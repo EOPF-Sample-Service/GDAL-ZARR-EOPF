@@ -50,7 +50,7 @@ Below is the same roadmap formatted in Markdown:
     - Integration tests.
 
 - **Team Review & Feedback**
-  - Present the design document to your team.
+  - Present the design document to team.
   - Adjust based on feedback and organizational coding guidelines.
 
 ---
