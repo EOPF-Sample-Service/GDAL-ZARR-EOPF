@@ -1,0 +1,31 @@
+name: Build and Test
+on:
+  push:
+  pull_request:
+
+jobs:
+  build_test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev cmake build-essential
+
+    - name: Configure
+      run: cmake -B build -S .
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Test
+      run: |
+        # Create dummy file
+        touch dummy.eopf
+
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+
+        cd build
+        ctest --verbose
