@@ -1,5 +1,3 @@
 cdse-venv/
 /.vs
-/out/build/x64-Debug
-/out/build/Linux-GCC-Debug
-/CMakeSettings.json
+
