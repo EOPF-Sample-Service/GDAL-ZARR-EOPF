@@ -20,6 +20,11 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
+    - name: Debug listing
+      run: |
+        echo "Contents of build/Debug:"
+        ls $GITHUB_WORKSPACE/build/Debug
+
     - name: Test
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/Debug
