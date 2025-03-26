@@ -1,8 +1,4 @@
-// src/EOPFDriver.cpp
 #include "gdal_priv.h"
-#include "cpl_conv.h"
-#include "cpl_string.h"
-
 #include "EOPFDataset.h"
 
 
