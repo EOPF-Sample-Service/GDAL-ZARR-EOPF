@@ -22,8 +22,6 @@ jobs:
 
     - name: Test
       run: |
-
-        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
-
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/Debug
         cd build
         ctest --verbose
