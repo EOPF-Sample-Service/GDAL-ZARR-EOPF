@@ -20,24 +20,24 @@ endif()
 # Name the output
 set_target_properties(gdal_EOPF PROPERTIES OUTPUT_NAME "gdal_EOPF")
 
+install(TARGETS gdal_EOPF
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/gdalplugins
+)
 
 # ========== Build test executables ==========
 enable_testing()
 
 # Test 1: skeleton
-add_executable(test_skeleton tests/test_skeleton.cpp)
+add_executable(test_eopf_driver
+    tests/test_eopf_driver.cpp
+)
+# Link test against GDAL
 if(TARGET GDAL::GDAL)
-    target_link_libraries(test_skeleton PRIVATE GDAL::GDAL)
+    target_link_libraries(test_eopf_driver PRIVATE GDAL::GDAL)
 else()
-    target_link_libraries(test_skeleton PRIVATE ${GDAL_LIBRARY})
+    target_link_libraries(test_eopf_driver PRIVATE ${GDAL_LIBRARY})
 endif()
-add_test(NAME SkeletonTest COMMAND test_skeleton)
+# Optional: integrate with CTest (uncomment if desired)
 
-# Test 2: Zarr read
-#add_executable(test_zarr_read tests/test_zarr_read.cpp)
-#if(TARGET GDAL::GDAL)
- #   target_link_libraries(test_zarr_read PRIVATE GDAL::GDAL)
-#else()
- #   target_link_libraries(test_zarr_read PRIVATE ${GDAL_LIBRARY})
-#endif()
-#add_test(NAME ZarrReadTest COMMAND test_zarr_read)
+add_test(NAME EOPFRegistrationTest COMMAND test_eopf_driver)
+
