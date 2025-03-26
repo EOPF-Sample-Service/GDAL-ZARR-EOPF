@@ -8,10 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    env:
-      GDAL_DRIVER_PATH: ${{ github.workspace }}/build
-    
     steps:
     - uses: actions/checkout@v3
 
@@ -21,11 +17,21 @@ jobs:
         sudo apt-get install -y gdal-bin libgdal-dev cmake build-essential
 
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build
-    
+      run: cmake -B build .
+
     - name: Build
-      run: cmake --build ${{github.workspace}}/build
-    
+      run: cmake --build build
+
+    - name: List build directory
+      run: ls -l build
+
     - name: Test
-      working-directory: ${{github.workspace}}/build
-      run: ctest
+      run: |
+        # If library is in build/ (not in subfolders):
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+
+        # Create the dummy file with .eopf extension
+        touch build/dummy.eopf
+
+        cd build
+        ctest --verbose
