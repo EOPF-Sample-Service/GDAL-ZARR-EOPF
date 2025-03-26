@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build_test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -16,12 +16,19 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev cmake build-essential
 
-    - name: Configure CMake
-      run: cmake -B build .
+    - name: Configure
+      run: cmake -B build -S .
 
     - name: Build
       run: cmake --build build
 
-    - name: List build directory
-      run: ls -l build
+    - name: Test
+      run: |
+        # create dummy file with extension .eopf
+        touch build/test.eopf
 
+        # ensure GDAL looks in 'build' for gdal_EOPF.so
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+
+        cd build
+        ctest --verbose

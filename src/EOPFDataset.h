@@ -14,8 +14,6 @@ public:
 
     EOPFDataset();
     ~EOPFDataset() override;
-
-    // For skeleton, might store a file pointer or nothing
 };
 
 #endif
