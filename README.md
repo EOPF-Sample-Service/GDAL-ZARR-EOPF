@@ -1,6 +1,6 @@
 ﻿# EOPF GDAL Driver
 
-[![Build Status](https://github.com/Yuvraj198920/eopf-gdal-driver/actions/workflows/build.yml/badge.svg)](https://github.com/Yuvraj198920/eopf-gdal-driver/actions/workflows/build.yml)
+[![Build Status](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/build.yml/badge.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/build.yml)
 
 **Overview**  
 This repository contains the **EOPF GDAL Plugin**, a community-driven effort to extend [GDAL](https://gdal.org) with support for the Earth Observation Processing Framework (EOPF). By loading this plugin, users can open, process, and visualize EOPF datasets in GDAL-based applications and workflows—such as [QGIS](https://qgis.org), command-line utilities (e.g., `gdalinfo`, `gdal_translate`), and custom scripts.
