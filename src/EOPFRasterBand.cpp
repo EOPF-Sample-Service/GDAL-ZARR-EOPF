@@ -1,22 +1,19 @@
-// src/EOPFRasterBand.cpp
 #include "EOPFRasterBand.h"
-#include "EOPFDataset.h"
-#include <cstring> // memset
 
-EOPFRasterBand::EOPFRasterBand(EOPFDataset* poDSIn, int nBandIn)
+EOPFRasterBand::EOPFRasterBand(GDALDataset* poDS, int nBand, GDALDataType eDataType)
 {
-    poDS = poDSIn;
-    nBand = nBandIn;
+    this->poDS = poDS;
+    this->nBand = nBand;
+    this->eDataType = eDataType;
 
-    eDataType = GDT_Byte;
-    // entire row is a block
-    nBlockXSize = poDS->GetRasterXSize();
-    nBlockYSize = 1;
+    // Set default block size (to be determined from Zarr chunks)
+    nBlockXSize = 256;
+    nBlockYSize = 256;
 }
 
 CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
 {
-    // fill row with zeros
-    std::memset(pImage, 0, nBlockXSize);
+    // Not implemented yet - just fill with zeros for now
+    memset(pImage, 0, nBlockXSize * nBlockYSize * GDALGetDataTypeSizeBytes(eDataType));
     return CE_None;
 }
