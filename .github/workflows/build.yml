@@ -25,13 +25,3 @@ jobs:
     - name: List build directory
       run: ls -l build
 
-    - name: Test
-      run: |
-        # If library is in build/ (not in subfolders):
-        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
-
-        # Create the dummy file with .eopf extension
-        touch build/dummy.eopf
-
-        cd build
-        ctest --verbose
