@@ -74,8 +74,8 @@ sudo apt-get update && sudo apt-get install -y \
 
 1. **Clone the Repository**  
    ```bash
-    git clone https://github.com/Yuvraj198920/eopf-gdal-driver
-    cd eopf-gdal-driver
+    https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+    cd GDAL-ZARR-EOPF
    ```
 
 2. **Configure with CMake**  
