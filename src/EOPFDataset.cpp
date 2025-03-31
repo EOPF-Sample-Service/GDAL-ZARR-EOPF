@@ -3,6 +3,8 @@
 #include "cpl_string.h"
 #include "cpl_vsi.h"
 #include "cpl_json.h"
+#include "EOPFRasterBand.h" 
+
 #include <algorithm>
 
 // Constructor
@@ -53,12 +55,10 @@ GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo)
     EOPFMode eMode = EOPFMode::CONVENIENCE;  // Default to convenience mode
 
     if (pszMode != nullptr) {
-        if (EQUAL(pszMode, "SENSOR")) {
+        if (EQUAL(pszMode, "SENSOR"))
             eMode = EOPFMode::SENSOR;
-        }
-        else if (EQUAL(pszMode, "CONVENIENCE")) {
+        else if (EQUAL(pszMode, "CONVENIENCE"))
             eMode = EOPFMode::CONVENIENCE;
-        }
         else {
             CPLError(CE_Warning, CPLE_AppDefined,
                 "Unknown mode '%s', defaulting to CONVENIENCE mode", pszMode);
@@ -109,30 +109,35 @@ bool EOPFDataset::Initialize(const char* pszFilename, EOPFMode eMode)
             return false;
         }
     }
-    return true;
 }
 
 // Parse Zarr metadata
+// Add this to the ParseZarrMetadata method or Initialize method
 bool EOPFDataset::ParseZarrMetadata(const char* pszPath)
 {
     // For now, just log that we found metadata
     CPLDebug("EOPF", "Found metadata file: %s", pszPath);
-    CPLDebug("EOPF", "Using %s mode", m_eMode == EOPFMode::SENSOR ? "SENSOR" : "CONVENIENCE");
-
+    
     // Set some basic metadata
     SetMetadataItem("ZARR_VERSION", m_bIsZarrV3 ? "3" : "2");
     SetMetadataItem("DRIVER_MODE", m_eMode == EOPFMode::SENSOR ? "SENSOR" : "CONVENIENCE");
-
-    // Note: Full implementation will parse metadata, create bands, etc.
-    // This is just a skeleton for the issue
-
+    
+    // Mock raster information for initial implementation
+    // In a real implementation, this would be parsed from the Zarr metadata
+    nRasterXSize = 1000;
+    nRasterYSize = 1000;
+    
+    // Create a single raster band (float32 type)
+    // In a real implementation, bands would be created based on Zarr arrays
+    SetBand(1, new EOPFRasterBand(this, 1, GDT_Float32));
+    
     return true;
 }
+
 
 // Override GetGeoTransform
 CPLErr EOPFDataset::GetGeoTransform(double* padfTransform)
 {
-    // Default transform (identity)
     padfTransform[0] = 0.0;  // Origin X
     padfTransform[1] = 1.0;  // Pixel width
     padfTransform[2] = 0.0;  // Rotation (row/column)

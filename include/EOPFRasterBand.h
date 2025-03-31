@@ -10,6 +10,10 @@ public:
 
     // Override methods from GDALRasterBand
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
+
+private:
+    std::string m_osVarName;      // Name of the Zarr variable/array
+    std::string m_osChunkDir;     // Path to directory containing Zarr chunks
 };
 
 #endif /* EOPF_RASTERBAND_H */
