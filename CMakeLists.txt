@@ -14,7 +14,8 @@ add_library(eopfdriver SHARED
   src/EOPFDriver.cpp
   src/EOPFDataset.cpp
   src/EOPFRasterBand.cpp
- "include/EOPFDataset.h")
+
+)
 
 if(TARGET GDAL::GDAL)
   target_link_libraries(eopfdriver PRIVATE GDAL::GDAL)
