@@ -1,49 +1,44 @@
 #include "EOPFRasterBand.h"
-#include "EOPFDataset.h"
+#include "cpl_vsi.h"
+#include "cpl_string.h"
 #include <cstring>
 
-EOPFRasterBand::EOPFRasterBand(EOPFDataset* poDSIn, int nBandIn)
+EOPFRasterBand::EOPFRasterBand(GDALDataset* poDS, int nBand, GDALDataType eDataType)
 {
-    poDS = poDSIn;
-    nBand = nBandIn;
-    eDataType = GDT_Byte;
+    this->poDS = poDS;
+    this->nBand = nBand;
+    this->eDataType = eDataType;
 
-    // entire row as block if not Zarr-based chunk logic
-    // but let's keep it for skeleton
-    nBlockXSize = poDSIn->GetRasterXSize();
-    nBlockYSize = 1;
+    // Default block size for Zarr chunks - should be updated from metadata
+    nBlockXSize = 256;
+    nBlockYSize = 256;
+
+    // Variable/array name - should be set during initialization
+    m_osVarName = CPLSPrintf("band%d", nBand);
 }
 
 CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
 {
-    auto* poEDS = reinterpret_cast<EOPFDataset*>(poDS);
-    if (!poEDS)
-        return CE_Failure;
+    // For the initial implementation, we'll just fill with zeros
+    // This will be replaced with actual Zarr chunk reading code
 
-    if (poEDS->bIsZarr)
-    {
-        // compute which chunk we want
-        // We'll do a naive approach: each block is "one row"
-        // so chunk coords might be (nBlockXOff=0, nBlockYOff=some row).
-        // In real Zarr, you'd do chunkX = nBlockXOff / chunkSizeX, chunkY = nBlockYOff / chunkSizeY
-        // Then offset within chunk. But let's do a direct call:
-        unsigned char buffer[256 * 256]; // if chunk=256x256
-        poEDS->ReadChunk(0, 0, nBand, buffer);
+    const int nBytes = GDALGetDataTypeSizeBytes(eDataType) * nBlockXSize * nBlockYSize;
+    memset(pImage, 0, nBytes);
 
-        // We only need 1 row from that chunk
-        // For demonstration, fill pImage with the first row of the chunk
-        // i.e. 256 bytes from buffer
-        // if nBlockXSize=512, we handle partial, etc.
+    CPLDebug("EOPF", "Reading block (%d, %d) - placeholder implementation",
+        nBlockXOff, nBlockYOff);
 
-        int rowWidth = poEDS->nRasterXSize;
-        if (rowWidth > 256) rowWidth = 256; // clamp
-        std::memcpy(pImage, buffer, rowWidth);
-    }
-    else
-    {
-        // fallback skeleton from Issue#1 (fill zero)
-        std::memset(pImage, 0, nBlockXSize);
-    }
+    // Construct chunk filename (Zarr V2 format: {z}.{y}.{x})
+    // In a full implementation, this would handle various chunk naming conventions
+
+    /*
+    CPLString osChunkFile = CPLFormFilename(m_osChunkDir.c_str(),
+                                           CPLSPrintf("%d.%d", nBlockYOff, nBlockXOff),
+                                           nullptr);
+
+    // Read and decompress the chunk data
+    // ...
+    */
 
     return CE_None;
 }

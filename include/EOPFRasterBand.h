@@ -1,17 +1,19 @@
-#ifndef EOPFRASTERBAND_H
-#define EOPFRASTERBAND_H
+#ifndef EOPF_RASTERBAND_H
+#define EOPF_RASTERBAND_H
 
-#include "gdal_pam.h"
+#include "gdal_priv.h"
 
-class EOPFDataset;
-
-class EOPFRasterBand final : public GDALPamRasterBand
+class EOPFRasterBand final : public GDALRasterBand
 {
 public:
-    EOPFRasterBand(EOPFDataset* poDS, int nBand);
-    ~EOPFRasterBand() override {}
+    EOPFRasterBand(GDALDataset* poDS, int nBand, GDALDataType eDataType);
 
+    // Override methods from GDALRasterBand
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
+
+private:
+    std::string m_osVarName;      // Name of the Zarr variable/array
+    std::string m_osChunkDir;     // Path to directory containing Zarr chunks
 };
 
-#endif
+#endif /* EOPF_RASTERBAND_H */
