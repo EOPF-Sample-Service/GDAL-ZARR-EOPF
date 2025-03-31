@@ -1,7 +1,6 @@
 #include "gdal_priv.h"
 #include "EOPFDataset.h"
-
-
+#include "cpl_string.h"
 
 extern "C" void GDALRegister_EOPF();
 
@@ -27,9 +26,7 @@ extern "C" void GDALRegister_EOPF()
     poDriver->SetMetadataItem(GDAL_DCAP_MULTIDIM_RASTER, "YES");
     poDriver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
 
-#if GDAL_VERSION_NUM >= 3100
-    poDriver->SetMetadataItem(GDAL_DCAP_MULTIDIM, "YES");
-#endif
+
 
     // Add open options
     char** papszOptions = nullptr;
@@ -38,7 +35,14 @@ extern "C" void GDALRegister_EOPF()
     papszOptions = CSLAddString(papszOptions, "    <Value>CONVENIENCE</Value>");
     papszOptions = CSLAddString(papszOptions, "</Option>");
 
-    poDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, CSLSave(papszOptions));
+    CPLString osOptions;
+    for (int i = 0; papszOptions != nullptr && papszOptions[i] != nullptr; i++) {
+        if (i > 0) osOptions += "\n";
+        osOptions += papszOptions[i];
+    }
+    poDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, osOptions.c_str());
+
+
     CSLDestroy(papszOptions);
 
     // Setting the open function
