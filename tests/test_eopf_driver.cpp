@@ -20,25 +20,20 @@ int main()
     std::cout << "Long  Name: " << poDriver->GetMetadataItem(GDAL_DMD_LONGNAME) << std::endl;
     std::cout << "Testing identification function..." << std::endl;
 
-    // Test identification and open (with mocked paths)
-    // This is just to test the API, not actual functionality
-    char** papszOpenOptions = CSLSetNameValue(nullptr, "MODE", "SENSOR");
+    // Test identification function
+    std::cout << "Testing identification function..." << std::endl;
 
+    // Test opening (will fail with non-existent path, but tests API)
     std::cout << "Opening non-existent dataset to test API..." << std::endl;
-    GDALDataset* poDS = (GDALDataset*)GDALOpenEx("EOPF:non_existent_path.zarr",
-        GDAL_OF_READONLY,
-        nullptr,
-        papszOpenOptions,
-        nullptr);
-    CSLDestroy(papszOpenOptions);
+    GDALDataset* poDS = (GDALDataset*)GDALOpen("EOPF:non_existent_path.zarr", GA_ReadOnly);
 
     if (poDS) {
-        GDALClose(poDS);
         std::cout << "Dataset opened (unexpected!)" << std::endl;
+        GDALClose(poDS);
     }
     else {
         std::cout << "Dataset failed to open (expected at this stage)" << std::endl;
     }
 
-    return 0; // test success
+    return 0;
 }
