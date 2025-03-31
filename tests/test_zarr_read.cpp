@@ -7,8 +7,10 @@
 // Create a mock Zarr dataset for testing
 bool CreateMockZarrDataset(const char* pszPath) {
     // Create directory structure
-    VSIMkdir(pszPath, 0755);
-
+    if (VSIMkdir(pszPath, 0755) != 0) {
+        std::cerr << "Failed to create test directory" << std::endl;
+        return false;
+    }
     // Create .zarray metadata file (Zarr V2)
     std::string osZarrayPath = CPLFormFilename(pszPath, ".zarray", nullptr);
     VSILFILE* fp = VSIFOpenL(osZarrayPath.c_str(), "wb");
