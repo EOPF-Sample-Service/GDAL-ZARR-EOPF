@@ -1,65 +1,35 @@
-#ifndef EOPFDATASET_H
-#define EOPFDATASET_H
+#ifndef EOPF_DATASET_H
+#define EOPF_DATASET_H
 
-#include "EOPFRasterBand.h"
-#include <cstring>
+#include "gdal_priv.h"
+#include <string>
 
-class EOPFDataset final : public GDALPamDataset
-{
-public:
-    static int Identify(struct GDALOpenInfo* poOpenInfo);
-    static GDALDataset* Open(struct GDALOpenInfo* poOpenInfo);
-
-    EOPFDataset();
-    ~EOPFDataset() override;
-
-    // Dummy chunk logic
-    bool bIsZarr = false;     // indicates if we recognized .zarr
-    int chunkSizeX = 256;     // placeholder chunk dimension
-    int chunkSizeY = 256;
-
-    // For reading chunk data
-    CPLErr ReadChunk(int chunkX, int chunkY, int band, void* pBuffer);
-
-    // Add getter for nRasterXSize
-    int GetRasterXSize() const { return nRasterXSize; }
-
-    // etc. (existing skeleton)
+enum class EOPFMode {
+    SENSOR,      // Native hierarchical structure
+    CONVENIENCE  // Simplified structure
 };
 
+class EOPFDataset final : public GDALDataset
+{
+public:
+    static GDALDataset* Open(GDALOpenInfo* poOpenInfo);
+    static int Identify(GDALOpenInfo* poOpenInfo);
 
-    CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
-    {
-        auto* poEDS = reinterpret_cast<EOPFDataset*>(poDS);
-        if (!poEDS)
-            return CE_Failure;
+    // Override methods from GDALDataset
+    CPLErr GetGeoTransform(double* padfTransform) override;
 
-        if (poEDS->bIsZarr)
-        {
-            // compute which chunk we want
-            // We'll do a naive approach: each block is "one row"
-            // so chunk coords might be (nBlockXOff=0, nBlockYOff=some row).
-            // In real Zarr, you'd do chunkX = nBlockXOff / chunkSizeX, chunkY = nBlockYOff / chunkSizeY
-            // Then offset within chunk. But let's do a direct call:
-            unsigned char buffer[256 * 256]; // if chunk=256x256
-            poEDS->ReadChunk(0, 0, nBand, buffer);
+private:
+    // Private constructor - datasets should be created with Open()
+    EOPFDataset();
 
-            // We only need 1 row from that chunk
-            // For demonstration, fill pImage with the first row of the chunk
-            // i.e. 256 bytes from buffer
-            // if nBlockXSize=512, we handle partial, etc.
+    // Helper methods
+    bool Initialize(const char* pszFilename, EOPFMode eMode);
+    bool ParseZarrMetadata(const char* pszPath);
 
-            int rowWidth = poEDS->GetRasterXSize();
-            if (rowWidth > 256) rowWidth = 256; // clamp
-            std::memcpy(pImage, buffer, rowWidth);
-        }
-        else
-        {
-            // fallback skeleton from Issue#1 (fill zero)
-            std::memset(pImage, 0, nBlockXSize);
-        }
+    // Dataset properties
+    std::string m_osPath;         // Path to the EOPF dataset
+    EOPFMode m_eMode;             // Operational mode
+    bool m_bIsZarrV3;             // Whether this is a Zarr V3 dataset
+};
 
-        return CE_None;
-    }
-
-#endif
+#endif /* EOPF_DATASET_H */
