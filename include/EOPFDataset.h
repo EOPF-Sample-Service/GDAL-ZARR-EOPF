@@ -27,17 +27,6 @@ public:
     // etc. (existing skeleton)
 };
 
-    EOPFRasterBand::EOPFRasterBand(EOPFDataset* poDSIn, int nBandIn)
-    {
-        poDS = poDSIn;
-        nBand = nBandIn;
-        eDataType = GDT_Byte;
-
-        // entire row as block if not Zarr-based chunk logic
-        // but let's keep it for skeleton
-        nBlockXSize = poDSIn->GetRasterXSize();
-        nBlockYSize = 1;
-    }
 
     CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
     {
