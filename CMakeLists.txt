@@ -48,3 +48,12 @@ endif()
 # Optional: integrate with CTest (uncomment if desired)
 
 add_test(NAME EOPFRegistrationTest COMMAND test_eopf_driver)
+
+# Add new test_zarr_read
+add_executable(test_zarr_read tests/test_zarr_read.cpp)
+if(TARGET GDAL::GDAL)
+    target_link_libraries(test_zarr_read PRIVATE GDAL::GDAL)
+else()
+    target_link_libraries(test_zarr_read PRIVATE ${GDAL_LIBRARY})
+endif()
+add_test(NAME ZarrReadTest COMMAND test_zarr_read)

@@ -1,144 +1,77 @@
 #include "EOPFDataset.h"
-#include "cpl_port.h"
+#include "EOPFRasterBand.h"
+#include "cpl_conv.h"
 #include "cpl_string.h"
-#include "cpl_vsi.h"
-#include "cpl_json.h"
-#include <algorithm>
 
-// Constructor
-EOPFDataset::EOPFDataset() :
-    m_eMode(EOPFMode::CONVENIENCE),
-    m_bIsZarrV3(false)
-{
-}
+EOPFDataset::EOPFDataset() {}
+EOPFDataset::~EOPFDataset() {}
 
-// Static method to identify EOPF datasets
 int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo)
 {
-    // Skip if filename is empty
-    if (poOpenInfo->pszFilename == nullptr)
-        return FALSE;
-
-    // Get the filename
-    const char* pszFilename = poOpenInfo->pszFilename;
-
-    // Check if the file has a .zarr extension
-    if (EQUAL(CPLGetExtension(pszFilename), "zarr"))
+    // We'll handle .zarr extension for Issue #2 (Zarr read).
+    if (poOpenInfo->pszFilename
+        && EQUAL(CPLGetExtension(poOpenInfo->pszFilename), "zarr"))
+    {
         return TRUE;
-
-    // Check for EOPF: prefix
-    if (STARTS_WITH_CI(pszFilename, "EOPF:"))
+    }
+    // fallback: check if extension is .eopf (Issue #1 skeleton)
+    if (poOpenInfo->pszFilename
+        && EQUAL(CPLGetExtension(poOpenInfo->pszFilename), "eopf"))
+    {
         return TRUE;
-
-    // Look for zarr.json (Zarr V3) or .zarray (Zarr V2) files
-    VSIStatBufL sStat;
-    CPLString osZarrJsonPath = CPLFormFilename(pszFilename, "zarr.json", nullptr);
-    CPLString osZarrayPath = CPLFormFilename(pszFilename, ".zarray", nullptr);
-
-    if (VSIStatL(osZarrJsonPath, &sStat) == 0 || VSIStatL(osZarrayPath, &sStat) == 0)
-        return TRUE;
-
+    }
     return FALSE;
 }
 
-// Static method to open EOPF datasets
 GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo)
 {
-    // Check if the driver can open this file
     if (!Identify(poOpenInfo))
         return nullptr;
 
-    // Parse for driver mode option
-    const char* pszMode = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "MODE");
-    EOPFMode eMode = EOPFMode::CONVENIENCE;  // Default to convenience mode
-
-    if (pszMode != nullptr) {
-        if (EQUAL(pszMode, "SENSOR")) {
-            eMode = EOPFMode::SENSOR;
-        }
-        else if (EQUAL(pszMode, "CONVENIENCE")) {
-            eMode = EOPFMode::CONVENIENCE;
-        }
-        else {
-            CPLError(CE_Warning, CPLE_AppDefined,
-                "Unknown mode '%s', defaulting to CONVENIENCE mode", pszMode);
-        }
-    }
-
-    // Create a new dataset
-    EOPFDataset* poDS = new EOPFDataset();
-
-    // Initialize the dataset
-    if (!poDS->Initialize(poOpenInfo->pszFilename, eMode)) {
-        delete poDS;
+    if (poOpenInfo->eAccess == GA_Update)
+    {
+        CPLError(CE_Failure, CPLE_NotSupported,
+            "EOPF plugin is read-only for now");
         return nullptr;
     }
+
+    // Create dataset
+    EOPFDataset* poDS = new EOPFDataset();
+
+    // Distinguish if it's .zarr or .eopf
+    const char* ext = CPLGetExtension(poOpenInfo->pszFilename);
+    if (EQUAL(ext, "zarr")) {
+        poDS->bIsZarr = true;
+        // Maybe we do some dummy read of a .zarray file if it existed
+        // ...
+        // We'll store dummy size, e.g. 512 x 512 for Zarr
+        poDS->nRasterXSize = 512;
+        poDS->nRasterYSize = 512;
+        // multi-bands possible, but let's do 1 for now
+        poDS->nBands = 1;
+    }
+    else {
+        // fallback skeleton from Issue #1
+        poDS->nRasterXSize = 256;
+        poDS->nRasterYSize = 256;
+        poDS->nBands = 1;
+    }
+
+    // create band(s)
+    poDS->SetBand(1, new EOPFRasterBand(poDS, 1));
 
     return poDS;
 }
 
-// Initialize dataset
-bool EOPFDataset::Initialize(const char* pszFilename, EOPFMode eMode)
+// This is the "chunk read" placeholder
+CPLErr EOPFDataset::ReadChunk(int chunkX, int chunkY, int band, void* pBuffer)
 {
-    m_osPath = pszFilename;
-    m_eMode = eMode;
-
-    // If filename starts with EOPF:, extract the actual path
-    if (STARTS_WITH_CI(pszFilename, "EOPF:")) {
-        m_osPath = pszFilename + 5;  // Skip "EOPF:"
-    }
-
-    // Check Zarr version by looking for zarr.json (V3) or .zarray (V2)
-    VSIStatBufL sStat;
-    CPLString osZarrJsonPath = CPLFormFilename(m_osPath.c_str(), "zarr.json", nullptr);
-
-    if (VSIStatL(osZarrJsonPath, &sStat) == 0) {
-        m_bIsZarrV3 = true;
-        return ParseZarrMetadata(osZarrJsonPath.c_str());
-    }
-    else {
-        // If not V3, check for V2
-        CPLString osZarrayPath = CPLFormFilename(m_osPath.c_str(), ".zarray", nullptr);
-        if (VSIStatL(osZarrayPath, &sStat) == 0) {
-            m_bIsZarrV3 = false;
-            return ParseZarrMetadata(osZarrayPath.c_str());
-        }
-        else {
-            CPLError(CE_Failure, CPLE_AppDefined,
-                "Could not find zarr.json or .zarray in %s", m_osPath.c_str());
-            return false;
-        }
-    }
-    return true;
-}
-
-// Parse Zarr metadata
-bool EOPFDataset::ParseZarrMetadata(const char* pszPath)
-{
-    // For now, just log that we found metadata
-    CPLDebug("EOPF", "Found metadata file: %s", pszPath);
-    CPLDebug("EOPF", "Using %s mode", m_eMode == EOPFMode::SENSOR ? "SENSOR" : "CONVENIENCE");
-
-    // Set some basic metadata
-    SetMetadataItem("ZARR_VERSION", m_bIsZarrV3 ? "3" : "2");
-    SetMetadataItem("DRIVER_MODE", m_eMode == EOPFMode::SENSOR ? "SENSOR" : "CONVENIENCE");
-
-    // Note: Full implementation will parse metadata, create bands, etc.
-    // This is just a skeleton for the issue
-
-    return true;
-}
-
-// Override GetGeoTransform
-CPLErr EOPFDataset::GetGeoTransform(double* padfTransform)
-{
-    // Default transform (identity)
-    padfTransform[0] = 0.0;  // Origin X
-    padfTransform[1] = 1.0;  // Pixel width
-    padfTransform[2] = 0.0;  // Rotation (row/column)
-    padfTransform[3] = 0.0;  // Origin Y
-    padfTransform[4] = 0.0;  // Rotation (row/column)
-    padfTransform[5] = 1.0;  // Pixel height
+    // For demonstration: fill chunk with a distinct pattern
+    // e.g. band # in the pattern so we see difference if multi-band
+    unsigned char fillVal = static_cast<unsigned char>(band * 50 + 25);
+    // we do chunkSizeX * chunkSizeY bytes
+    int totalBytes = chunkSizeX * chunkSizeY;
+    memset(pBuffer, fillVal, totalBytes);
 
     return CE_None;
 }

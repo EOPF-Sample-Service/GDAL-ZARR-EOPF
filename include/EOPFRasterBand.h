@@ -1,15 +1,17 @@
-#ifndef EOPF_RASTERBAND_H
-#define EOPF_RASTERBAND_H
+#ifndef EOPFRASTERBAND_H
+#define EOPFRASTERBAND_H
 
-#include "gdal_priv.h"
+#include "gdal_pam.h"
 
-class EOPFRasterBand final : public GDALRasterBand
+class EOPFDataset;
+
+class EOPFRasterBand final : public GDALPamRasterBand
 {
 public:
-    EOPFRasterBand(GDALDataset* poDS, int nBand, GDALDataType eDataType);
+    EOPFRasterBand(EOPFDataset* poDS, int nBand);
+    ~EOPFRasterBand() override {}
 
-    // Override methods from GDALRasterBand
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
 };
 
-#endif /* EOPF_RASTERBAND_H */
+#endif

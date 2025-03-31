@@ -29,4 +29,10 @@ jobs:
     
     - name: Test
       working-directory: ${{github.workspace}}/build
-      run: ctest
+      run: |
+        # create the dummy files
+        touch test.eopf
+        touch dummy.zarr
+        
+        export GDAL_DRIVER_PATH=${{ github.workspace }}/build
+        ctest --verbose
