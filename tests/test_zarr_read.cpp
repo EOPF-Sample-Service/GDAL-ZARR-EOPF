@@ -11,23 +11,27 @@ bool CreateMockZarrDataset(const char* pszPath) {
 
     // Create .zarray metadata file (Zarr V2)
     std::string osZarrayPath = CPLFormFilename(pszPath, ".zarray", nullptr);
-    std::ofstream zarrayFile(osZarrayPath);
-    if (!zarrayFile.is_open()) {
+    VSILFILE* fp = VSIFOpenL(osZarrayPath.c_str(), "wb");
+    if (fp == nullptr) {
         std::cerr << "Failed to create mock .zarray file" << std::endl;
         return false;
     }
 
-    zarrayFile << R"({
-        "chunks": [2, 3],
-        "compressor": {"id": "zlib", "level": 1},
-        "dtype": "<f4",
-        "fill_value": "NaN",
-        "filters": null,
-        "order": "C",
-        "shape": [4, 6],
-        "zarr_format": 2
-    })";
-    zarrayFile.close();
+    // Write content
+    std::string jsonContent = R"({
+    "chunks": [2, 3],
+    "compressor": {"id": "zlib", "level": 1},
+    "dtype": "<f4",
+    "fill_value": "NaN",
+    "filters": null,
+    "order": "C",
+    "shape": [4, 6],
+    "zarr_format": 2
+})";
+
+    VSIFWriteL(jsonContent.c_str(), 1, jsonContent.size(), fp);
+    VSIFCloseL(fp);
+
 
     // Create a mock data chunk
     std::string osChunkPath = CPLFormFilename(pszPath, "0.0", nullptr);
