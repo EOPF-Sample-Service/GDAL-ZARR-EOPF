@@ -9,9 +9,15 @@ enum class EOPFMode {
     CONVENIENCE  // Simplified structure
 };
 
+/**
+ * EOPFDataset class represents an EOPF dataset stored in a Zarr-like structure.
+ * Inherits from GDALPamDataset to benefit from Persistent Auxiliary Metadata (PAM)
+ */
+
 class EOPFDataset final : public GDALDataset
 {
 public:
+    // Registration callbacks
     static GDALDataset* Open(GDALOpenInfo* poOpenInfo);
     static int Identify(GDALOpenInfo* poOpenInfo);
 
@@ -30,6 +36,8 @@ private:
     std::string m_osPath;         // Path to the EOPF dataset
     EOPFMode m_eMode;             // Operational mode
     bool m_bIsZarrV3;             // Whether this is a Zarr V3 dataset
+	int chunkSizeX = 256;          // Default chunk size X (to be parsed from metadata)
+	int chunkSizeY = 256;          // Default chunk size Y (to be parsed from metadata)
 };
 
 #endif /* EOPF_DATASET_H */
