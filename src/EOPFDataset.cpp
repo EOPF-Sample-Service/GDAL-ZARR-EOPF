@@ -50,29 +50,77 @@ GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo)
     if (!Identify(poOpenInfo))
         return nullptr;
 
+	if (poOpenInfo->eAccess == GA_Update) {
+		CPLError(CE_Failure, CPLE_NotSupported, "EOPF Driver is read-only.");
+		return nullptr;
+	}
     // Parse for driver mode option
     const char* pszMode = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "MODE");
     EOPFMode eMode = EOPFMode::CONVENIENCE;  // Default to convenience mode
 
+    // Create a new dataset
+    EOPFDataset* poDS = new EOPFDataset();
+
     if (pszMode != nullptr) {
         if (EQUAL(pszMode, "SENSOR"))
-            eMode = EOPFMode::SENSOR;
-        else if (EQUAL(pszMode, "CONVENIENCE"))
-            eMode = EOPFMode::CONVENIENCE;
+            poDS->m_eMode = EOPFMode::SENSOR;
+		else if (EQUAL(pszMode, "CONVENIENCE"))
+            poDS->m_eMode = EOPFMode::CONVENIENCE;
         else {
             CPLError(CE_Warning, CPLE_AppDefined,
                 "Unknown mode '%s', defaulting to CONVENIENCE mode", pszMode);
         }
     }
 
-    // Create a new dataset
-    EOPFDataset* poDS = new EOPFDataset();
-
-    // Initialize the dataset
-    if (!poDS->Initialize(poOpenInfo->pszFilename, eMode)) {
-        delete poDS;
-        return nullptr;
+    poDS->m_osPath = poOpenInfo->pszFilename;
+    if (STARTS_WITH_CI(poOpenInfo->pszFilename, "EOPF:"))
+    {
+        // strip the "EOPF:" prefix
+		poDS->m_osPath = std::string(poOpenInfo->pszFilename + 5);
     }
+
+    // Find the Zarr version and parse metadata
+    VSIStatBufL sStat;
+    CPLString osZarrJson = CPLFormFilename(poDS->m_osPath.c_str(), "zarr.json", nullptr);
+    if (VSIStatL(osZarrJson, &sStat) == 0)
+    {
+        poDS->m_bIsZarrV3 = true;
+		if (!poDS->ParseZarrMetadata(osZarrJson.c_str())) {
+			delete poDS;
+			return nullptr;
+		}
+    }
+    else
+    {
+        // Fallback: try .zarray (assume Zarr V2)
+        CPLString osZarray = CPLFormFilename(poDS->m_osPath.c_str(), ".zarray", nullptr);
+        if (VSIStatL(osZarray, &sStat) == 0)
+        {
+            poDS->m_bIsZarrV3 = false;
+            if (!poDS->ParseZarrMetadata(osZarray.c_str()))
+            {
+                delete poDS;
+                return nullptr;
+            }
+        }
+        else
+        {
+            CPLError(CE_Failure, CPLE_AppDefined, "No Zarr metadata found in %s", poDS->m_osPath.c_str());
+            delete poDS;
+            return nullptr;
+        }
+    }
+
+    // Create raster bands based on metadata.
+    // For simplicity, assume one band. In a full implementation, iterate over available arrays.
+    poDS->nBands = 1;
+    poDS->SetBand(1, new EOPFRasterBand(poDS, 1, GDT_Float32));
+
+    // Set geotransform and projection if available.
+    // For this example, we'll use a dummy geotransform.
+    double adfGeoTransform[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+    poDS->SetGeoTransform(adfGeoTransform);
+    poDS->SetProjection("LOCAL_CS[\"EOPF_Zarr\"]");
 
     return poDS;
 }
