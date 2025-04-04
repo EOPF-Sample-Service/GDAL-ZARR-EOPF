@@ -161,26 +161,51 @@ bool EOPFDataset::Initialize(const char* pszFilename, EOPFMode eMode)
 
 // Parse Zarr metadata
 // Add this to the ParseZarrMetadata method or Initialize method
-bool EOPFDataset::ParseZarrMetadata(const char* pszPath)
-{
-    // For now, just log that we found metadata
-    CPLDebug("EOPF", "Found metadata file: %s", pszPath);
-    
-    // Set some basic metadata
-    SetMetadataItem("ZARR_VERSION", m_bIsZarrV3 ? "3" : "2");
-    SetMetadataItem("DRIVER_MODE", m_eMode == EOPFMode::SENSOR ? "SENSOR" : "CONVENIENCE");
-    
-    // Mock raster information for initial implementation
-    // In a real implementation, this would be parsed from the Zarr metadata
-    nRasterXSize = 1000;
-    nRasterYSize = 1000;
-    
-    // Create a single raster band (float32 type)
-    // In a real implementation, bands would be created based on Zarr arrays
-    SetBand(1, new EOPFRasterBand(this, 1, GDT_Float32));
-    
+bool EOPFDataset::ParseZarrMetadata(const char* pszMetadataPath) {
+    CPLJSONDocument oDoc;
+    if (!oDoc.Load(pszMetadataPath)) {
+        CPLError(CE_Failure, CPLE_AppDefined,
+            "Failed to load Zarr metadata from %s", pszMetadataPath);
+        return false;
+    }
+
+    CPLJSONObject oRoot = oDoc.GetRoot();
+    if (!oRoot.IsValid()) {
+        CPLError(CE_Failure, CPLE_AppDefined,
+            "Invalid JSON structure in %s", pszMetadataPath);
+        return false;
+    }
+
+    // Parse "shape" array [rows, cols]
+    CPLJSONArray oShape = oRoot.GetArray("shape");
+    if (!oShape.IsValid() || oShape.Size() < 2) {
+        CPLError(CE_Failure, CPLE_AppDefined,
+            "Invalid or missing 'shape' in Zarr metadata");
+        return false;
+    }
+    nRasterYSize = oShape[0].ToInteger();
+    nRasterXSize = oShape[1].ToInteger();
+
+    // Parse "chunks" array [chunk_rows, chunk_cols]
+    CPLJSONArray oChunks = oRoot.GetArray("chunks");
+    if (oChunks.IsValid() && oChunks.Size() >= 2) {
+        chunkSizeY = oChunks[0].ToInteger();
+        chunkSizeX = oChunks[1].ToInteger();
+    }
+    else {
+        CPLError(CE_Warning, CPLE_AppDefined,
+            "Missing chunk size info, defaulting to 256x256");
+        chunkSizeX = 256;
+        chunkSizeY = 256;
+    }
+
+    // Set metadata
+    SetMetadataItem("ZARR_SHAPE", CPLSPrintf("%dx%d", nRasterXSize, nRasterYSize));
+    SetMetadataItem("CHUNK_SIZE", CPLSPrintf("%dx%d", chunkSizeX, chunkSizeY));
+
     return true;
 }
+
 
 
 // Override GetGeoTransform

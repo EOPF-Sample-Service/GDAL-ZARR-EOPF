@@ -23,7 +23,8 @@ public:
 
     // Override methods from GDALDataset
     CPLErr GetGeoTransform(double* padfTransform) override;
-
+    int GetChunkSizeX() const { return chunkSizeX; }
+    int GetChunkSizeY() const { return chunkSizeY; }
 private:
     // Private constructor - datasets should be created with Open()
     EOPFDataset();
