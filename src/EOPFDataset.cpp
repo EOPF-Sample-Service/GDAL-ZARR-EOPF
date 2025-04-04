@@ -2,11 +2,9 @@
 #include "EOPFRasterBand.h"
 #include "cpl_string.h"
 
-// Constructor
-EOPFDataset::EOPFDataset() :
-    m_eMode(EOPFMode::CONVENIENCE),
-    m_bIsZarrV3(false)
-{
+// Constructor  
+EOPFDataset::EOPFDataset() : m_nChunkX(256), m_nChunkY(256), m_bIsZarrV3(false)  
+{  
 }
 
 // Static method to identify EOPF datasets
