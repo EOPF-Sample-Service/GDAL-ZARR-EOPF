@@ -1,27 +1,23 @@
 #include "EOPFDataset.h"
 #include "EOPFRasterBand.h"
 #include "cpl_string.h"
+#include "cpl_vsi.h"
 
-// Constructor  
-EOPFDataset::EOPFDataset() : m_nChunkX(256), m_nChunkY(256), m_bIsZarrV3(false)  
-{  
-}
+/************************************************************************/
+/*                             Identify()                               */
+/************************************************************************/
 
-// Static method to identify EOPF datasets
-int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo)
-{
-    // Skip if filename is empty
+int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo) {
     if (poOpenInfo->pszFilename == nullptr)
         return FALSE;
 
-    // Get the filename
     const char* pszFilename = poOpenInfo->pszFilename;
 
     // Check if the file has a .zarr extension
     if (EQUAL(CPLGetExtension(pszFilename), "zarr"))
         return TRUE;
 
-    // Check for EOPF: prefix
+    // Check for EOPF-Zarr prefix
     if (STARTS_WITH_CI(pszFilename, "EOPF-Zarr:"))
         return TRUE;
 
@@ -35,6 +31,7 @@ int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo)
 
     return FALSE;
 }
+
 
 // Static method to open EOPF datasets
 
@@ -58,6 +55,20 @@ GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo) {
     if (!poDS->LoadGroupStructure(poDS->m_osPath)) {
         CPLError(CE_Failure, CPLE_AppDefined, "Failed to load group hierarchy");
         return nullptr;
+    }
+
+    // Create subdataset list
+    std::vector<std::string> subgroups = poDS->GetSubGroups();
+    int nSubDS = 0;
+    for (const auto& group : subgroups) {
+        poDS->SetMetadataItem(
+            CPLSPrintf("SUBDATASET_%d_NAME", ++nSubDS),
+            CPLSPrintf("EOPF-Zarr:\"%s\"", group.c_str())
+        );
+        poDS->SetMetadataItem(
+            CPLSPrintf("SUBDATASET_%d_DESC", nSubDS),
+            CPLSPrintf("Group: %s", CPLGetFilename(group.c_str()))
+        );
     }
 
     // Create raster bands

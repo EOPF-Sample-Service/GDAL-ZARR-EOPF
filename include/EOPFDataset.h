@@ -43,8 +43,6 @@ private:
 
     // Core properties
     std::string m_osPath;         // Path to the EOPF dataset
-    EOPFMode m_eMode;             // Operational mode
-    bool m_bIsZarrV3;
     int m_nChunkX = 256;
     int m_nChunkY = 256;
     GroupInfo m_oRootGroup;
