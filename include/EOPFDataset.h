@@ -1,7 +1,10 @@
 #ifndef EOPF_DATASET_H
 #define EOPF_DATASET_H
 
-#include "gdal_priv.h"
+#include "gdal_pam.h"
+#include "cpl_json.h"
+#include <vector>
+#include <map>
 #include <string>
 
 enum class EOPFMode {
@@ -9,37 +12,52 @@ enum class EOPFMode {
     CONVENIENCE  // Simplified structure
 };
 
-/**
- * EOPFDataset class represents an EOPF dataset stored in a Zarr-like structure.
- * Inherits from GDALPamDataset to benefit from Persistent Auxiliary Metadata (PAM)
- */
+class EOPFRasterBand;
 
-class EOPFDataset final : public GDALDataset
-{
+class EOPFDataset final : public GDALDataset {
+    friend class EOPFRasterBand;
+
 public:
-    // Registration callbacks
     static GDALDataset* Open(GDALOpenInfo* poOpenInfo);
     static int Identify(GDALOpenInfo* poOpenInfo);
 
-    // Override methods from GDALDataset
-    CPLErr GetGeoTransform(double* padfTransform) override;
-    const std::string& GetPath() const { return m_osPath; }  // For m_osPath 
-    int GetChunkSizeX() const { return chunkSizeX; }
-    int GetChunkSizeY() const { return chunkSizeY; }
+    // Metadata and group access
+    const std::string& GetPath() const { return m_osPath; }
+    int GetChunkSizeX() const { return m_nChunkX; }
+    int GetChunkSizeY() const { return m_nChunkY; }
+    bool ParseZarrMetadata(const std::string& osMetadataPath);
+    bool LoadGroupStructure(const std::string& osPath);
+    std::vector<std::string> GetSubGroups() const;
+
+    // Sentinel-2 specific metadata
+    std::string GetSTACVersion() const { return m_osSTACVersion; }
+    std::string GetProcessingLevel() const { return m_osProcessingLevel; }
+
 private:
-    // Private constructor - datasets should be created with Open()
-    EOPFDataset();
+    struct GroupInfo {
+        std::string osPath;
+        std::map<std::string, std::string> attrs;
+        std::vector<std::string> arrays;
+        std::vector<GroupInfo> subgroups;
+    };
 
-    // Helper methods
-    bool Initialize(const char* pszFilename, EOPFMode eMode);
-    bool ParseZarrMetadata(const char* pszPath);
-
-    // Dataset properties
+    // Core properties
     std::string m_osPath;         // Path to the EOPF dataset
     EOPFMode m_eMode;             // Operational mode
-    bool m_bIsZarrV3;             // Whether this is a Zarr V3 dataset
-	int chunkSizeX = 256;          // Default chunk size X (to be parsed from metadata)
-	int chunkSizeY = 256;          // Default chunk size Y (to be parsed from metadata)
+    bool m_bIsZarrV3;
+    int m_nChunkX = 256;
+    int m_nChunkY = 256;
+    GroupInfo m_oRootGroup;
+
+    // Metadata
+    std::string m_osSTACVersion;
+    std::string m_osProcessingLevel;
+    std::map<std::string, std::map<std::string, std::string>> m_bandMetadata;
+
+    // Helper methods
+    void ParseBandMetadata(const CPLJSONObject& oBandRoot);
+    void GetSubGroupsRecursive(const GroupInfo& group,
+        std::vector<std::string>& output) const;
 };
 
-#endif /* EOPF_DATASET_H */
+#endif // EOPF_DATASET_H

@@ -35,18 +35,18 @@ CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
     int chunkY = nBlockYOff / poEOPFDS->GetChunkSizeY();
 
     // Construct chunk filename based on Zarr V2 convention: "chunkY.chunkX"
-    CPLString osChunkFile = CPLFormFilename(m_osChunkDir.c_str(),
-        CPLSPrintf("%d.%d", chunkY, chunkX),
-        nullptr);
+    CPLString osChunkFile = CPLFormFilename(
+        m_osChunkDir.c_str(),
+        CPLSPrintf("%d.%d", chunkX, chunkY), // Not chunkY.chunkX
+        nullptr
+    );
 
     // Open the chunk file using VSI functions
     VSILFILE* fp = VSIFOpenL(osChunkFile, "rb");
     if (fp == nullptr)
     {
         // If the chunk file does not exist, fill with fill value (here 0)
-        int nBytes = GDALGetDataTypeSizeBytes(eDataType) * nBlockXSize * nBlockYSize;
-        memset(pImage, 0, nBytes);
-        CPLDebug("EOPF", "Chunk file %s not found, filling with 0", osChunkFile.c_str());
+        memset(pImage, 0, nBlockXSize * nBlockYSize * GDALGetDataTypeSizeBytes(eDataType));
         return CE_None;
     }
 
