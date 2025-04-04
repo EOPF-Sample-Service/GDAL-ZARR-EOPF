@@ -20,7 +20,7 @@ EOPFRasterBand::EOPFRasterBand(GDALDataset* poDSIn, int nBandIn, GDALDataType eD
 
     // Set a default variable name and chunk directory.
     m_osVarName = CPLSPrintf("band%d", nBand);
-    m_osChunkDir = poEOPFDS->m_osPath; // assume chunk files are stored in the same directory
+    m_osChunkDir = poEOPFDS->GetPath(); // assume chunk files are stored in the same directory
 }
 
 CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)

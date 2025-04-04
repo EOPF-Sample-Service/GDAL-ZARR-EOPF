@@ -23,6 +23,7 @@ public:
 
     // Override methods from GDALDataset
     CPLErr GetGeoTransform(double* padfTransform) override;
+    const std::string& GetPath() const { return m_osPath; }  // For m_osPath 
     int GetChunkSizeX() const { return chunkSizeX; }
     int GetChunkSizeY() const { return chunkSizeY; }
 private:
