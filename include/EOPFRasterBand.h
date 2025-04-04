@@ -2,6 +2,7 @@
 #define EOPF_RASTERBAND_H
 
 #include "gdal_priv.h"
+#include <string>
 
 class EOPFRasterBand final : public GDALRasterBand
 {

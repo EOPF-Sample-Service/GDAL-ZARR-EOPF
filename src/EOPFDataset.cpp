@@ -1,35 +1,24 @@
 #include "EOPFDataset.h"
-#include "cpl_port.h"
+#include "EOPFRasterBand.h"
 #include "cpl_string.h"
 #include "cpl_vsi.h"
-#include "cpl_json.h"
-#include "EOPFRasterBand.h" 
 
-#include <algorithm>
+/************************************************************************/
+/*                             Identify()                               */
+/************************************************************************/
 
-// Constructor
-EOPFDataset::EOPFDataset() :
-    m_eMode(EOPFMode::CONVENIENCE),
-    m_bIsZarrV3(false)
-{
-}
-
-// Static method to identify EOPF datasets
-int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo)
-{
-    // Skip if filename is empty
+int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo) {
     if (poOpenInfo->pszFilename == nullptr)
         return FALSE;
 
-    // Get the filename
     const char* pszFilename = poOpenInfo->pszFilename;
 
     // Check if the file has a .zarr extension
     if (EQUAL(CPLGetExtension(pszFilename), "zarr"))
         return TRUE;
 
-    // Check for EOPF: prefix
-    if (STARTS_WITH_CI(pszFilename, "EOPF:"))
+    // Check for EOPF-Zarr prefix
+    if (STARTS_WITH_CI(pszFilename, "EOPF-Zarr:"))
         return TRUE;
 
     // Look for zarr.json (Zarr V3) or .zarray (Zarr V2) files
@@ -43,107 +32,146 @@ int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo)
     return FALSE;
 }
 
+
 // Static method to open EOPF datasets
-GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo)
-{
-    // Check if the driver can open this file
-    if (!Identify(poOpenInfo))
+
+GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo) {
+    if (!Identify(poOpenInfo) || poOpenInfo->eAccess == GA_Update)
         return nullptr;
 
-    // Parse for driver mode option
-    const char* pszMode = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "MODE");
-    EOPFMode eMode = EOPFMode::CONVENIENCE;  // Default to convenience mode
+    auto poDS = std::make_unique<EOPFDataset>();
+    poDS->m_osPath = STARTS_WITH_CI(poOpenInfo->pszFilename, "EOPF-Zarr:")
+        ? std::string(poOpenInfo->pszFilename + 10)
+        : std::string(poOpenInfo->pszFilename);
 
-    if (pszMode != nullptr) {
-        if (EQUAL(pszMode, "SENSOR"))
-            eMode = EOPFMode::SENSOR;
-        else if (EQUAL(pszMode, "CONVENIENCE"))
-            eMode = EOPFMode::CONVENIENCE;
-        else {
-            CPLError(CE_Warning, CPLE_AppDefined,
-                "Unknown mode '%s', defaulting to CONVENIENCE mode", pszMode);
-        }
-    }
-
-    // Create a new dataset
-    EOPFDataset* poDS = new EOPFDataset();
-
-    // Initialize the dataset
-    if (!poDS->Initialize(poOpenInfo->pszFilename, eMode)) {
-        delete poDS;
+    // Load metadata
+    std::string osZarray = CPLFormFilename(poDS->m_osPath.c_str(), ".zarray", nullptr);
+    if (!poDS->ParseZarrMetadata(osZarray)) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Failed to parse Zarr metadata");
         return nullptr;
     }
 
-    return poDS;
+    // Load group structure
+    if (!poDS->LoadGroupStructure(poDS->m_osPath)) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Failed to load group hierarchy");
+        return nullptr;
+    }
+
+    // Create subdataset list
+    std::vector<std::string> subgroups = poDS->GetSubGroups();
+    int nSubDS = 0;
+    for (const auto& group : subgroups) {
+        poDS->SetMetadataItem(
+            CPLSPrintf("SUBDATASET_%d_NAME", ++nSubDS),
+            CPLSPrintf("EOPF-Zarr:\"%s\"", group.c_str())
+        );
+        poDS->SetMetadataItem(
+            CPLSPrintf("SUBDATASET_%d_DESC", nSubDS),
+            CPLSPrintf("Group: %s", CPLGetFilename(group.c_str()))
+        );
+    }
+
+    // Create raster bands
+    poDS->nRasterXSize = poDS->m_nChunkX * 4;  // Example size for testing
+    poDS->nRasterYSize = poDS->m_nChunkY * 4;
+    poDS->nBands = 1;
+    poDS->SetBand(1, new EOPFRasterBand(poDS.get(), 1, GDT_Float32));
+
+    return poDS.release();
 }
 
-// Initialize dataset
-bool EOPFDataset::Initialize(const char* pszFilename, EOPFMode eMode)
-{
-    m_osPath = pszFilename;
-    m_eMode = eMode;
-
-    // If filename starts with EOPF:, extract the actual path
-    if (STARTS_WITH_CI(pszFilename, "EOPF:")) {
-        m_osPath = pszFilename + 5;  // Skip "EOPF:"
-    }
-
-    // Check Zarr version by looking for zarr.json (V3) or .zarray (V2)
-    VSIStatBufL sStat;
-    CPLString osZarrJsonPath = CPLFormFilename(m_osPath.c_str(), "zarr.json", nullptr);
-
-    if (VSIStatL(osZarrJsonPath, &sStat) == 0) {
-        m_bIsZarrV3 = true;
-        return ParseZarrMetadata(osZarrJsonPath.c_str());
-    }
-    else {
-        // If not V3, check for V2
-        CPLString osZarrayPath = CPLFormFilename(m_osPath.c_str(), ".zarray", nullptr);
-        if (VSIStatL(osZarrayPath, &sStat) == 0) {
-            m_bIsZarrV3 = false;
-            return ParseZarrMetadata(osZarrayPath.c_str());
-        }
-        else {
-            CPLError(CE_Failure, CPLE_AppDefined,
-                "Could not find zarr.json or .zarray in %s", m_osPath.c_str());
-            return false;
-        }
-    }
-}
 
 // Parse Zarr metadata
 // Add this to the ParseZarrMetadata method or Initialize method
-bool EOPFDataset::ParseZarrMetadata(const char* pszPath)
-{
-    // For now, just log that we found metadata
-    CPLDebug("EOPF", "Found metadata file: %s", pszPath);
-    
-    // Set some basic metadata
-    SetMetadataItem("ZARR_VERSION", m_bIsZarrV3 ? "3" : "2");
-    SetMetadataItem("DRIVER_MODE", m_eMode == EOPFMode::SENSOR ? "SENSOR" : "CONVENIENCE");
-    
-    // Mock raster information for initial implementation
-    // In a real implementation, this would be parsed from the Zarr metadata
-    nRasterXSize = 1000;
-    nRasterYSize = 1000;
-    
-    // Create a single raster band (float32 type)
-    // In a real implementation, bands would be created based on Zarr arrays
-    SetBand(1, new EOPFRasterBand(this, 1, GDT_Float32));
-    
+bool EOPFDataset::ParseZarrMetadata(const std::string& osMetadataPath) {
+    CPLJSONDocument oDoc;
+    if (!oDoc.Load(osMetadataPath)) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Failed to load %s", osMetadataPath.c_str());
+        return false;
+    }
+
+    CPLJSONObject oRoot = oDoc.GetRoot();
+
+    // Parse array dimensions
+    CPLJSONArray oShape = oRoot.GetArray("shape");
+    if (oShape.Size() >= 2) {
+        nRasterYSize = oShape[0].ToInteger();
+        nRasterXSize = oShape[1].ToInteger();
+    }
+
+    // Parse chunks
+    CPLJSONArray oChunks = oRoot.GetArray("chunks");
+    if (oChunks.Size() >= 2) {
+        m_nChunkY = oChunks[0].ToInteger();
+        m_nChunkX = oChunks[1].ToInteger();
+    }
+
+    // Parse STAC metadata
+    CPLJSONObject oSTAC = oRoot.GetObj("stac");
+    if (oSTAC.IsValid()) {
+        m_osSTACVersion = oSTAC.GetString("version");
+        SetMetadataItem("STAC_VERSION", m_osSTACVersion.c_str());
+    }
+
     return true;
 }
 
-
-// Override GetGeoTransform
-CPLErr EOPFDataset::GetGeoTransform(double* padfTransform)
+bool EOPFDataset::LoadGroupStructure(const std::string& osPath)
 {
-    padfTransform[0] = 0.0;  // Origin X
-    padfTransform[1] = 1.0;  // Pixel width
-    padfTransform[2] = 0.0;  // Rotation (row/column)
-    padfTransform[3] = 0.0;  // Origin Y
-    padfTransform[4] = 0.0;  // Rotation (row/column)
-    padfTransform[5] = 1.0;  // Pixel height
+    CPLJSONDocument oDoc;
+    std::string osGroupFile = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
 
-    return CE_None;
+    if (oDoc.Load(osGroupFile)) {
+        // Load subgroups
+        CPLJSONArray oGroups = oDoc.GetRoot().GetArray("groups");
+        for (int i = 0; i < oGroups.Size(); ++i) {
+            GroupInfo subgroup;
+            subgroup.osPath = CPLFormFilename(osPath.c_str(),
+                oGroups[i].ToString().c_str(),
+                nullptr);
+            if (LoadGroupStructure(subgroup.osPath)) {
+                m_oRootGroup.subgroups.push_back(subgroup);
+            }
+        }
+    }
+
+	// Load arrays
+    std::string osArrayfile = CPLFormFilename(osPath.c_str(), ".zarray", nullptr);
+    if (oDoc.Load(osArrayfile)) {
+        m_oRootGroup.arrays.push_back(osPath);
+    }
+
+	return true;
+}
+
+
+void EOPFDataset::ParseBandMetadata(const CPLJSONObject& oBand) {
+    std::string osBandName = oBand.GetName();
+    std::map<std::string, std::string> bandMetadata;
+
+    bandMetadata["central_wavelength"] = oBand.GetString("central_wavelength");
+    bandMetadata["bandwidth"] = oBand.GetString("bandwidth");
+    bandMetadata["physical_gain"] = oBand.GetString("physical_gain");
+
+    // Add spectral response (truncated for brevity)
+    CPLJSONArray oSpectralResponse = oBand.GetArray("spectral_response_values");
+    if (oSpectralResponse.IsValid()) {
+        bandMetadata["spectral_response"] = "..."; // Store first 5 values
+    }
+
+    m_bandMetadata[osBandName] = bandMetadata;
+}
+
+std::vector<std::string> EOPFDataset::GetSubGroups() const {
+    std::vector<std::string> subgroups;
+    GetSubGroupsRecursive(m_oRootGroup, subgroups);
+    return subgroups;
+}
+
+void EOPFDataset::GetSubGroupsRecursive(const GroupInfo& group,
+    std::vector<std::string>& output) const {
+    for (const auto& subgroup : group.subgroups) {
+        output.push_back(subgroup.osPath);
+        GetSubGroupsRecursive(subgroup, output);
+    }
 }
