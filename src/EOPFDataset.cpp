@@ -132,8 +132,8 @@ bool EOPFDataset::Initialize(const char* pszFilename, EOPFMode eMode)
     m_eMode = eMode;
 
     // If filename starts with EOPF:, extract the actual path
-    if (STARTS_WITH_CI(pszFilename, "EOPF:")) {
-        m_osPath = pszFilename + 5;  // Skip "EOPF:"
+    if (STARTS_WITH_CI(pszFilename, "EOPF-Zarr:")) {
+        m_osPath = pszFilename + 10;  // Skip "EOPF:"
     }
 
     // Check Zarr version by looking for zarr.json (V3) or .zarray (V2)

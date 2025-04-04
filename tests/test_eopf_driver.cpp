@@ -9,7 +9,7 @@ int main()
     GDALAllRegister();
 
     // Check for EOPF driver by name
-    GDALDriver* poDriver = GetGDALDriverManager()->GetDriverByName("EOPF");
+    GDALDriver* poDriver = GetGDALDriverManager()->GetDriverByName("EOPF-Zarr");
     if (!poDriver) {
         std::cerr << "ERROR: EOPF driver not found!" << std::endl;
         return 1; // non-zero means test failure

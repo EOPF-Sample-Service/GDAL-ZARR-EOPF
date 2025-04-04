@@ -7,14 +7,14 @@ extern "C" void GDALRegister_EOPF();
 extern "C" void GDALRegister_EOPF()
 {
     // Avoid re-registering if the driver already exists
-    if (GDALGetDriverByName("EOPF") != nullptr)
+    if (GDALGetDriverByName("EOPF-Zarr") != nullptr)
         return;
 
     // Create a new driver
     GDALDriver* poDriver = new GDALDriver();
 
     // Short name
-    poDriver->SetDescription("EOPF");
+    poDriver->SetDescription("EOPF-Zarr");
 
     // Long name (for display)
     poDriver->SetMetadataItem(GDAL_DMD_LONGNAME, "Earth Observation Processing Framework Demo");
