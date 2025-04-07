@@ -8,52 +8,33 @@
 /************************************************************************/
 
 int EOPFDataset::Identify(GDALOpenInfo* poOpenInfo) {
-    if (poOpenInfo->pszFilename == nullptr)
-        return FALSE;
-
-    const char* pszFilename = poOpenInfo->pszFilename;
-
-    // Check if the file has a .zarr extension
-    if (EQUAL(CPLGetExtension(pszFilename), "zarr"))
-        return TRUE;
-
-    // Check for EOPF-Zarr prefix
-    if (STARTS_WITH_CI(pszFilename, "EOPF-Zarr:"))
-        return TRUE;
-
-    // Look for zarr.json (Zarr V3) or .zarray (Zarr V2) files
-    VSIStatBufL sStat;
-    CPLString osZarrJsonPath = CPLFormFilename(pszFilename, "zarr.json", nullptr);
-    CPLString osZarrayPath = CPLFormFilename(pszFilename, ".zarray", nullptr);
-
-    if (VSIStatL(osZarrJsonPath, &sStat) == 0 || VSIStatL(osZarrayPath, &sStat) == 0)
-        return TRUE;
-
-    return FALSE;
+    return STARTS_WITH_CI(poOpenInfo->pszFilename, "EOPF-Zarr:");
 }
 
-
-// Static method to open EOPF datasets
+/************************************************************************/
+/*                              Open()                                  */
+/************************************************************************/
 
 GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo) {
     if (!Identify(poOpenInfo) || poOpenInfo->eAccess == GA_Update)
         return nullptr;
 
-    auto poDS = std::make_unique<EOPFDataset>();
-    poDS->m_osPath = STARTS_WITH_CI(poOpenInfo->pszFilename, "EOPF-Zarr:")
-        ? std::string(poOpenInfo->pszFilename + 10)
-        : std::string(poOpenInfo->pszFilename);
+    // Extract dataset path (strip "EOPF-Zarr:" prefix)
+    std::string osPath(poOpenInfo->pszFilename + 10); // "EOPF-Zarr:" is 10 chars
 
-    // Load metadata
-    std::string osZarray = CPLFormFilename(poDS->m_osPath.c_str(), ".zarray", nullptr);
+    auto poDS = std::make_unique<EOPFDataset>();
+    poDS->m_osPath = osPath;
+
+    // Parse root metadata
+    std::string osZarray = CPLFormFilename(osPath.c_str(), ".zarray", nullptr);
     if (!poDS->ParseZarrMetadata(osZarray)) {
         CPLError(CE_Failure, CPLE_AppDefined, "Failed to parse Zarr metadata");
         return nullptr;
     }
 
-    // Load group structure
-    if (!poDS->LoadGroupStructure(poDS->m_osPath)) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Failed to load group hierarchy");
+    // Load group hierarchy
+    if (!poDS->LoadGroupStructure(osPath)) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Failed to load group structure");
         return nullptr;
     }
 
@@ -71,22 +52,22 @@ GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo) {
         );
     }
 
-    // Create raster bands
+    // Create bands (example for first group)
     poDS->nRasterXSize = poDS->m_nChunkX * 4;  // Example size for testing
     poDS->nRasterYSize = poDS->m_nChunkY * 4;
-    poDS->nBands = 1;
     poDS->SetBand(1, new EOPFRasterBand(poDS.get(), 1, GDT_Float32));
 
     return poDS.release();
 }
 
+/************************************************************************/
+/*                        ParseZarrMetadata()                           */
+/************************************************************************/
 
-// Parse Zarr metadata
-// Add this to the ParseZarrMetadata method or Initialize method
 bool EOPFDataset::ParseZarrMetadata(const std::string& osMetadataPath) {
     CPLJSONDocument oDoc;
     if (!oDoc.Load(osMetadataPath)) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Failed to load %s", osMetadataPath.c_str());
+        CPLError(CE_Failure, CPLE_AppDefined, "Can't load %s", osMetadataPath.c_str());
         return false;
     }
 
@@ -95,15 +76,15 @@ bool EOPFDataset::ParseZarrMetadata(const std::string& osMetadataPath) {
     // Parse array dimensions
     CPLJSONArray oShape = oRoot.GetArray("shape");
     if (oShape.Size() >= 2) {
-        nRasterYSize = oShape[0].ToInteger();
-        nRasterXSize = oShape[1].ToInteger();
+        nRasterYSize = oShape[0].GetInteger();
+        nRasterXSize = oShape[1].GetInteger();
     }
 
     // Parse chunks
     CPLJSONArray oChunks = oRoot.GetArray("chunks");
     if (oChunks.Size() >= 2) {
-        m_nChunkY = oChunks[0].ToInteger();
-        m_nChunkX = oChunks[1].ToInteger();
+        m_nChunkY = oChunks[0].GetInteger();
+        m_nChunkX = oChunks[1].GetInteger();
     }
 
     // Parse STAC metadata
@@ -113,28 +94,38 @@ bool EOPFDataset::ParseZarrMetadata(const std::string& osMetadataPath) {
         SetMetadataItem("STAC_VERSION", m_osSTACVersion.c_str());
     }
 
-    return true;
-}
-
-bool EOPFDataset::LoadGroupStructure(const std::string& osPath)
-{
-    CPLJSONDocument oDoc;
-    std::string osGroupFile = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
-    if (!oDoc.Load(osGroupFile)) return false;
-    m_oRootGroup.osPath = osPath;
-
-    // Load attributes
-    std::string osAttrFile = CPLFormFilename(osPath.c_str(), ".zattrs", nullptr);
-    if (oDoc.Load(osAttrFile)) {
-        CPLJSONObject oRoot = oDoc.GetRoot();
-        for (const auto& item : oRoot.GetChildren()) {
-            m_oRootGroup.attrs[item.GetName()] = item.ToString();
+    // Parse band metadata
+    CPLJSONObject oBandMetadata = oRoot.GetObj("band_metadata");
+    if (oBandMetadata.IsValid()) {
+        for (const auto& oBand : oBandMetadata.GetChildren()) {
+            ParseBandMetadata(oBand);
         }
     }
 
-    // Recursively load subgroups
-    std::string osSubGroupsFile = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
-    if (oDoc.Load(osSubGroupsFile)) {
+    return true;
+}
+
+/************************************************************************/
+/*                        LoadGroupStructure()                          */
+/************************************************************************/
+
+bool EOPFDataset::LoadGroupStructure(const std::string& osPath) {
+    CPLJSONDocument oDoc;
+    std::string osGroupFile = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
+
+    if (oDoc.Load(osGroupFile)) {
+        m_oRootGroup.osPath = osPath;
+
+        // Load attributes
+        std::string osAttrFile = CPLFormFilename(osPath.c_str(), ".zattrs", nullptr);
+        if (oDoc.Load(osAttrFile)) {
+            CPLJSONObject oRoot = oDoc.GetRoot();
+            for (const auto& item : oRoot.GetChildren()) {
+                m_oRootGroup.attrs[item.GetName()] = item.ToString();
+            }
+        }
+
+        // Process subgroups
         CPLJSONArray oGroups = oDoc.GetRoot().GetArray("groups");
         for (int i = 0; i < oGroups.Size(); ++i) {
             GroupInfo subgroup;
@@ -147,15 +138,41 @@ bool EOPFDataset::LoadGroupStructure(const std::string& osPath)
         }
     }
 
-	// Load arrays
-    std::string osArrayfile = CPLFormFilename(osPath.c_str(), ".zarray", nullptr);
-    if (oDoc.Load(osArrayfile)) {
+    // Process arrays
+    std::string osArrayFile = CPLFormFilename(osPath.c_str(), ".zarray", nullptr);
+    VSIStatBufL sStat;
+    if (oDoc.Load(osArrayFile)) {
         m_oRootGroup.arrays.push_back(osPath);
     }
 
-	return true;
+    return true;
 }
 
+/************************************************************************/
+/*                        GetSubGroupsRecursive()                       */
+/************************************************************************/
+
+void EOPFDataset::GetSubGroupsRecursive(const GroupInfo& group,
+    std::vector<std::string>& output) const {
+    for (const auto& subgroup : group.subgroups) {
+        output.push_back(subgroup.osPath);
+        GetSubGroupsRecursive(subgroup, output);
+    }
+}
+
+/************************************************************************/
+/*                           GetSubGroups()                             */
+/************************************************************************/
+
+std::vector<std::string> EOPFDataset::GetSubGroups() const {
+    std::vector<std::string> subgroups;
+    GetSubGroupsRecursive(m_oRootGroup, subgroups);
+    return subgroups;
+}
+
+/************************************************************************/
+/*                        ParseBandMetadata()                           */
+/************************************************************************/
 
 void EOPFDataset::ParseBandMetadata(const CPLJSONObject& oBand) {
     std::string osBandName = oBand.GetName();
@@ -165,29 +182,5 @@ void EOPFDataset::ParseBandMetadata(const CPLJSONObject& oBand) {
     bandMetadata["bandwidth"] = oBand.GetString("bandwidth");
     bandMetadata["physical_gain"] = oBand.GetString("physical_gain");
 
-    // Add spectral response (truncated for brevity)
-    CPLJSONArray oSpectralResponse = oBand.GetArray("spectral_response_values");
-    if (oSpectralResponse.IsValid()) {
-        bandMetadata["spectral_response"] = "..."; // Store first 5 values
-    }
-
     m_bandMetadata[osBandName] = bandMetadata;
-}
-
-std::vector<std::string> EOPFDataset::GetSubGroups() const {
-    std::vector<std::string> subgroups;
-    GetSubGroupsRecursive(m_oRootGroup, subgroups);
-    return subgroups;
-}
-
-std::vector<std::string> EOPFDataset::GetArrays() const {
-    return m_oRootGroup.arrays;
-}
-
-void EOPFDataset::GetSubGroupsRecursive(const GroupInfo& group,
-    std::vector<std::string>& output) const {
-    for (const auto& subgroup : group.subgroups) {
-        output.push_back(subgroup.osPath);
-        GetSubGroupsRecursive(subgroup, output);
-    }
 }
