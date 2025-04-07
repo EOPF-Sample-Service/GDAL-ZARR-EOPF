@@ -175,6 +175,7 @@ std::vector<std::string> EOPFDataset::GetSubGroups() const {
     return subgroups;
 }
 
+
 /************************************************************************/
 /*                        ParseBandMetadata()                           */
 /************************************************************************/
@@ -189,3 +190,4 @@ void EOPFDataset::ParseBandMetadata(const CPLJSONObject& oBand) {
 
     m_bandMetadata[osBandName] = bandMetadata;
 }
+
