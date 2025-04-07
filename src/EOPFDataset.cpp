@@ -120,9 +120,21 @@ bool EOPFDataset::LoadGroupStructure(const std::string& osPath)
 {
     CPLJSONDocument oDoc;
     std::string osGroupFile = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
+    if (!oDoc.Load(osGroupFile)) return false;
+    m_oRootGroup.osPath = osPath;
 
-    if (oDoc.Load(osGroupFile)) {
-        // Load subgroups
+    // Load attributes
+    std::string osAttrFile = CPLFormFilename(osPath.c_str(), ".zattrs", nullptr);
+    if (oDoc.Load(osAttrFile)) {
+        CPLJSONObject oRoot = oDoc.GetRoot();
+        for (const auto& item : oRoot.GetChildren()) {
+            m_oRootGroup.attrs[item.GetName()] = item.ToString();
+        }
+    }
+
+    // Recursively load subgroups
+    std::string osSubGroupsFile = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
+    if (oDoc.Load(osSubGroupsFile)) {
         CPLJSONArray oGroups = oDoc.GetRoot().GetArray("groups");
         for (int i = 0; i < oGroups.Size(); ++i) {
             GroupInfo subgroup;
