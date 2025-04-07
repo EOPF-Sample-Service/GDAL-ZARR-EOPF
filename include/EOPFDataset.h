@@ -1,3 +1,14 @@
+
+#define EOPF_DATASET_H
+
+#include "gdal_pam.h"  // GDAL dataset base class
+#include "cpl_json.h"  // CPLJSONObject
+#include <vector>
+#include <map>
+#include <string>
+
+class EOPFRasterBand;
+
 class EOPFDataset final : public GDALDataset {
     friend class EOPFRasterBand;
 
@@ -45,11 +56,10 @@ private:
     /************************************************************************/
     /*                        ListSubDatasets()                             */
     /************************************************************************/
-
-    std::vector<std::string> EOPFDataset::ListSubDatasets() const {
-        std::vector<std::string> subdatasets;
-        for (const auto& subgroup : m_oRootGroup.subgroups) {
-            subdatasets.push_back(subgroup.osPath);
-        }
-        return subdatasets;
+std::vector<std::string> EOPFDataset::ListSubDatasets() const {
+    std::vector<std::string> subdatasets;
+    for (const auto& subgroup : m_oRootGroup.subgroups) {
+        subdatasets.push_back(subgroup.osPath);
     }
+    return subdatasets;
+}
