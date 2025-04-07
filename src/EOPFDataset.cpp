@@ -180,6 +180,10 @@ std::vector<std::string> EOPFDataset::GetSubGroups() const {
     return subgroups;
 }
 
+std::vector<std::string> EOPFDataset::GetArrays() const {
+    return m_oRootGroup.arrays;
+}
+
 void EOPFDataset::GetSubGroupsRecursive(const GroupInfo& group,
     std::vector<std::string>& output) const {
     for (const auto& subgroup : group.subgroups) {

@@ -69,5 +69,20 @@ CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
 
     CPLDebug("EOPF", "Successfully read chunk (%d, %d) from %s", chunkX, chunkY, osChunkFile.c_str());
 
+    std::string res = "r10m";  // Extract from m_osCurrentPath
+    if (poEOPFDS->m_osCurrentPath.find("r20m") != std::string::npos) res = "r20m";
+    else if (poEOPFDS->m_osCurrentPath.find("r60m") != std::string::npos) res = "r60m";
+
+    // Build chunk path
+    std::string osChunkFile = CPLFormFilename(
+        poEOPFDS->m_osPath.c_str(),
+        CPLSPrintf("%s/%s/%d.%d",
+            poEOPFDS->m_osCurrentPath.c_str(),
+            res.c_str(),
+            nBlockYOff,
+            nBlockXOff),
+        nullptr
+    );
+
     return CE_None;
 }

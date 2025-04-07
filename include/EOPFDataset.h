@@ -28,7 +28,7 @@ public:
     bool ParseZarrMetadata(const std::string& osMetadataPath);
     bool LoadGroupStructure(const std::string& osPath);
     std::vector<std::string> GetSubGroups() const;
-
+    std::vector<std::string> GetArrays() const;
     // Sentinel-2 specific metadata
     std::string GetSTACVersion() const { return m_osSTACVersion; }
     std::string GetProcessingLevel() const { return m_osProcessingLevel; }
@@ -45,7 +45,9 @@ private:
     std::string m_osPath;         // Path to the EOPF dataset
     int m_nChunkX = 256;
     int m_nChunkY = 256;
+
     GroupInfo m_oRootGroup;
+    std::string m_osCurrentPath;
 
     // Metadata
     std::string m_osSTACVersion;
