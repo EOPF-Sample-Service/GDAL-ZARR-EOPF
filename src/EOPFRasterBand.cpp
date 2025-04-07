@@ -3,78 +3,60 @@
 #include "cpl_conv.h"
 #include "cpl_vsi.h"
 #include "cpl_string.h"
-#include <cstring>
-#include <vector>
 
-EOPFRasterBand::EOPFRasterBand(GDALDataset* poDSIn, int nBandIn, GDALDataType eDataTypeIn)
-{
+EOPFRasterBand::EOPFRasterBand(GDALDataset* poDSIn, int nBandIn, GDALDataType eDataTypeIn) {
     poDS = poDSIn;
     nBand = nBandIn;
     eDataType = eDataTypeIn;
 
-    // For Zarr, set block size equal to chunk dimensions if available.
     EOPFDataset* poEOPFDS = static_cast<EOPFDataset*>(poDSIn);
-    // Use public getters instead of private members
+    if (!poEOPFDS) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Invalid dataset pointer");
+        return;
+    }
+
+    // Set block size from dataset's chunk dimensions
     nBlockXSize = poEOPFDS->GetChunkSizeX();
     nBlockYSize = poEOPFDS->GetChunkSizeY();
 
-    // Set a default variable name and chunk directory.
-    m_osVarName = CPLSPrintf("band%d", nBand);
-    m_osChunkDir = poEOPFDS->GetPath(); // assume chunk files are stored in the same directory
+    // Get dataset path for chunk directory
+    m_osChunkDir = poEOPFDS->GetPath();
 }
 
-CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
-{
+CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) {
     EOPFDataset* poEOPFDS = static_cast<EOPFDataset*>(poDS);
-    if (!poEOPFDS)
+    if (!poEOPFDS) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Dataset unavailable");
         return CE_Failure;
+    }
 
-    // For simplicity, assume block corresponds exactly to one chunk.
-    // Compute chunk indices:
-    int chunkX = nBlockXOff / poEOPFDS->GetChunkSizeX();
-    int chunkY = nBlockYOff / poEOPFDS->GetChunkSizeY();
-
-    std::string res = "r10m";  // Extract from m_osCurrentPath
-    if (poEOPFDS->m_osCurrentPath.find("r20m") != std::string::npos) res = "r20m";
-    else if (poEOPFDS->m_osCurrentPath.find("r60m") != std::string::npos) res = "r60m";
-    // Construct chunk filename based on Zarr V2 convention: "chunkY.chunkX"
+    // Zarr chunk naming convention: "y.x"
     CPLString osChunkFile = CPLFormFilename(
-        poEOPFDS->m_osPath.c_str(),
-        CPLSPrintf("%s/%s/%d.%d",
-            poEOPFDS->m_osCurrentPath.c_str(),
-            res.c_str(),
-            nBlockYOff,
-            nBlockXOff),
+        m_osChunkDir.c_str(),
+        CPLSPrintf("%d.%d", nBlockYOff, nBlockXOff), // Note Y comes first
         nullptr
     );
 
-    // Open the chunk file using VSI functions
     VSILFILE* fp = VSIFOpenL(osChunkFile, "rb");
-    if (fp == nullptr)
-    {
-        // If the chunk file does not exist, fill with fill value (here 0)
-        memset(pImage, 0, nBlockXSize * nBlockYSize * GDALGetDataTypeSizeBytes(eDataType));
+    if (!fp) {
+        // Initialize with zeros if chunk missing
+        int nPixels = nBlockXSize * nBlockYSize;
+        memset(pImage, 0, nPixels * GDALGetDataTypeSizeBytes(eDataType));
+        CPLError(CE_Warning, CPLE_FileIO, "Chunk %s not found", osChunkFile.c_str());
         return CE_None;
     }
 
-    // Allocate a buffer for the chunk data
-    int nBytes = GDALGetDataTypeSizeBytes(eDataType) * poEOPFDS->GetChunkSizeX() * poEOPFDS->GetChunkSizeY();
-    std::vector<char> chunkData(nBytes, 0);
-
-    size_t nRead = VSIFReadL(chunkData.data(), 1, nBytes, fp);
+    // Calculate expected bytes
+    size_t nExpectedBytes = GDALGetDataTypeSizeBytes(eDataType) * nBlockXSize * nBlockYSize;
+    size_t nRead = VSIFReadL(pImage, 1, nExpectedBytes, fp);
     VSIFCloseL(fp);
 
-    if (nRead != (size_t)nBytes)
-    {
-        CPLError(CE_Failure, CPLE_FileIO, "Failed to read complete chunk from %s", osChunkFile.c_str());
+    if (nRead != nExpectedBytes) {
+        CPLError(CE_Failure, CPLE_FileIO,
+            "Short read (%d/%d bytes) for %s",
+            (int)nRead, (int)nExpectedBytes, osChunkFile.c_str());
         return CE_Failure;
     }
-
-    // For this implementation, assume the entire chunk is used.
-    // If block size exactly equals chunk size, we can simply copy the data.
-    memcpy(pImage, chunkData.data(), nBytes);
-
-    CPLDebug("EOPF", "Successfully read chunk (%d, %d) from %s", chunkX, chunkY, osChunkFile.c_str());
 
     return CE_None;
 }
