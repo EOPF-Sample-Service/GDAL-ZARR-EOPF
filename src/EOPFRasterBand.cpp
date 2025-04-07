@@ -34,10 +34,17 @@ CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
     int chunkX = nBlockXOff / poEOPFDS->GetChunkSizeX();
     int chunkY = nBlockYOff / poEOPFDS->GetChunkSizeY();
 
+    std::string res = "r10m";  // Extract from m_osCurrentPath
+    if (poEOPFDS->m_osCurrentPath.find("r20m") != std::string::npos) res = "r20m";
+    else if (poEOPFDS->m_osCurrentPath.find("r60m") != std::string::npos) res = "r60m";
     // Construct chunk filename based on Zarr V2 convention: "chunkY.chunkX"
     CPLString osChunkFile = CPLFormFilename(
-        m_osChunkDir.c_str(),
-        CPLSPrintf("%d.%d", chunkX, chunkY), // Not chunkY.chunkX
+        poEOPFDS->m_osPath.c_str(),
+        CPLSPrintf("%s/%s/%d.%d",
+            poEOPFDS->m_osCurrentPath.c_str(),
+            res.c_str(),
+            nBlockYOff,
+            nBlockXOff),
         nullptr
     );
 
@@ -68,21 +75,6 @@ CPLErr EOPFRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
     memcpy(pImage, chunkData.data(), nBytes);
 
     CPLDebug("EOPF", "Successfully read chunk (%d, %d) from %s", chunkX, chunkY, osChunkFile.c_str());
-
-    std::string res = "r10m";  // Extract from m_osCurrentPath
-    if (poEOPFDS->m_osCurrentPath.find("r20m") != std::string::npos) res = "r20m";
-    else if (poEOPFDS->m_osCurrentPath.find("r60m") != std::string::npos) res = "r60m";
-
-    // Build chunk path
-    std::string osChunkFile = CPLFormFilename(
-        poEOPFDS->m_osPath.c_str(),
-        CPLSPrintf("%s/%s/%d.%d",
-            poEOPFDS->m_osCurrentPath.c_str(),
-            res.c_str(),
-            nBlockYOff,
-            nBlockXOff),
-        nullptr
-    );
 
     return CE_None;
 }
