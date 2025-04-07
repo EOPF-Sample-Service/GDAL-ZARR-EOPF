@@ -76,15 +76,15 @@ bool EOPFDataset::ParseZarrMetadata(const std::string& osMetadataPath) {
     // Parse array dimensions
     CPLJSONArray oShape = oRoot.GetArray("shape");
     if (oShape.Size() >= 2) {
-        nRasterYSize = oShape[0].GetInteger();
-        nRasterXSize = oShape[1].GetInteger();
+        nRasterYSize = oShape[0].ToInteger();
+        nRasterXSize = oShape[1].ToInteger();
     }
 
     // Parse chunks
     CPLJSONArray oChunks = oRoot.GetArray("chunks");
     if (oChunks.Size() >= 2) {
-        m_nChunkY = oChunks[0].GetInteger();
-        m_nChunkX = oChunks[1].GetInteger();
+        m_nChunkY = oChunks[0].ToInteger();
+        m_nChunkX = oChunks[1].ToInteger();
     }
 
     // Parse STAC metadata
