@@ -1,14 +1,3 @@
-#ifndef EOPF_DATASET_H
-#define EOPF_DATASET_H
-
-#include "gdal_pam.h"
-#include "cpl_json.h"
-#include <vector>
-#include <map>
-#include <string>
-
-class EOPFRasterBand;
-
 class EOPFDataset final : public GDALDataset {
     friend class EOPFRasterBand;
 
@@ -23,6 +12,7 @@ public:
     bool ParseZarrMetadata(const std::string& osMetadataPath);
     bool LoadGroupStructure(const std::string& osPath);
     std::vector<std::string> GetSubGroups() const;
+    std::vector<std::string> ListSubDatasets() const; // Add this line
 
     // Sentinel-2 specific metadata
     std::string GetSTACVersion() const { return m_osSTACVersion; }
@@ -52,5 +42,14 @@ private:
     void GetSubGroupsRecursive(const GroupInfo& group,
         std::vector<std::string>& output) const;
 };
+    /************************************************************************/
+    /*                        ListSubDatasets()                             */
+    /************************************************************************/
 
-#endif // EOPF_DATASET_H
+    std::vector<std::string> EOPFDataset::ListSubDatasets() const {
+        std::vector<std::string> subdatasets;
+        for (const auto& subgroup : m_oRootGroup.subgroups) {
+            subdatasets.push_back(subgroup.osPath);
+        }
+        return subdatasets;
+    }

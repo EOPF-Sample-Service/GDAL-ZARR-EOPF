@@ -19,46 +19,54 @@ GDALDataset* EOPFDataset::Open(GDALOpenInfo* poOpenInfo) {
     if (!Identify(poOpenInfo) || poOpenInfo->eAccess == GA_Update)
         return nullptr;
 
-    // Extract dataset path (strip "EOPF-Zarr:" prefix)
-    std::string osPath(poOpenInfo->pszFilename + 10); // "EOPF-Zarr:" is 10 chars
+    // Extract path (strip "EOPF-Zarr:" prefix if present)
+    std::string osPath = STARTS_WITH_CI(poOpenInfo->pszFilename, "EOPF-Zarr:")
+        ? std::string(poOpenInfo->pszFilename + 10)
+        : std::string(poOpenInfo->pszFilename);
 
     auto poDS = std::make_unique<EOPFDataset>();
     poDS->m_osPath = osPath;
 
-    // Parse root metadata
-    std::string osZarray = CPLFormFilename(osPath.c_str(), ".zarray", nullptr);
-    if (!poDS->ParseZarrMetadata(osZarray)) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Failed to parse Zarr metadata");
-        return nullptr;
+    // Check if root is a group
+    std::string osZgroup = CPLFormFilename(osPath.c_str(), ".zgroup", nullptr);
+    if (VSIStatL(osZgroup.c_str(), nullptr) == 0) {
+        // Load group hierarchy
+        if (!poDS->LoadGroupStructure(osPath)) {
+            CPLError(CE_Failure, CPLE_AppDefined, "Failed to load group structure");
+            return nullptr;
+        }
+
+        // Create subdataset entries
+        std::vector<std::string> subgroups = poDS->GetSubGroups();
+        int nSubDs = 0;
+        for (const auto& group : subgroups) {
+            poDS->SetMetadataItem(
+                CPLSPrintf("SUBDATASET_%d_NAME", ++nSubDs),
+                CPLSPrintf("EOPF-Zarr:\"%s\"", group.c_str())
+            );
+            poDS->SetMetadataItem(
+                CPLSPrintf("SUBDATASET_%d_DESC", nSubDs),
+                CPLSPrintf("Group: %s", CPLGetFilename(group.c_str()))
+            );
+        }
+    }
+    // Check if root is an array
+    else {
+        std::string osZarray = CPLFormFilename(osPath.c_str(), ".zarray", nullptr);
+        if (!poDS->ParseZarrMetadata(osZarray)) {
+            CPLError(CE_Failure, CPLE_AppDefined, "Failed to parse array metadata");
+            return nullptr;
+        }
     }
 
-    // Load group hierarchy
-    if (!poDS->LoadGroupStructure(osPath)) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Failed to load group structure");
-        return nullptr;
-    }
-
-    // Create subdataset list
-    std::vector<std::string> subgroups = poDS->GetSubGroups();
-    int nSubDS = 0;
-    for (const auto& group : subgroups) {
-        poDS->SetMetadataItem(
-            CPLSPrintf("SUBDATASET_%d_NAME", ++nSubDS),
-            CPLSPrintf("EOPF-Zarr:\"%s\"", group.c_str())
-        );
-        poDS->SetMetadataItem(
-            CPLSPrintf("SUBDATASET_%d_DESC", nSubDS),
-            CPLSPrintf("Group: %s", CPLGetFilename(group.c_str()))
-        );
-    }
-
-    // Create bands (example for first group)
-    poDS->nRasterXSize = poDS->m_nChunkX * 4;  // Example size for testing
+    // Create raster bands
+    poDS->nRasterXSize = poDS->m_nChunkX * 4;  // Example size
     poDS->nRasterYSize = poDS->m_nChunkY * 4;
     poDS->SetBand(1, new EOPFRasterBand(poDS.get(), 1, GDT_Float32));
 
     return poDS.release();
 }
+
 
 /************************************************************************/
 /*                        ParseZarrMetadata()                           */
@@ -87,23 +95,20 @@ bool EOPFDataset::ParseZarrMetadata(const std::string& osMetadataPath) {
         m_nChunkX = oChunks[1].ToInteger();
     }
 
-    // Parse STAC metadata
-    CPLJSONObject oSTAC = oRoot.GetObj("stac");
-    if (oSTAC.IsValid()) {
-        m_osSTACVersion = oSTAC.GetString("version");
-        SetMetadataItem("STAC_VERSION", m_osSTACVersion.c_str());
-    }
-
-    // Parse band metadata
-    CPLJSONObject oBandMetadata = oRoot.GetObj("band_metadata");
-    if (oBandMetadata.IsValid()) {
-        for (const auto& oBand : oBandMetadata.GetChildren()) {
-            ParseBandMetadata(oBand);
+    // Parse STAC metadata from parent group
+    std::string osParentDir = CPLGetPath(osMetadataPath.c_str());
+    std::string osGroupAttrs = CPLFormFilename(osParentDir.c_str(), ".zattrs", nullptr);
+    if (oDoc.Load(osGroupAttrs)) {
+        CPLJSONObject oSTAC = oDoc.GetRoot().GetObj("stac");
+        if (oSTAC.IsValid()) {
+            m_osSTACVersion = oSTAC.GetString("version");
+            SetMetadataItem("STAC_VERSION", m_osSTACVersion.c_str());
         }
     }
 
     return true;
 }
+
 
 /************************************************************************/
 /*                        LoadGroupStructure()                          */
