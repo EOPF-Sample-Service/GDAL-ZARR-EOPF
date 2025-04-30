@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(eopf-gdal-driver VERSION 0.1.0 LANGUAGES CXX)
+project(EOPFZarrPlugin VERSION 0.1.0 LANGUAGES CXX)
 
 
 #  Find GDAL Package
@@ -15,7 +15,7 @@ add_library(eopfdriver SHARED
   src/EOPFDataset.cpp
   src/EOPFRasterBand.cpp
 
-)
+ "include/EOPFZarr.h")
 
 if(TARGET GDAL::GDAL)
   target_link_libraries(eopfdriver PRIVATE GDAL::GDAL)
@@ -38,7 +38,7 @@ enable_testing()
 # Create a test executable
 add_executable(test_eopf_driver
     tests/test_eopf_driver.cpp
-)
+ "include/EOPFZarr.h")
 # Link test against GDAL
 if(TARGET GDAL::GDAL)
     target_link_libraries(test_eopf_driver PRIVATE GDAL::GDAL)
@@ -51,7 +51,7 @@ endif()
 add_test(NAME EOPFRegistrationTest COMMAND test_eopf_driver)
 
 # Add new test_zarr_read
-add_executable(test_zarr_read tests/test_zarr_read.cpp)
+add_executable(test_zarr_read tests/test_zarr_read.cpp "include/EOPFZarr.h")
 if(TARGET GDAL::GDAL)
     target_link_libraries(test_zarr_read PRIVATE GDAL::GDAL)
 else()
