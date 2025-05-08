@@ -83,15 +83,15 @@ sudo apt-get update && sudo apt-get install -y \
    mkdir build
    cd build
    cmake .. -DCMAKE_BUILD_TYPE=Release
-   cmake --build . -j$(nproc)
+  
    ```
    The CMake script attempts to locate GDAL via `find_package(GDAL REQUIRED)`. If GDAL is not found automatically, set `GDAL_DIR` or `GDAL_INCLUDE_DIR/GDAL_LIBRARY` manually.
 
 3. **Compile**  
    ```bash
-   cmake --build .
+    cmake --build . -j$(nproc)
    ```
-   This produces a shared library named something like `gdal_EOPF.so` (on Linux) or `gdal_EOPF.dll` (Windows).
+   This produces a shared library named something like `gdal_EOPFZarr.so` (on Linux) or `gdal_EOPFZarr.dll` (Windows).
 
 ---
 
