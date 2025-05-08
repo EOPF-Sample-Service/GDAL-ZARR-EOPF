@@ -82,7 +82,8 @@ sudo apt-get update && sudo apt-get install -y \
    ```bash
    mkdir build
    cd build
-   cmake ..
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   cmake --build . -j$(nproc)
    ```
    The CMake script attempts to locate GDAL via `find_package(GDAL REQUIRED)`. If GDAL is not found automatically, set `GDAL_DIR` or `GDAL_INCLUDE_DIR/GDAL_LIBRARY` manually.
 
