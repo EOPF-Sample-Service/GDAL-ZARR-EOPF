@@ -121,7 +121,7 @@ Replace `/path/to/build` with the actual directory containing `gdal_EOPF.so` (or
    ```
    You should see something like:  
    ```
-   EOPF (ro): Earth Observation Processing Framework
+   EOPFZarr (ro): Earth Observation Processing Framework
    ```
 
 2. **Open an EOPF Dataset**  
