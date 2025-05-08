@@ -117,7 +117,7 @@ Replace `/path/to/build` with the actual directory containing `gdal_EOPF.so` (or
 
 1. **Check Formats**  
    ```bash
-   gdalinfo --formats | grep EOPF
+   gdalinfo --formats | grep EOPFZARR
    ```
    You should see something like:  
    ```
