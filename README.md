@@ -1,4 +1,4 @@
-﻿# EOPF GDAL Driver
+﻿# EOPF‑Zarr plugin
 
 [![Build Status](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/build.yml/badge.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/build.yml)
 
