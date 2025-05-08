@@ -24,11 +24,8 @@ else()
   target_link_libraries(eopfdriver PRIVATE ${GDAL_LIBRARY})
 endif()
 
-
-
 # Set the output name with gdal_ prefix for GDAL plugin detection
 set_target_properties(eopfdriver PROPERTIES PREFIX "gdal_" OUTPUT_NAME "EOPF")
-
 
 # Installation settings for the driver
 install(TARGETS eopfdriver
