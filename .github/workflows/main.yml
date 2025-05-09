@@ -1,4 +1,4 @@
-name: Build & test EOPFZarr plugin
+﻿name: Build & test EOPFZarr plugin
 
 on:
   push:
@@ -41,17 +41,17 @@ jobs:
 
     - name: Smoke test
       run: |
-        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-        echo "Checking for EOPFZARR driver in available formats:"
-        gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
-        # Create a more complete Zarr test dataset
-        mkdir -p /tmp/test.zarr
-        # Create .zgroup file
-        echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
-        # Create .zattrs with minimal spatial reference
-        echo '{"spatial_ref":"EPSG:4326"}' > /tmp/test.zarr/.zattrs
-        # Create .zarray with required metadata
-        echo '{
+          export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
+          echo "Checking for EOPFZARR driver in available formats:"
+          gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
+          # Create a more complete Zarr test dataset
+          mkdir -p /tmp/test.zarr
+          # Create .zgroup file
+          echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
+          # Create .zattrs with minimal spatial reference
+          echo '{"spatial_ref":"EPSG:4326"}' > /tmp/test.zarr/.zattrs
+          # Create .zarray with required metadata
+          echo '{
           "chunks": [1, 1],
           "compressor": null,
           "dtype": "<f4",
@@ -59,27 +59,28 @@ jobs:
           "filters": null, 
           "order": "C",
           "shape": [10, 10],
-          "zarr_format": 2
-        }' > /tmp/test.zarr/.zarray
-    
-        # Create a tiny data chunk file
-        dd if=/dev/zero of=/tmp/test.zarr/0 bs=4 count=100
-    
-        echo "Opening test Zarr dataset:"
-        echo "Listing contents of test Zarr dataset:"
-        ls -la /tmp/test.zarr/
-        # Add debug environment variable to show driver selection
-        export CPL_DEBUG=ON
-        echo "Opening with detailed debug info to show driver selection:"
-        gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
-    
-        # Try forcing the EOPFZARR driver explicitly
-        echo "Opening with explicit EOPFZARR driver:"
-        gdalinfo EOPFZARR:"/tmp/test.zarr" | head -n 10 || echo "Failed to open with explicit EOPFZARR driver"
-    
-        # Compare with direct Zarr driver opening
-        echo "Opening with explicit Zarr driver for comparison:"
-        gdalinfo Zarr:"/tmp/test.zarr" | head -n 10 || echo "Failed to open with explicit Zar
+          "zarr_format": 2}' > /tmp/test.zarr/.zarray
+          
+          # Create a tiny data chunk file
+          dd if=/dev/zero of=/tmp/test.zarr/0 bs=4 count=100
+          echo "Opening test Zarr dataset:"
+          echo "Listing contents of test Zarr dataset:"
+          ls -la /tmp/test.zarr/
+          # Add debug environment variable to show driver selection
+          export CPL_DEBUG=ON
+          echo "Opening with detailed debug info to show driver selection:"
+          gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
+          # Verify dataset can be opened (ignoring warnings)
+          if gdalinfo /tmp/test.zarr > /dev/null 2>&1; then
+            echo "✅ Test dataset opened successfully"
+          else
+            echo "❌ Dataset failed to open"
+          exit 1
+          fi
+          
+          # Show a few lines of actual dataset info
+          echo "Sample dataset info (hiding warnings):"
+          CPL_LOG_ERRORS=OFF gdalinfo /tmp/test.zarr | head -n 10
 
     - name: Debug info
       if: failure()
