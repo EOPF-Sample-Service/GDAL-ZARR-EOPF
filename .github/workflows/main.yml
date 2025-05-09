@@ -39,6 +39,18 @@ jobs:
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
 
+    - name: Debug info
+      if: failure()
+      run: |
+        echo "Listing available GDAL drivers:"
+        gdalinfo --formats
+        echo "Listing contents of the driver path:"
+        ls -la $GITHUB_WORKSPACE/build/${{ matrix.cfg }}
+        echo "Listing contents of test Zarr dataset:"
+        ls -la /tmp/test.zarr/
+        echo "GDAL version information:"
+        gdalinfo --version
+
     - name: Smoke test
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
