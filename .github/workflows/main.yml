@@ -24,11 +24,16 @@ jobs:
         sudo apt-get install -y --no-install-recommends \
              gdal-bin libgdal-dev cmake ninja-build build-essential
 
-    - name: Configure
+    - name: Configure with pkg-config
       run: |
-        cmake -S . -B build/${{ matrix.cfg }} \
+        # Find GDAL using PKG_CONFIG which is more reliable with system packages
+        mkdir -p build/${{ matrix.cfg }}
+        cd build/${{ matrix.cfg }}
+        PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake ../.. \
           -G Ninja \
-          -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
+          -DGDAL_INCLUDE_DIR=$(gdal-config --includedir) \
+          -DGDAL_LIBRARY=$(gdal-config --libs | grep -o -P "(?<=-L).*?(?= )" | tr -d '\n')/libgdal.so
 
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
@@ -38,7 +43,7 @@ jobs:
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
         gdalinfo --formats | grep -q "EOPFZARR" \
           && echo "Driver registered ✅"
-        # create a tiny Zarr store (single array) for open test
+        # Create a tiny Zarr store (single array) for open test
         mkdir -p /tmp/test.zarr
         echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
         echo '{}' > /tmp/test.zarr/.zattrs
