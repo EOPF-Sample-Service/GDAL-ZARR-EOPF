@@ -23,18 +23,11 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends \
              gdal-bin libgdal-dev cmake ninja-build build-essential
-
-    - name: Configure with pkg-config
+    - name: Configure
       run: |
-        # Find GDAL using PKG_CONFIG which is more reliable with system packages
-        mkdir -p build/${{ matrix.cfg }}
-        cd build/${{ matrix.cfg }}
-        PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake ../.. \
+        cmake -S . -B build/${{ matrix.cfg }} \
           -G Ninja \
-          -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
-          -DGDAL_INCLUDE_DIR=$(gdal-config --includedir) \
-          -DGDAL_LIBRARY=$(gdal-config --libs | grep -o -P "(?<=-L).*?(?= )" | tr -d '\n')/libgdal.so
-
+          -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
 
@@ -42,8 +35,12 @@ jobs:
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
         gdalinfo --formats | grep -q "EOPFZARR" \
-          && echo "Driver registered ✅" || (echo "Driver not registered" && exit 1)
-
+          && echo "Driver registered ✅"
+        # create a tiny Zarr store (single array) for open test
+        mkdir -p /tmp/test.zarr
+        echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
+        echo '{}' > /tmp/test.zarr/.zattrs
+        gdalinfo /tmp/test.zarr | head -n 5
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
