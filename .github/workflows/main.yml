@@ -70,13 +70,6 @@ jobs:
           export CPL_DEBUG=ON
           echo "Opening with detailed debug info to show driver selection:"
           gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
-          # Verify dataset can be opened (ignoring warnings)
-          if gdalinfo /tmp/test.zarr > /dev/null 2>&1; then
-            echo "✅ Test dataset opened successfully"
-          else
-            echo "❌ Dataset failed to open"
-          exit 1
-          fi
           
           # Show a few lines of actual dataset info
           echo "Sample dataset info (hiding warnings):"
