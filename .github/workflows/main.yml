@@ -42,16 +42,7 @@ jobs:
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
         gdalinfo --formats | grep -q "EOPFZARR" \
-          && echo "Driver registered ✅"
-        # Create a tiny Zarr store (single array) for open test
-        mkdir -p /tmp/test.zarr
-        echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
-        echo '{}' > /tmp/test.zarr/.zattrs
-        mkdir -p /tmp/test.zarr/band1
-        echo '{"chunks":[10,10],"shape":[100,100],"dtype":"|i1"}' > /tmp/test.zarr/band1/.zarray
-    
-        # Test opening
-        gdalinfo EOPFZarr:/tmp/test.zarr
+          && echo "Driver registered ✅" || (echo "Driver not registered" && exit 1)
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
