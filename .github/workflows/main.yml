@@ -2,7 +2,7 @@ name: Build & test EOPFZarr plugin
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -18,22 +18,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Install GDAL dev packages
+    - name: Install GDAL
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \
-             gdal-bin libgdal-dev cmake ninja-build build-essential
+        sudo add-apt-repository ppa:ubuntugis/ppa -y
+        sudo apt-get update
+        sudo apt-get install -y libgdal-dev gdal-bin cmake ninja-build
 
-    - name: Configure with pkg-config
+    - name: Configure CMake
       run: |
-        # Find GDAL using PKG_CONFIG which is more reliable with system packages
         mkdir -p build/${{ matrix.cfg }}
         cd build/${{ matrix.cfg }}
-        PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake ../.. \
+        cmake ../.. \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
-          -DGDAL_INCLUDE_DIR=$(gdal-config --includedir) \
-          -DGDAL_LIBRARY=$(gdal-config --libs | grep -o -P "(?<=-L).*?(?= )" | tr -d '\n')/libgdal.so
+          -DGDAL_DIR=$(gdal-config --prefix)/lib/cmake/gdal
 
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
@@ -41,16 +39,17 @@ jobs:
     - name: Smoke test
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-        gdalinfo --formats | grep -q "EOPFZARR" \
-          && echo "Driver registered ✅"
-        # Create a tiny Zarr store (single array) for open test
+        gdalinfo --formats | grep -i "EOPFZarr"
+        
         mkdir -p /tmp/test.zarr
         echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
         echo '{}' > /tmp/test.zarr/.zattrs
-        gdalinfo /tmp/test.zarr | head -n 5
+        mkdir -p /tmp/test.zarr/test_array
+        echo '{"chunks": [10], "shape": [100], "dtype": "i4"}' > /tmp/test.zarr/test_array/.zarray
+        gdalinfo EOPFZarr:/tmp/test.zarr
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal_EOPFZarr-${{ matrix.cfg }}
-        path: build/${{ matrix.cfg }}/gdal_EOPFZarr.so
+        name: eopfzarr-${{ matrix.cfg }}
+        path: build/${{ matrix.cfg }}/libeopf_zarr.so
