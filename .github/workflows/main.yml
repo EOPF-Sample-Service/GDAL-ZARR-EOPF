@@ -68,10 +68,18 @@ jobs:
         echo "Opening test Zarr dataset:"
         echo "Listing contents of test Zarr dataset:"
         ls -la /tmp/test.zarr/
-        echo "GDAL version information:"
-        gdalinfo --version
-        gdalinfo /tmp/test.zarr | head -n 5
-
+        # Add debug environment variable to show driver selection
+        export CPL_DEBUG=ON
+        echo "Opening with detailed debug info to show driver selection:"
+        gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
+    
+        # Try forcing the EOPFZARR driver explicitly
+        echo "Opening with explicit EOPFZARR driver:"
+        gdalinfo EOPFZARR:"/tmp/test.zarr" | head -n 10 || echo "Failed to open with explicit EOPFZARR driver"
+    
+        # Compare with direct Zarr driver opening
+        echo "Opening with explicit Zarr driver for comparison:"
+        gdalinfo Zarr:"/tmp/test.zarr" | head -n 10 || echo "Failed to open with explicit Zar
 
     - name: Debug info
       if: failure()
