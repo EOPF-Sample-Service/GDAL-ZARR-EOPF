@@ -29,7 +29,7 @@ static bool HasFile(const std::string& path)
 static int EOPFIdentify(GDALOpenInfo* info)
 
 {
-    CPLDebug("EOPFZARR", "Identify called for %s", info->pszFilename);
+
     if (info->eAccess == GA_Update)
         return FALSE;
 
@@ -78,7 +78,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
             poOpenInfo->pszFilename);
         return nullptr;              // let GDAL emit an error
     }
-    return EOPFZarrDataset::Create(inner, gEOPFDriver);
+    return inner ? EOPFZarrDataset::Create(inner, gEOPFDriver) : nullptr;
 }
 
 /* -------------------------------------------------------------------- */
@@ -98,7 +98,7 @@ extern "C" void GDALRegister_EOPFZarr()
 
     gEOPFDriver->SetDescription("EOPFZARR");          // short name
     gEOPFDriver->SetMetadataItem(GDAL_DMD_LONGNAME,
-        "EOPF‑zarr (Sentinel‑2) format-1");
+        "EOPF‑zarr (Sentinel‑2) format-6");
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
 

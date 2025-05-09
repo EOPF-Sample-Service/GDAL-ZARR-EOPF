@@ -7,6 +7,7 @@ find_package(GDAL CONFIG REQUIRED)
 add_library(gdal_EOPFZarr MODULE
     src/eopfzarr_driver.cpp
     src/eopfzarr_dataset.cpp
+    src/eopf_metadata.cpp
     )
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
