@@ -20,3 +20,8 @@ set_target_properties(gdal_EOPFZarr PROPERTIES
     PREFIX ""                      # no lib
     # DO NOT override OUTPUT_NAME, or set it to "gdal_EOPFZarr"
     SUFFIX ".so")
+
+# Add test to verify driver registration
+enable_testing()
+add_test(NAME driver_registration 
+         COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
