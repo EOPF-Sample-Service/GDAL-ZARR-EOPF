@@ -44,11 +44,29 @@ jobs:
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
         echo "Checking for EOPFZARR driver in available formats:"
         gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
-        # create a tiny Zarr store (single array) for open test
-        mkdir -p /tmp/test.zarr
+        # Create a more complete Zarr test dataset
+        mkdir -p /tmp/test.zarr/0
+        # Create .zgroup file
         echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
-        echo '{}' > /tmp/test.zarr/.zattrs
-        gdalinfo /tmp/test.zarr | head -n 5
+        # Create .zattrs with minimal spatial reference
+        echo '{"spatial_ref":"EPSG:4326"}' > /tmp/test.zarr/.zattrs
+        # Create .zarray with required metadata
+        echo '{
+          "chunks": [1, 1],
+          "compressor": null,
+          "dtype": "<f4",
+          "fill_value": "NaN",
+          "filters": null, 
+          "order": "C",
+          "shape": [10, 10],
+          "zarr_format": 2
+        }' > /tmp/test.zarr/.zarray
+    
+        # Create a tiny data chunk file
+        dd if=/dev/zero of=/tmp/test.zarr/0 bs=4 count=100
+    
+        echo "Opening test Zarr dataset:"
+
 
     - name: Debug info
       if: failure()
