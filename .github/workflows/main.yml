@@ -35,7 +35,7 @@ jobs:
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
         gdalinfo --formats | grep -q "EOPFZARR" \
-          && echo "Driver registered ✅"
+          && echo "Driver registered ✅"  || (echo "Driver not registered" && exit 1)
         # create a tiny Zarr store (single array) for open test
         mkdir -p /tmp/test.zarr
         echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
