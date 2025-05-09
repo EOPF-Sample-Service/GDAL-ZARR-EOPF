@@ -66,6 +66,10 @@ jobs:
         dd if=/dev/zero of=/tmp/test.zarr/0 bs=4 count=100
     
         echo "Opening test Zarr dataset:"
+        echo "Listing contents of test Zarr dataset:"
+        ls -la /tmp/test.zarr/
+        echo "GDAL version information:"
+        gdalinfo --version
 
 
     - name: Debug info
