@@ -70,6 +70,7 @@ jobs:
         ls -la /tmp/test.zarr/
         echo "GDAL version information:"
         gdalinfo --version
+        gdalinfo /tmp/test.zarr | head -n 5
 
 
     - name: Debug info
