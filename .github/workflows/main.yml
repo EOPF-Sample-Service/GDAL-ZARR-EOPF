@@ -45,7 +45,7 @@ jobs:
         echo "Checking for EOPFZARR driver in available formats:"
         gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
         # Create a more complete Zarr test dataset
-        mkdir -p /tmp/test.zarr/0
+        mkdir -p /tmp/test.zarr
         # Create .zgroup file
         echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
         # Create .zattrs with minimal spatial reference
