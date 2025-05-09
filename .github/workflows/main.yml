@@ -42,6 +42,7 @@ jobs:
     - name: Smoke test
       run: |
         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
+        echo "Checking for EOPFZARR driver in available formats:"
         gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
         # create a tiny Zarr store (single array) for open test
         mkdir -p /tmp/test.zarr
