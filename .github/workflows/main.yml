@@ -18,6 +18,14 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Cache APT packages
+      uses: actions/cache@v3
+      with:
+        path: /var/cache/apt
+        key: ${{ runner.os }}-apt-${{ hashFiles('path/to/lockfile') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-
+
     - name: Install GDAL dev packages
       run: |
         sudo apt-get update -qq
