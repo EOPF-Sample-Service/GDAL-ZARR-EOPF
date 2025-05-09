@@ -26,14 +26,28 @@ jobs:
 
     - name: Configure with pkg-config
       run: |
-        # Find GDAL using PKG_CONFIG which is more reliable with system packages
         mkdir -p build/${{ matrix.cfg }}
         cd build/${{ matrix.cfg }}
-        PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake ../.. \
+        
+        # Create a simple GDALConfig.cmake file for CONFIG mode
+        GDAL_INC=$(gdal-config --includedir)
+        GDAL_LIB=$(gdal-config --libs | awk '{print $1}' | sed 's/-L//')
+        
+        cat > GDALConfig.cmake << EOF
+        set(GDAL_FOUND TRUE)
+        set(GDAL_INCLUDE_DIRS "${GDAL_INC}")
+        set(GDAL_LIBRARIES "${GDAL_LIB}/libgdal.so")
+        add_library(GDAL::GDAL SHARED IMPORTED)
+        set_target_properties(GDAL::GDAL PROPERTIES
+          IMPORTED_LOCATION "${GDAL_LIB}/libgdal.so"
+          INTERFACE_INCLUDE_DIRECTORIES "${GDAL_INC}")
+        EOF
+        
+        # Use this custom config
+        cmake ../.. \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
-          -DGDAL_INCLUDE_DIR=$(gdal-config --includedir) \
-          -DGDAL_LIBRARY=$(gdal-config --libs | grep -o -P "(?<=-L).*?(?= )" | tr -d '\n')/libgdal.so
+          -DCMAKE_PREFIX_PATH=$(pwd)
 
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
