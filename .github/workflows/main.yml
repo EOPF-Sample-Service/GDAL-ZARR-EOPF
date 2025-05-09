@@ -1,0 +1,51 @@
+name: Build & test EOPFZarr plugin
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        cfg: [Debug, Release]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install GDAL dev packages
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+             gdal-bin libgdal-dev cmake ninja-build build-essential
+
+    - name: Configure
+      run: |
+        cmake -S . -B build/${{ matrix.cfg }} \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+
+    - name: Build
+      run: cmake --build build/${{ matrix.cfg }} --parallel
+
+    - name: Smoke test
+      run: |
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
+        gdalinfo --formats | grep -q "EOPFZARR" \
+          && echo "Driver registered ✅"
+        # create a tiny Zarr store (single array) for open test
+        mkdir -p /tmp/test.zarr
+        echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
+        echo '{}' > /tmp/test.zarr/.zattrs
+        gdalinfo /tmp/test.zarr | head -n 5
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal_EOPFZarr-${{ matrix.cfg }}
+        path: build/${{ matrix.cfg }}/gdal_EOPFZarr.so
