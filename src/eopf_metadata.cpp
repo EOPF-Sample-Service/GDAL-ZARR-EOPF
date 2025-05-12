@@ -2,6 +2,7 @@
 #include "cpl_json.h"
 #include "ogr_spatialref.h"
 #include <cstdlib>              // strtol
+#include <functional>
 
 /* ------------------------------------------------------------------ */
 /*      Extract coordinate-related metadata from JSON                  */
