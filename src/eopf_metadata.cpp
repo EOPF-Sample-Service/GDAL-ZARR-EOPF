@@ -110,19 +110,27 @@ ProcessEOPFBandMetadata(const CPLJSONObject& root, GDALDataset& ds)
         try {
             bandIndex = std::stoi(bandName);
         }
-        catch (...) {
+        catch (const std::invalid_argument&) {
             // Handle special bands like "8A" - map to appropriate index
             if (bandName == "8A" || bandName == "b8a")
                 bandIndex = 8;  // Just an example, adjust based on your band indexing
             else if (bandName.substr(0, 1) == "b" && bandName.length() > 1)
                 // Handle "b01", "b02" format by removing the 'b' prefix
                 try {
-                bandIndex = std::stoi(bandName.substr(1));
-            }
-            catch (...) {
-                // Skip if we can't determine band index
-                continue;
-            }
+                    bandIndex = std::stoi(bandName.substr(1));
+                }
+                catch (const std::invalid_argument&) {
+                    // Skip if we can't determine band index
+                    continue;
+                }
+                catch (const std::out_of_range&) {
+                    // Skip if the band index is out of range
+                    continue;
+                }
+        }
+        catch (const std::out_of_range&) {
+            // Skip if the band index is out of range
+            continue;
         }
 
         // Skip if we couldn't determine a valid band index
