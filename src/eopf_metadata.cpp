@@ -7,43 +7,56 @@
 /* ------------------------------------------------------------------ */
 /*      Extract coordinate-related metadata from JSON                  */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/*      Extract coordinate-related metadata from JSON                  */
+/* ------------------------------------------------------------------ */
 static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
 {
-    // Function to recursively search for specific keys in a nested JSON object
-    std::function<std::string(const CPLJSONObject&, const std::string&)> findKeyInObject;
-    findKeyInObject = [&findKeyInObject](const CPLJSONObject& jsonObj, const std::string& keyToFind) -> std::string {
-        // Try to get the value directly
-        std::string value = jsonObj.GetString(keyToFind, "");
-        if (!value.empty()) {
-            return value;
-        }
-
-        // Otherwise search in all children
-        for (const auto& child : jsonObj.GetChildren()) {
-            if (child.GetType() == CPLJSONObject::Type::Object) {
-                value = findKeyInObject(child, keyToFind);
-                if (!value.empty()) {
-                    return value;
-                }
-            }
-        }
-        return "";
-        };
-
     // -----------------------------------
     // STEP 1: Extract spatial reference information
     // -----------------------------------
-    std::string wkt = obj.GetString("spatial_ref", "");
-    std::string epsg = obj.GetString("proj:epsg", obj.GetString("epsg", ""));
 
-    // If not found at the top level, search recursively
-    if (epsg.empty()) {
-        epsg = findKeyInObject(obj, "proj:epsg");
-        if (epsg.empty()) {
-            epsg = findKeyInObject(obj, "epsg");
+    // Find EPSG code directly or in STAC properties
+    std::string epsg;
+    const CPLJSONObject& stacDiscovery = obj.GetObj("stac_discovery");
+    if (stacDiscovery.IsValid()) {
+        const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+        if (properties.IsValid()) {
+            epsg = properties.GetString("proj:epsg", "");
+            if (!epsg.empty()) {
+                CPLDebug("EOPFZARR", "Found proj:epsg in STAC properties: %s", epsg.c_str());
+            }
         }
+    }
+
+    // If not found in STAC, try top level
+    if (epsg.empty()) {
+        epsg = obj.GetString("proj:epsg", obj.GetString("epsg", ""));
         if (!epsg.empty()) {
-            CPLDebug("EOPFZARR", "Found proj:epsg value by deep search: %s", epsg.c_str());
+            CPLDebug("EOPFZARR", "Found proj:epsg at top level: %s", epsg.c_str());
+        }
+    }
+
+    // If still not found, simple search in common locations
+    if (epsg.empty()) {
+        for (const auto& child : obj.GetChildren()) {
+            if (child.GetType() == CPLJSONObject::Type::Object) {
+                epsg = child.GetString("proj:epsg", child.GetString("epsg", ""));
+                if (!epsg.empty()) {
+                    CPLDebug("EOPFZARR", "Found proj:epsg in child %s: %s",
+                        child.GetName().c_str(), epsg.c_str());
+                    break;
+                }
+            }
+        }
+    }
+
+    // Look for WKT
+    std::string wkt = obj.GetString("spatial_ref", "");
+    if (wkt.empty() && stacDiscovery.IsValid()) {
+        const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+        if (properties.IsValid()) {
+            wkt = properties.GetString("spatial_ref", "");
         }
     }
 
@@ -114,88 +127,44 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
         nEPSG = 4326;
     }
 
-// -----------------------------------
-// STEP 3: For UTM Zone 32N (EPSG:32632), use proj:bbox if available or set defaults
-// -----------------------------------
+    // -----------------------------------
+    // STEP 3: For UTM Zone 32N (EPSG:32632), use proj:bbox if available or set defaults
+    // -----------------------------------
     if (nEPSG == 32632) {
-        // Try to find proj:bbox in the potentially deeply nested structure
+        // Try to find proj:bbox in common locations
         bool foundProjBbox = false;
         double bboxMinX = 0.0, bboxMinY = 0.0, bboxMaxX = 0.0, bboxMaxY = 0.0;
 
-        // Function to recursively search for proj:bbox in a nested object
-        std::function<bool(const CPLJSONObject&)> findProjBbox;
-        findProjBbox = [&bboxMinX, &bboxMinY, &bboxMaxX, &bboxMaxY](const CPLJSONObject& jsonObj) -> bool {
-            // First, try the direct path we know exists in some files
-            const CPLJSONObject& stacDiscovery = jsonObj.GetObj("stac_discovery");
-            if (stacDiscovery.IsValid()) {
-                const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
-                if (properties.IsValid()) {
-                    CPLJSONArray projBbox = properties.GetArray("proj:bbox");
-                    if (projBbox.IsValid() && projBbox.Size() >= 4) {
-                        bboxMinX = projBbox[0].ToDouble();
-                        bboxMinY = projBbox[1].ToDouble();
-                        bboxMaxX = projBbox[2].ToDouble();
-                        bboxMaxY = projBbox[3].ToDouble();
-                        CPLDebug("EOPFZARR", "Found proj:bbox in STAC properties: [%.2f,%.2f,%.2f,%.2f]",
-                            bboxMinX, bboxMinY, bboxMaxX, bboxMaxY);
-                        return true;
-                    }
+        // Check STAC properties path
+        if (stacDiscovery.IsValid()) {
+            const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+            if (properties.IsValid()) {
+                CPLJSONArray projBbox = properties.GetArray("proj:bbox");
+                if (projBbox.IsValid() && projBbox.Size() >= 4) {
+                    bboxMinX = projBbox[0].ToDouble();
+                    bboxMinY = projBbox[1].ToDouble();
+                    bboxMaxX = projBbox[2].ToDouble();
+                    bboxMaxY = projBbox[3].ToDouble();
+                    foundProjBbox = true;
+                    CPLDebug("EOPFZARR", "Found proj:bbox in STAC properties: [%.2f,%.2f,%.2f,%.2f]",
+                        bboxMinX, bboxMinY, bboxMaxX, bboxMaxY);
                 }
             }
+        }
 
-            // Check if this object has a proj:bbox array directly
-            CPLJSONArray projBbox = jsonObj.GetArray("proj:bbox");
+        // If not found, check top level
+        if (!foundProjBbox) {
+            CPLJSONArray projBbox = obj.GetArray("proj:bbox");
             if (projBbox.IsValid() && projBbox.Size() >= 4) {
                 bboxMinX = projBbox[0].ToDouble();
                 bboxMinY = projBbox[1].ToDouble();
                 bboxMaxX = projBbox[2].ToDouble();
                 bboxMaxY = projBbox[3].ToDouble();
+                foundProjBbox = true;
                 CPLDebug("EOPFZARR", "Found proj:bbox at top level: [%.2f,%.2f,%.2f,%.2f]",
                     bboxMinX, bboxMinY, bboxMaxX, bboxMaxY);
-                return true;
             }
-
-            // Now recursively search all children if not found by direct paths
-            for (const auto& child : jsonObj.GetChildren()) {
-                if (child.GetType() == CPLJSONObject::Type::Object) {
-                    // Try direct access in each child first (more efficient)
-                    CPLJSONArray childProjBbox = child.GetArray("proj:bbox");
-                    if (childProjBbox.IsValid() && childProjBbox.Size() >= 4) {
-                        bboxMinX = childProjBbox[0].ToDouble();
-                        bboxMinY = childProjBbox[1].ToDouble();
-                        bboxMaxX = childProjBbox[2].ToDouble();
-                        bboxMaxY = childProjBbox[3].ToDouble();
-                        CPLDebug("EOPFZARR", "Found proj:bbox in child object: [%.2f,%.2f,%.2f,%.2f]",
-                            bboxMinX, bboxMinY, bboxMaxX, bboxMaxY);
-                        return true;
-                    }
-
-                    // Check for STAC structure in this child
-                    const CPLJSONObject& childStacDiscovery = child.GetObj("stac_discovery");
-                    if (childStacDiscovery.IsValid()) {
-                        const CPLJSONObject& childProperties = childStacDiscovery.GetObj("properties");
-                        if (childProperties.IsValid()) {
-                            CPLJSONArray childStacBbox = childProperties.GetArray("proj:bbox");
-                            if (childStacBbox.IsValid() && childStacBbox.Size() >= 4) {
-                                bboxMinX = childStacBbox[0].ToDouble();
-                                bboxMinY = childStacBbox[1].ToDouble();
-                                bboxMaxX = childStacBbox[2].ToDouble();
-                                bboxMaxY = childStacBbox[3].ToDouble();
-                                CPLDebug("EOPFZARR", "Found proj:bbox in child STAC properties: [%.2f,%.2f,%.2f,%.2f]",
-                                    bboxMinX, bboxMinY, bboxMaxX, bboxMaxY);
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return false;
-            };
-
-
-        // Search for proj:bbox in the object
-        foundProjBbox = findProjBbox(obj);
+        }
 
         if (foundProjBbox) {
             CPLDebug("EOPFZARR", "Found proj:bbox: [%.8f,%.8f,%.8f,%.8f]",
@@ -258,52 +227,38 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
             ds.SetMetadataItem("utm_northing_max", "5000000.00000000");
         }
 
-        // Also look for geographic bbox (might be in a different location)
+        // Look for geographic bbox
         bool foundGeoBbox = false;
         double geoBboxMinX = 0.0, geoBboxMinY = 0.0, geoBboxMaxX = 0.0, geoBboxMaxY = 0.0;
 
-        // Function to recursively search for regular bbox in a nested object
-        std::function<bool(const CPLJSONObject&)> findGeoBbox;
-        findGeoBbox = [&geoBboxMinX, &geoBboxMinY, &geoBboxMaxX, &geoBboxMaxY, &findGeoBbox](const CPLJSONObject& jsonObj) -> bool {
-            // Check if this object has a bbox array
-            CPLJSONArray geoBbox = jsonObj.GetArray("bbox");
+        // Check STAC properties path
+        if (stacDiscovery.IsValid()) {
+            const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+            if (properties.IsValid()) {
+                CPLJSONArray geoBbox = properties.GetArray("bbox");
+                if (geoBbox.IsValid() && geoBbox.Size() >= 4) {
+                    geoBboxMinX = geoBbox[0].ToDouble();
+                    geoBboxMinY = geoBbox[1].ToDouble();
+                    geoBboxMaxX = geoBbox[2].ToDouble();
+                    geoBboxMaxY = geoBbox[3].ToDouble();
+                    foundGeoBbox = true;
+                    CPLDebug("EOPFZARR", "Found geographic bbox in STAC properties");
+                }
+            }
+        }
+
+        // If not found, check top level
+        if (!foundGeoBbox) {
+            CPLJSONArray geoBbox = obj.GetArray("bbox");
             if (geoBbox.IsValid() && geoBbox.Size() >= 4) {
                 geoBboxMinX = geoBbox[0].ToDouble();
                 geoBboxMinY = geoBbox[1].ToDouble();
                 geoBboxMaxX = geoBbox[2].ToDouble();
                 geoBboxMaxY = geoBbox[3].ToDouble();
-                return true;
+                foundGeoBbox = true;
+                CPLDebug("EOPFZARR", "Found geographic bbox at top level");
             }
-
-            // Look for stac_discovery/properties path
-            const CPLJSONObject& stacDiscovery = jsonObj.GetObj("stac_discovery");
-            if (stacDiscovery.IsValid()) {
-                const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
-                if (properties.IsValid()) {
-                    geoBbox = properties.GetArray("bbox");
-                    if (geoBbox.IsValid() && geoBbox.Size() >= 4) {
-                        geoBboxMinX = geoBbox[0].ToDouble();
-                        geoBboxMinY = geoBbox[1].ToDouble();
-                        geoBboxMaxX = geoBbox[2].ToDouble();
-                        geoBboxMaxY = geoBbox[3].ToDouble();
-                        return true;
-                    }
-                }
-            }
-
-            // Recursively search all children
-            for (const auto& child : jsonObj.GetChildren()) {
-                if (child.GetType() == CPLJSONObject::Type::Object) {
-                    if (findGeoBbox(child)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-            };
-
-        // Search for geo bbox in the object
-        foundGeoBbox = findGeoBbox(obj);
+        }
 
         if (foundGeoBbox) {
             // Set geographic bounds from found bbox
@@ -495,6 +450,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
         }
     }
 }
+
 
 /* ------------------------------------------------------------------ */
 /*      Check for .zmetadata file that may have consolidated metadata */
