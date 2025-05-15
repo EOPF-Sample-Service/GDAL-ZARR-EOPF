@@ -7,7 +7,7 @@
 
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner,
     GDALDriver* selfDrv)
-    : mInner(std::move(inner)), mProjectionRef(nullptr)
+    : mInner(std::move(inner)), mProjectionRef(nullptr), mSubdatasets(nullptr)
 {
     // Initialize geotransform with identity transform
     mGeoTransform[0] = 0.0;
@@ -31,6 +31,9 @@ EOPFZarrDataset::~EOPFZarrDataset()
 {
     if (mProjectionRef)
         CPLFree(mProjectionRef);
+
+    if (mSubdatasets)
+        CSLDestroy(mSubdatasets);
 }
 
 EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner, GDALDriver* drv)
@@ -120,4 +123,40 @@ CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
         return CE_None;
     }
     return CE_Failure;
+}
+
+char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
+{
+    if (pszDomain != nullptr && EQUAL(pszDomain, "SUBDATASETS")) {
+        // Get subdatasets from the inner Zarr dataset
+        char** papszInnerSubdatasets = mInner->GetMetadata("SUBDATASETS");
+        if (papszInnerSubdatasets == nullptr) {
+            return nullptr;
+        }
+
+        // Clean up our previous domain if it exists
+        if (mSubdatasets) {
+            CSLDestroy(mSubdatasets);
+            mSubdatasets = nullptr;
+        }
+
+        // Copy the subdatasets, replacing "ZARR:" with "EOPFZARR:"
+        mSubdatasets = CSLDuplicate(papszInnerSubdatasets);
+        for (int i = 0; mSubdatasets[i] != nullptr; i++) {
+            if (strstr(mSubdatasets[i], "_NAME=ZARR:")) {
+                char* pszValue = strstr(mSubdatasets[i], "=ZARR:");
+                if (pszValue) {
+                    pszValue[1] = 'E'; // =E...
+                    pszValue[2] = 'O'; // =EO...
+                    pszValue[3] = 'P'; // =EOP...
+                    pszValue[4] = 'F'; // =EOPF...
+                    pszValue[5] = 'Z'; // =EOPFZ...
+                }
+            }
+        }
+        return mSubdatasets;
+    }
+
+    // For other domains, delegate to the parent class
+    return GDALDataset::GetMetadata(pszDomain);
 }
