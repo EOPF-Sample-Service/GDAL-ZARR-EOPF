@@ -487,6 +487,57 @@ static bool LoadZMetadata(const std::string& rootPath, CPLJSONDocument& doc)
 }
 
 /* ------------------------------------------------------------------ */
+/*      Discover and attach subdatasets                                */
+/* ------------------------------------------------------------------ */
+void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
+    const CPLJSONObject& metadata)
+{
+    // Simply pass through subdatasets from the inner Zarr dataset
+    char** papszInnerSubdatasets = ds.GetMetadata("SUBDATASETS");
+    if (papszInnerSubdatasets == nullptr) {
+        CPLDebug("EOPFZARR", "No subdatasets found from inner Zarr driver");
+        return;
+    }
+
+    // Count how many subdatasets we have (NAME/DESC pairs)
+    int nSubdatasets = 0;
+    for (int i = 0; papszInnerSubdatasets[i] != nullptr; i++) {
+        if (strstr(papszInnerSubdatasets[i], "SUBDATASET_") &&
+            strstr(papszInnerSubdatasets[i], "_NAME=")) {
+            nSubdatasets++;
+        }
+    }
+
+    CPLDebug("EOPFZARR", "Found %d subdatasets from inner Zarr driver", nSubdatasets);
+
+    // Copy and adapt the subdataset information
+    for (int i = 1; i <= nSubdatasets; i++) {
+        CPLString nameKey, descKey;
+        nameKey.Printf("SUBDATASET_%d_NAME", i);
+        descKey.Printf("SUBDATASET_%d_DESC", i);
+
+        const char* pszName = CSLFetchNameValue(papszInnerSubdatasets, nameKey);
+        const char* pszDesc = CSLFetchNameValue(papszInnerSubdatasets, descKey);
+
+        if (pszName && pszDesc) {
+            // Replace the "ZARR:" prefix with "EOPFZARR:" in the subdataset name
+            CPLString eopfName = pszName;
+            if (STARTS_WITH(pszName, "ZARR:")) {
+                eopfName.Printf("EOPFZARR:%s", pszName + 5);
+            }
+
+            // Set the subdataset metadata
+            ds.SetMetadataItem(nameKey, eopfName, "SUBDATASETS");
+            ds.SetMetadataItem(descKey, pszDesc, "SUBDATASETS");
+
+            CPLDebug("EOPFZARR", "Added subdataset: %s = %s", nameKey.c_str(), eopfName.c_str());
+        }
+    }
+}
+
+
+
+/* ------------------------------------------------------------------ */
 /*      AttachMetadata main entry                                      */
 /* ------------------------------------------------------------------ */
 void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
@@ -520,24 +571,8 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
     {
         const CPLJSONObject& root = doc.GetRoot();
 
-        // Debug - check for proj:epsg specifically 
-        std::string epsg = root.GetString("proj:epsg", "");
-        if (!epsg.empty()) {
-            CPLDebug("EOPFZARR", "Found proj:epsg at root level: %s", epsg.c_str());
-        }
-        else {
-            // Look in all children for proj:epsg
-            for (const auto& child : root.GetChildren()) {
-                epsg = child.GetString("proj:epsg", "");
-                if (!epsg.empty()) {
-                    CPLDebug("EOPFZARR", "Found proj:epsg in child %s: %s",
-                        child.GetName().c_str(), epsg.c_str());
-                    break;
-                }
-            }
-        }
-
         ExtractCoordinateMetadata(root, ds);
+        DiscoverSubdatasets(ds, rootPath, root);
     }
     else
     {
@@ -547,6 +582,7 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
         // This will ensure we set up default coordinate information
         CPLJSONObject emptyObj;
         ExtractCoordinateMetadata(emptyObj, ds);
+        DiscoverSubdatasets(ds, rootPath, emptyObj);
     }
 
     // Store coordinate info in domain-specific metadata

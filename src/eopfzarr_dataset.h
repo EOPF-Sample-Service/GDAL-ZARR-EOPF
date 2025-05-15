@@ -12,6 +12,7 @@ private:
     std::unique_ptr<GDALDataset> mInner;
     double mGeoTransform[6];
     char* mProjectionRef;
+    char** mSubdatasets;
 
 public:
     EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver* selfDrv);
@@ -23,8 +24,10 @@ public:
     // Load metadata from Zarr file
     void LoadEOPFMetadata();
 
+    // Override metadata method to handle subdatasets
+    char** GetMetadata(const char* pszDomain = nullptr) override;
+
     // Override geospatial methods to correctly handle coordinate transformations
-    // In newer GDAL versions, these are the correct methods:
     const OGRSpatialReference* GetSpatialRef() const override;
     CPLErr GetGeoTransform(double* padfTransform) override;
 
