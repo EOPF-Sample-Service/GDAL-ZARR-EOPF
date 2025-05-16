@@ -63,7 +63,7 @@ jobs:
 
           # Optional: Show a sample of the full output
           echo "Sample of dataset info:"
-          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 15
+          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
 
     - name: Debug info
       if: failure()
