@@ -126,13 +126,13 @@ Replace `/path/to/build` with the actual directory containing `gdal_EOPF.so` (or
 
 2. **Open an EOPF Dataset**  
    ```bash
-   gdalinfo /path/to/EOPF_Zarr_Dataset/
+   gdalinfo -oo EOPF_PROCESS=YES /path/to/EOPF_Zarr_Dataset/
    ```
    or in Python:
    ```python
    from osgeo import gdal
-   ds = gdal.Open("/path/to/EOPF_Zarr_Dataset/")
-   print(ds.RasterXSize, ds.RasterYSize)
+   ds = gdal.Open("/path/to/your/dataset.zarr", open_options=['EOPF_PROCESS=YES'])
+   # This will activate your EOPFZarr plugin.
    ```
    If everything is set up correctly, the plugin interprets the EOPF data and displays or processes it like any other GDAL-supported format.
 
