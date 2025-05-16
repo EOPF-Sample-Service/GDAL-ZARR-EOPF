@@ -538,7 +538,7 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
         nSubdatasets++;
     }
 
-    ds.SetMetadataItem("ZARR_SUBDATASET_COUNT", CPLString().Printf("%d", nSubdatasets).c_str());
+    ds.SetMetadataItem("SUBDATASET_COUNT", CPLString().Printf("%d", nSubdatasets).c_str());
     CPLDebug("EOPFZARR", "Found %d subdatasets in Zarr dataset", nSubdatasets);
 
     // Process each subdataset
