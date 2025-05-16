@@ -71,7 +71,7 @@ jobs:
           echo "Opening with detailed debug info to show driver selection:"
           gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
           echo "Opening with detailed debug info to show EOPFZarr driver selection:"
-          gdalinfo -oo EOPF_PROCESS=YES /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
+          gdalinfo -oo EOPF_PROCESS=YES /tmp/test.zarr | grep "Size is 10, 10" || echo "Dataset dimensions not as expected."
           # Show a few lines of actual dataset info
           echo "Sample dataset info (hiding warnings):"
           CPL_LOG_ERRORS=OFF gdalinfo /tmp/test.zarr | head -n 10
