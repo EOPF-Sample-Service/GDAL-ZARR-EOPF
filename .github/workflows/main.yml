@@ -67,7 +67,7 @@ jobs:
           echo "Listing contents of test Zarr dataset:"
           ls -la /tmp/test.zarr/
           # Add debug environment variable to show driver selection
-          export CPL_DEBUG=ON
+          export CPL_DEBUG=OFF
           echo "Opening with detailed debug info to show driver selection:"
           gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
           echo "Opening with detailed debug info to show EOPFZarr driver selection:"
