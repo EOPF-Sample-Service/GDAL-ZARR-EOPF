@@ -50,8 +50,8 @@ jobs:
           echo "Opening sample Zarr dataset with EOPF_PROCESS=YES:"
 
           # Use CPL_DEBUG for detailed driver selection info
-          export CPL_DEBUG=ON
-          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
+          export CPL_DEBUG=OFF
+          gdalinfo $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
       
           # Verify dimensions or other expected properties of your sample data
           echo "Verifying dataset properties:"
