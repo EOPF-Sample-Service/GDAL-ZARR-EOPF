@@ -78,20 +78,40 @@ void EOPFZarrDataset::LoadEOPFMetadata()
         CSLDestroy(papszTokens);
     }
     else {
-        // Set default geotransform for European region
-        mGeoTransform[0] = 10.0;       // Origin X
-        mGeoTransform[1] = 0.01;       // Pixel width
-        mGeoTransform[2] = 0.0;        // Rotation
-        mGeoTransform[3] = 45.0;       // Origin Y
-        mGeoTransform[4] = 0.0;        // Rotation
-        mGeoTransform[5] = -0.01;      // Pixel height
-
-        CPLDebug("EOPFZARR", "Set default geotransform: [%f,%f,%f,%f,%f,%f]",
-            mGeoTransform[0], mGeoTransform[1], mGeoTransform[2],
-            mGeoTransform[3], mGeoTransform[4], mGeoTransform[5]);
+        // Keep default geotransform initialized in constructor
+        CPLDebug("EOPFZARR", "No geotransform metadata found, using default");
     }
 }
 
+
+
+CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
+{
+    if (padfTransform)
+    {
+        // Get the geo_transform metadata item
+        const char* pszGeoTransform = GetMetadataItem("geo_transform");
+        if (pszGeoTransform)
+        {
+            // Parse the comma-separated values
+            char** papszTokens = CSLTokenizeString2(pszGeoTransform, ",", 0);
+            if (CSLCount(papszTokens) == 6)
+            {
+                for (int i = 0; i < 6; i++)
+                    padfTransform[i] = CPLAtof(papszTokens[i]);
+
+                CSLDestroy(papszTokens);
+                return CE_None;
+            }
+            CSLDestroy(papszTokens);
+        }
+
+        // If we don't have a valid geo_transform, use the stored geotransform
+        memcpy(padfTransform, mGeoTransform, sizeof(double) * 6);
+        return CE_None;
+    }
+    return CE_Failure;
+}
 
 const OGRSpatialReference* EOPFZarrDataset::GetSpatialRef() const
 {
@@ -113,50 +133,43 @@ const OGRSpatialReference* EOPFZarrDataset::GetSpatialRef() const
     return poSRS;
 }
 
-
-
-CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
-{
-    if (padfTransform)
-    {
-        memcpy(padfTransform, mGeoTransform, sizeof(double) * 6);
-        return CE_None;
-    }
-    return CE_Failure;
-}
-
 char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
 {
+    // For subdatasets, return the subdataset metadata
     if (pszDomain != nullptr && EQUAL(pszDomain, "SUBDATASETS")) {
-        // Get subdatasets from the inner Zarr dataset
-        char** papszInnerSubdatasets = mInner->GetMetadata("SUBDATASETS");
-        if (papszInnerSubdatasets == nullptr) {
-            return nullptr;
-        }
-
-        // Clean up our previous domain if it exists
-        if (mSubdatasets) {
-            CSLDestroy(mSubdatasets);
-            mSubdatasets = nullptr;
-        }
-
-        // Copy the subdatasets, replacing "ZARR:" with "EOPFZARR:"
-        mSubdatasets = CSLDuplicate(papszInnerSubdatasets);
-        for (int i = 0; mSubdatasets[i] != nullptr; i++) {
-            if (strstr(mSubdatasets[i], "_NAME=ZARR:")) {
-                char* pszValue = strstr(mSubdatasets[i], "=ZARR:");
-                if (pszValue) {
-                    pszValue[1] = 'E'; // =E...
-                    pszValue[2] = 'O'; // =EO...
-                    pszValue[3] = 'P'; // =EOP...
-                    pszValue[4] = 'F'; // =EOPF...
-                    pszValue[5] = 'Z'; // =EOPFZ...
-                }
-            }
-        }
-        return mSubdatasets;
+        return GDALDataset::GetMetadata("SUBDATASETS");
     }
 
-    // For other domains, delegate to the parent class
+    // For the default domain, filter out redundant coordinate information
+    if (pszDomain == nullptr) {
+        char** papszMeta = GDALDataset::GetMetadata();
+        // Create filtered metadata list
+        char** papszFiltered = nullptr;
+        for (int i = 0; papszMeta && papszMeta[i]; i++) {
+            char* pszKey = nullptr;
+            const char* pszValue = CPLParseNameValue(papszMeta[i], &pszKey);
+
+            // Skip proj:epsg and spatial_ref items
+            if (pszKey &&
+                !EQUAL(pszKey, "proj:epsg") &&
+                !EQUAL(pszKey, "proj=epsg") &&
+                !STARTS_WITH_CI(pszKey, "proj") &&
+                !EQUAL(pszKey, "spatial_ref")) {
+                papszFiltered = CSLAddNameValue(papszFiltered, pszKey, pszValue);
+            }
+            CPLFree(pszKey);
+        }
+
+        // Store filtered metadata for future use
+        static char** papszLastFiltered = nullptr;
+        if (papszLastFiltered)
+            CSLDestroy(papszLastFiltered);
+        papszLastFiltered = papszFiltered;
+
+        return papszFiltered;
+    }
+
+    // For other domains, return the original metadata
     return GDALDataset::GetMetadata(pszDomain);
 }
+

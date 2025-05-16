@@ -30,6 +30,9 @@ public:
     // Override geospatial methods to correctly handle coordinate transformations
     const OGRSpatialReference* GetSpatialRef() const override;
     CPLErr GetGeoTransform(double* padfTransform) override;
+    // In eopfzarr_dataset.h:
+    
+
 
     // Additional methods if needed (e.g., for subdatasets or other functionality)
 };
