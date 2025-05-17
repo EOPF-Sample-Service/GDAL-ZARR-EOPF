@@ -56,10 +56,6 @@ jobs:
           # Verify dimensions or other expected properties of your sample data
           echo "Verifying dataset properties:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
-      
-          # Use CPL_DEBUG for detailed driver selection info
-          echo "Sample of dataset info without using EOPFZarr plugin:"
-          gdalinfo -oo $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
 
           # Optional: Show a sample of the full output
           echo "Sample of dataset info:"
