@@ -69,7 +69,13 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r tests/requirements.txt
+        # Get the system GDAL version first
+        GDAL_VERSION=$(gdal-config --version)
+        echo "System GDAL version: ${GDAL_VERSION}"
+        # Install the matching GDAL Python bindings
+        pip install gdal==${GDAL_VERSION}
+        # Install other requirements but exclude GDAL
+        grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin
 
     - name: Run Python tests
       run: |
