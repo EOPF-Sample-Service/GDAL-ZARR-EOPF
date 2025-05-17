@@ -131,7 +131,7 @@ Replace `/path/to/build` with the actual directory containing `gdal_EOPF.so` (or
    or in Python:
    ```python
    from osgeo import gdal
-   ds = gdal.Open("/path/to/your/dataset.zarr", open_options=['EOPF_PROCESS=YES'])
+   ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY, open_options=['EOPF_PROCESS=YES'])
    # This will activate your EOPFZarr plugin.
    ```
    If everything is set up correctly, the plugin interprets the EOPF data and displays or processes it like any other GDAL-supported format.

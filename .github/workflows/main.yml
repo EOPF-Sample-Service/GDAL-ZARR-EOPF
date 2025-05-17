@@ -45,35 +45,21 @@ jobs:
           echo "Checking for EOPFZARR driver in available formats:"
           gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
           # Create a more complete Zarr test dataset
-          mkdir -p /tmp/test.zarr
-          # Create .zgroup file
-          echo '{"zarr_format":2}' > /tmp/test.zarr/.zgroup
-          # Create .zattrs with minimal spatial reference
-          echo '{"spatial_ref":"EPSG:4326"}' > /tmp/test.zarr/.zattrs
-          # Create .zarray with required metadata
-          echo '{
-          "chunks": [1, 1],
-          "compressor": null,
-          "dtype": "<f4",
-          "fill_value": "NaN",
-          "filters": null, 
-          "order": "C",
-          "shape": [10, 10],
-          "zarr_format": 2}' > /tmp/test.zarr/.zarray
-          
-          # Create a tiny data chunk file
-          dd if=/dev/zero of=/tmp/test.zarr/0 bs=4 count=100
-          echo "Opening test Zarr dataset:"
-          echo "Listing contents of test Zarr dataset:"
-          ls -la /tmp/test.zarr/
-          # Add debug environment variable to show driver selection
-          export CPL_DEBUG=ON
-          echo "Opening with detailed debug info to show driver selection:"
-          gdalinfo /tmp/test.zarr | grep -i "driver" || echo "Driver info not found"
-          
-          # Show a few lines of actual dataset info
-          echo "Sample dataset info (hiding warnings):"
-          CPL_LOG_ERRORS=OFF gdalinfo /tmp/test.zarr | head -n 10
+          echo "Testing with sample data from repository:"
+          ls -la $GITHUB_WORKSPACE/src/sample_data/
+          echo "Opening sample Zarr dataset with EOPF_PROCESS=YES:"
+
+          # Use CPL_DEBUG for detailed driver selection info
+          export CPL_DEBUG=OFF
+          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
+      
+          # Verify dimensions or other expected properties of your sample data
+          echo "Verifying dataset properties:"
+          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
+
+          # Optional: Show a sample of the full output
+          echo "Sample of dataset info:"
+          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
 
     - name: Debug info
       if: failure()
