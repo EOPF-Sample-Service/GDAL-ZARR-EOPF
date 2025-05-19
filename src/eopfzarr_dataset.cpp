@@ -113,24 +113,22 @@ CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
     return CE_Failure;
 }
 
+CPLErr EOPFZarrDataset::SetSpatialRef(const OGRSpatialReference* poSRS)
+{
+    // Silently accept - do nothing
+    return CE_None;
+}
+
+CPLErr EOPFZarrDataset::SetGeoTransform(double* padfTransform)
+{
+    // Silently accept - do nothing
+    return CE_None;
+}
+
 const OGRSpatialReference* EOPFZarrDataset::GetSpatialRef() const
 {
-    if (mProjectionRef && strlen(mProjectionRef) > 0)
-    {
-        OGRSpatialReference* poSRS = new OGRSpatialReference();
-        if (poSRS->importFromWkt(mProjectionRef) == OGRERR_NONE)
-        {
-            // Return the spatial reference directly without modifications
-            return poSRS;
-        }
-        delete poSRS;
-    }
-
-    // Fall back to WGS84 if no valid projection reference found
-    OGRSpatialReference* poSRS = new OGRSpatialReference();
-    poSRS->SetWellKnownGeogCS("WGS84");
-    poSRS->SetAuthority("GEOGCS", "EPSG", 4326);
-    return poSRS;
+    // Return nullptr to prevent coordinate system information from being displayed
+    return nullptr;
 }
 
 char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
