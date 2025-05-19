@@ -42,24 +42,48 @@ jobs:
     - name: Smoke test
       run: |
           export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-          echo "Checking for EOPFZARR driver in available formats:"
+          echo "Test 1- Checking for EOPFZARR driver in available formats:"
           gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
           # Create a more complete Zarr test dataset
           echo "Testing with sample data from repository:"
           ls -la $GITHUB_WORKSPACE/src/sample_data/
-          echo "Opening sample Zarr dataset with EOPF_PROCESS=YES:"
+          echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
 
           # Use CPL_DEBUG for detailed driver selection info
           export CPL_DEBUG=OFF
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
       
           # Verify dimensions or other expected properties of your sample data
-          echo "Verifying dataset properties:"
+          echo "Test 3- Verifying dataset properties:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
 
           # Optional: Show a sample of the full output
-          echo "Sample of dataset info:"
+          echo "Test 4- Sample of dataset info:"
           CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Get the system GDAL version first
+        GDAL_VERSION=$(gdal-config --version)
+        echo "System GDAL version: ${GDAL_VERSION}"
+        # Install the matching GDAL Python bindings
+        pip install gdal==${GDAL_VERSION}
+        # Install other requirements but exclude GDAL
+        grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin
+
+    - name: Run Python tests
+      run: |
+        # Set the driver path so Python tests can find the plugin
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
+        # Run pytest
+        cd tests
+        pytest -xvs python/
 
     - name: Debug info
       if: failure()

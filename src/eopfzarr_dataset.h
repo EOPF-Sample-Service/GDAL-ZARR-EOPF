@@ -26,7 +26,9 @@ public:
 
     // Override metadata method to handle subdatasets
     char** GetMetadata(const char* pszDomain = nullptr) override;
-
+    CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
+    CPLErr SetGeoTransform(double* padfTransform) override;
+    
     // Override geospatial methods to correctly handle coordinate transformations
     const OGRSpatialReference* GetSpatialRef() const override;
     CPLErr GetGeoTransform(double* padfTransform) override;
