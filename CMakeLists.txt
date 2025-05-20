@@ -9,7 +9,7 @@ set(CMAKE_PREFIX_PATH
     "C:/OSGeo4W/lib") 
 
 # Use explicit module search for GDAL
-find_package(GDAL REQUIRED CONFIG)
+find_package(GDAL REQUIRED)
 
 # Print GDAL info for debugging
 message(STATUS "Found GDAL: ${GDAL_FOUND}")
@@ -28,7 +28,7 @@ add_library(gdal_EOPFZarr MODULE
 )
 
 # Use correct variables for MODULE mode
-target_include_directories(gdal_EOPFZarr PRIVATE GDAL::GDAL)
+target_include_directories(gdal_EOPFZarr PRIVATE ${GDAL_INCLUDE_DIRS})
 
 # On Windows, specify all the libraries explicitly
 if(WIN32)
