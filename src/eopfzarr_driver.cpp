@@ -5,12 +5,18 @@
  *  GDAL’s Driver Manager.  All wrapper‑dataset logic lives in
  *  eopfzarr_dataset.*.
  **********************************************************************/
-
 #include "eopfzarr_dataset.h"
 #include "gdal_priv.h"
 #include "cpl_vsi.h"
 #include "cpl_string.h" // Added for CSL functions (CSLRemove, CSLDuplicate, etc.)
 #include <string>
+
+ // Add Windows-specific export declarations without redefining CPL macros
+#ifdef _WIN32
+#define EOPFZARR_DLL __declspec(dllexport)
+#else
+#define EOPFZARR_DLL
+#endif
 
 static GDALDriver* gEOPFDriver = nullptr;   /* global ptr for reuse */
 
@@ -217,7 +223,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
 /* -------------------------------------------------------------------- */
 /*      GDALRegister_EOPFZarr — entry point called by Driver Manager     */
 /* -------------------------------------------------------------------- */
-extern "C" void GDALRegister_EOPFZarr()
+extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
 {
     if (GDALGetDriverByName("EOPFZARR") != nullptr)
         return;
@@ -243,4 +249,9 @@ extern "C" void GDALRegister_EOPFZarr()
 
     GetGDALDriverManager()->RegisterDriver(gEOPFDriver);
     CPLDebug("EOPFZARR", "EOPFZarr driver registered with EOPF_PROCESS open option.");
+}
+
+extern "C" EOPFZARR_DLL void GDALRegisterMe()
+{
+    GDALRegister_EOPFZarr();
 }
