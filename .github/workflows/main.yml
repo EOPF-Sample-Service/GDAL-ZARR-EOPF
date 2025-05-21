@@ -149,6 +149,13 @@ jobs:
       with:
         arch: x64
 
+    - name: Validate GDAL Installation
+      shell: pwsh
+      run: |
+        & "$env:OSGEO4W_ROOT\bin\gdalinfo.exe" --version
+        & "$env:OSGEO4W_ROOT\bin\gdal-config.exe" --version
+        & "$env:OSGEO4W_ROOT\bin\gdalinfo.exe" --formats | Select-String "EOPFZARR"
+
 
     - name: Configure CMake
       run: |
