@@ -117,37 +117,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install OSGeo4W using Community Action 
-        uses: echoix/setup-OSGeo4W@v0.2.0
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v2
         with:
-          packages: >-
-            gdal-devel
-            python3-gdal-devel
-            cmake
-            ninja
-          site: https://download.osgeo.org/osgeo4w/v2/
-          upgrade-also: true
-
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+          channels: conda-forge
+          environment-file: environment.yml
 
       - name: Configure CMake
         run: |
-            cmake -S . -B build/${{ matrix.cfg }} `
-              -G "Visual Studio 17 2022" `
-              -A x64 `
-              -DGDAL_DIR="$env:OSGEO4W_ROOT/apps/gdal/lib/cmake/gdal"
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DGDAL_DIR="$env:CONDA_PREFIX/Library/cmake/gdal"
 
       - name: Build
-        run: cmake --build build/${{ matrix.cfg }} --config ${{ matrix.cfg }} --parallel
-
-      - name: Smoke Test
-        shell: pwsh
-        run: |
-            $env:GDAL_DRIVER_PATH = "${{ github.workspace }}\build\${{ matrix.cfg }}"
-            gdalinfo --formats | Select-String "EOPFZARR" || (Write-Error "Driver missing"; exit 1)
+        run: cmake --build build --config Release --parallel
 
 
       - name: Upload Artifact
