@@ -113,27 +113,32 @@ jobs:
     strategy:
         matrix:
           cfg: [Release, Debug]
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Install OSGeo4W
-        shell: pwsh
-        run: |
-            $osgeoDir = "C:\OSGeo4W"
-            New-Item -Path $osgeoDir -ItemType Directory -Force
-            Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
-            Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList @(
-                "--advanced",
-                "--quiet-mode",
-                "--arch", "x86_64",
-                "--root", $osgeoDir,
-                "--packages", "gdal-devel,python3-gdal-devel,cmake,ninja"
-            ) -Wait
+    - name: Install OSGeo4W
+      shell: pwsh
+      run: |
+        Write-Host "Starting OSGeo4W installer..."
+        Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList @(
+          "--advanced",
+          "--quiet-mode",
+          "--no-desktop",
+          "--no-shortcuts",
+          "--root", "C:\OSGeo4W",
+          "--arch", "x86_64",
+          "--site", "https://download.osgeo.org/osgeo4w/v2/",
+          "--packages", "gdal,python3-gdal,cmake,ninja"
+        ) -NoNewWindow -Wait -PassThru | Out-Host
+        Write-Host "OSGeo4W installer finished."
+      timeout-minutes: 10
 
-      - name: Configure Environment
-        shell: pwsh
-        run: |
+
+    - name: Configure Environment
+      shell: pwsh
+      run: |
             # Set core paths
             echo "C:\OSGeo4W\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
             $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
@@ -143,19 +148,19 @@ jobs:
             $env:PATH = "C:\OSGeo4W\apps\Python310;C:\OSGeo4W\apps\Python310\Scripts;" + $env:PATH
             python -m pip install --upgrade pip pytest
 
-      - name: Configure CMake
-        run: |
+    - name: Configure CMake
+      run: |
             cmake -S . -B build/${{ matrix.cfg }} -G Ninja `
               -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
               -DGDAL_DIR="C:/OSGeo4W/cmake" `
               -DCMAKE_PREFIX_PATH="C:/OSGeo4W"
 
-      - name: Build
-        run: cmake --build build/${{ matrix.cfg }} --parallel
+    - name: Build
+      run: cmake --build build/${{ matrix.cfg }} --parallel
 
-      - name: Validate Build
-        shell: pwsh
-        run: |
+    - name: Validate Build
+      shell: pwsh
+      run: |
             # Architecture check
             dumpbin /headers build\${{ matrix.cfg }}\gdal_EOPFZarr.dll | findstr "x64"
             if (-not $?) { exit 1 }
@@ -163,15 +168,16 @@ jobs:
             # Dependency check
             dumpbin /dependents build\${{ matrix.cfg }}\gdal_EOPFZarr.dll | findstr "MSVCP140"
 
-      - name: Smoke Test
-        shell: pwsh
-        run: |
+    - name: Smoke Test
+      shell: pwsh
+      run: |
             $env:GDAL_DRIVER_PATH = "${{ github.workspace }}\build\${{ matrix.cfg }}"
             gdalinfo --formats | Select-String "EOPFZARR" || (Write-Error "Driver missing"; exit 1)
             gdalinfo -oo EOPF_PROCESS=YES "${{ github.workspace }}\test_data\sample.zarr"
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: win-gdal_EOPFZarr-${{ matrix.cfg }}
-          path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: win-gdal_EOPFZarr-${{ matrix.cfg }}
+        path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
+
