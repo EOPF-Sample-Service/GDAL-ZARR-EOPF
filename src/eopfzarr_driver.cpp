@@ -234,7 +234,7 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     gEOPFDriver = new GDALDriver();
 
     gEOPFDriver->SetDescription("EOPFZARR");
-    gEOPFDriver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver");
+    gEOPFDriver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver 3");
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     gEOPFDriver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");

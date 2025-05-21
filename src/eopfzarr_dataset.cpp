@@ -34,6 +34,8 @@ EOPFZarrDataset::~EOPFZarrDataset()
 
     if (mSubdatasets)
         CSLDestroy(mSubdatasets);
+    if(mSubdatasets)
+		delete mCachedSpatialRef;
 }
 
 EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner, GDALDriver* drv)
@@ -116,6 +118,7 @@ CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
 CPLErr EOPFZarrDataset::SetSpatialRef(const OGRSpatialReference* poSRS)
 {
     // Silently accept - do nothing
+
     return CE_None;
 }
 
@@ -128,7 +131,15 @@ CPLErr EOPFZarrDataset::SetGeoTransform(double* padfTransform)
 const OGRSpatialReference* EOPFZarrDataset::GetSpatialRef() const
 {
     // Return nullptr to prevent coordinate system information from being displayed
-    return nullptr;
+    if(!mProjectionRef)
+        return nullptr;
+	OGRSpatialReference* poRS = new OGRSpatialReference();
+    if (poRS->importFromWkt(mProjectionRef) != OGRERR_NONE)
+    {
+        delete poRS;
+        return nullptr;
+    }
+    return poRS;
 }
 
 char** EOPFZarrDataset::GetMetadata(const char* pszDomain)

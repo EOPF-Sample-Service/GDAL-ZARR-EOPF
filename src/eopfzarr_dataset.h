@@ -13,6 +13,7 @@ private:
     double mGeoTransform[6];
     char* mProjectionRef;
     char** mSubdatasets;
+    mutable OGRSpatialReference* mCachedSpatialRef = nullptr;
 
 public:
     EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver* selfDrv);
