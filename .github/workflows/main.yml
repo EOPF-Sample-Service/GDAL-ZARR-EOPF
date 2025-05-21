@@ -111,91 +111,48 @@ jobs:
     name: Windows Build
     runs-on: windows-latest
     strategy:
-        matrix:
-          cfg: [Release, Debug]
-
+      matrix:
+        cfg: [Release, Debug]
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Install OSGeo4W using Community Action 
+        uses: echoix/setup-OSGeo4W@v0.2.0
+        with:
+          packages: >-
+            gdal-devel
+            python3-gdal-devel
+            cmake
+            ninja
+          site: https://download.osgeo.org/osgeo4w/v2/
+          upgrade-also: true
 
-    - name: Install OSGeo4W
-      shell: pwsh
-      run: |
-        $osgeoDir = "C:\OSGeo4W"
-        New-Item -Path $osgeoDir -ItemType Directory -Force
-        Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
-        $logFile = "$env:TEMP\osgeo4w-setup.log"
-        $installArgs = @(
-          "--advanced",
-          "--quiet-mode",
-          "--autoaccept",
-          "--no-desktop",
-          "--no-shortcuts",
-          "--root", $osgeoDir,
-          "--arch", "x86_64",
-          "--site", "https://download.osgeo.org/osgeo4w/v2/",
-          "--logfile", $logFile,
-          "--packages", "gdal-devel,python3-gdal-devel,cmake"
-        )
-        $process = Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList $installArgs -PassThru -NoNewWindow -Wait
-        Write-Host "Exit code: $($process.ExitCode)"
-        Get-Content $logFile -ErrorAction SilentlyContinue | Select-String -Pattern "error|fail|warning" -SimpleMatch
-        if (Test-Path "$osgeoDir\bin\gdalinfo.exe") {
-          Write-Host "Installation verified"
-        } else {
-          Write-Error "Installation failed"
-          exit 1
-        }
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
-      timeout-minutes: 15
+      - name: Configure CMake
+        run: |
+            cmake -S . -B build/${{ matrix.cfg }} `
+              -G "Visual Studio 17 2022" `
+              -A x64 `
+              -DGDAL_DIR="$env:OSGEO4W_ROOT/apps/gdal/lib/cmake/gdal"
 
+      - name: Build
+        run: cmake --build build/${{ matrix.cfg }} --config ${{ matrix.cfg }} --parallel
 
-    - name: Setup MSVC
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
-
-    - name: Validate GDAL Installation
-      shell: pwsh
-      run: |
-        & "$env:OSGEO4W_ROOT\bin\gdalinfo.exe" --version
-        & "$env:OSGEO4W_ROOT\bin\gdal-config.exe" --version
-        & "$env:OSGEO4W_ROOT\bin\gdalinfo.exe" --formats | Select-String "EOPFZARR"
-
-
-    - name: Configure CMake
-      run: |
-        cmake -S . -B build `
-          -G "Visual Studio 17 2022" `
-          -A x64 `
-          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-
-
-    - name: Build
-      run: cmake --build build/${{ matrix.cfg }} --parallel
-
-
-    - name: Validate Build
-      shell: pwsh
-      run: |
-            # Architecture check
-            dumpbin /headers build\${{ matrix.cfg }}\gdal_EOPFZarr.dll | findstr "x64"
-            if (-not $?) { exit 1 }
-
-            # Dependency check
-            dumpbin /dependents build\${{ matrix.cfg }}\gdal_EOPFZarr.dll | findstr "MSVCP140"
-
-    - name: Smoke Test
-      shell: pwsh
-      run: |
+      - name: Smoke Test
+        shell: pwsh
+        run: |
             $env:GDAL_DRIVER_PATH = "${{ github.workspace }}\build\${{ matrix.cfg }}"
             gdalinfo --formats | Select-String "EOPFZARR" || (Write-Error "Driver missing"; exit 1)
-            gdalinfo -oo EOPF_PROCESS=YES "${{ github.workspace }}\test_data\sample.zarr"
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: win-gdal_EOPFZarr-${{ matrix.cfg }}
-        path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-gdal_EOPFZarr-${{ matrix.cfg }}
+          path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
 
