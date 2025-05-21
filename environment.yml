@@ -1,0 +1,7 @@
+name: gdal-env
+channels:
+  - conda-forge
+dependencies:
+  - gdal=3.10.3
+  - cmake
+  - ninja
