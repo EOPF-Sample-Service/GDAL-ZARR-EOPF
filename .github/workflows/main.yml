@@ -124,18 +124,23 @@ jobs:
             $osgeoDir = "C:\OSGeo4W"
             New-Item -Path $osgeoDir -ItemType Directory -Force
             Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
-            ".\osgeo4w-setup.exe",
-            "--advanced",
-            "--quiet-mode",
-            "--no-desktop",
-            "--no-shortcuts",
-            "--root", "C:\OSGeo4W",
-            "--arch","x86_64",
-            "--site", "https://download.osgeo.org/osgeo4w/v2/" 
-            "--packages", "gdal,python3-gdal,cmake,ninja"
+            Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList @(
+                "--advanced",
+                "--quiet-mode",
+                "--no-desktop",
+                "--no-shortcuts",
+                "--root", $osgeoDir,
+                "--arch", "x86_64",
+                "--site", "https://download.osgeo.org/osgeo4w/v2/",
+                "--packages", "gdal-devel,python3-gdal-devel,cmake,ninja"
+            ) -NoNewWindow -Wait
 
       timeout-minutes: 10
 
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
 
     - name: Configure Environment
       shell: pwsh
