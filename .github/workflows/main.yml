@@ -117,18 +117,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2
+      - name: Install OSGeo4W
+        uses: echoix/setup-OSGeo4W@v0.2.0
         with:
-          channels: conda-forge
-          environment-file: environment.yml
+            packages: gdal-devel python3-gdal-devel cmake ninja
+            site: https://download.osgeo.org/osgeo4w/v2/
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+            arch: x64
 
       - name: Configure CMake
+        timeout-minutes: 10
         run: |
-          cmake -S . -B build `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DGDAL_DIR="$env:CONDA_PREFIX/Library/cmake/gdal"
+            cmake -S . -B build `
+              -G "Visual Studio 17 2022" `
+              -A x64 `
+              -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal" `
+              --debug-output
 
       - name: Build
         run: cmake --build build --config Release --parallel
