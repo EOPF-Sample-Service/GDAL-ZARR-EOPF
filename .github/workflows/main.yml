@@ -134,8 +134,9 @@ jobs:
             "--site", "https://download.osgeo.org/osgeo4w/v2/",
             "--packages", "gdal-devel,python3-gdal-devel,cmake,ninja",
             "--autoaccept",
-            "--accept-license=*"  
+            "--accept-license=*"  # Explicitly accept all licenses
         ) -NoNewWindow -Wait
+
 
       timeout-minutes: 20
 
