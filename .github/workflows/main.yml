@@ -129,10 +129,11 @@ jobs:
             "--quiet-mode",
             "--no-desktop",
             "--no-shortcuts",
-            --root "C:\OSGeo4W",
-            --arch x86_64,
-            --site "https://download.osgeo.org/osgeo4w/v2/" 
-            --packages gdal,python3-gdal,cmake,ninja
+            "--root", "C:\OSGeo4W",
+            "--arch","x86_64",
+            "--site", "https://download.osgeo.org/osgeo4w/v2/" 
+            "--packages", "gdal,python3-gdal,cmake,ninja"
+
       timeout-minutes: 10
 
 
