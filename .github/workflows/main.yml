@@ -38,7 +38,10 @@ jobs:
           -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
     - name: Build
-      run: cmake --build build/${{ matrix.cfg }} --parallel
+      run: cmake --build build --config Release
+      env:
+        # Required for VS Generator
+        PATH: ${{ github.workspace }}\build
 
     - name: Smoke test
       run: |
