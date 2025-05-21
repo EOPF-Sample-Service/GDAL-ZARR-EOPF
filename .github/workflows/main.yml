@@ -151,13 +151,17 @@ jobs:
 
     - name: Configure CMake
       run: |
-            cmake -S . -B build/${{ matrix.cfg }} -G Ninja `
+            cmake -S . -B build/${{ matrix.cfg }} -G "Visual Studio 17 2022" -A x64 `
               -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
               -DGDAL_DIR="C:/OSGeo4W/cmake" `
               -DCMAKE_PREFIX_PATH="C:/OSGeo4W"
 
+
     - name: Build
-      run: cmake --build build/${{ matrix.cfg }} --parallel
+      run: cmake --build build --config Release
+      env:
+        # Required for VS Generator
+        PATH: ${{ github.workspace }}\build
 
     - name: Validate Build
       shell: pwsh
