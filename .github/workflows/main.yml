@@ -118,21 +118,39 @@ jobs:
     - name: Setup OSGeo4W
       shell: pwsh
       run: |
+        # Create a directory for OSGeo4W
+        New-Item -Path "C:\" -Name "OSGeo4W" -ItemType Directory -Force
+
         # Download OSGEO4W installer
         Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+
         # Run installer with required packages
-        ./osgeo4w-setup.exe --quiet-mode --no-desktop --no-startmenu --no-shortcuts --upgrade-also --root C:\OSGeo4W --packages gdal-dev,python3-gdal
+        Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList "--advanced --quiet-mode --no-desktop --no-startmenu --no-shortcuts --upgrade-also --root C:\OSGeo4W --packages gdal-dev,python3-gdal" -NoNewWindow -Wait
 
     - name: Setup environment
       shell: pwsh
       run: |
-        echo "C:\OSGeo4W\bin;C:\OSGeo4W\apps\gdal\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+        echo "C:\OSGeo4W\bin;C:\OSGeo4W\apps\gdal\bin;C:\OSGeo4W\apps\Python39\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Append
+      
+        # Set environment variables for CMake to find GDAL
         echo "GDAL_DATA=C:\OSGeo4W\share\gdal" | Out-File -FilePath $env:GITHUB_ENV -Append
+        echo "GDAL_ROOT=C:\OSGeo4W" | Out-File -FilePath $env:GITHUB_ENV -Append
+      
+        # Create a simpler structure for environment variables used by CMake
+        mkdir ${{ github.workspace }}\cmake
+      
+        @"
+        set(ENV{GDAL_ROOT} "C:/OSGeo4W")
+        set(ENV{GDAL_DIR} "C:/OSGeo4W")
+        set(GDAL_INCLUDE_DIR "C:/OSGeo4W/include")
+        set(GDAL_LIBRARY "C:/OSGeo4W/lib/gdal_i.lib")
+        "@ | Out-File -FilePath "${{ github.workspace }}\cmake\FindGDALConfig.cmake" -Encoding utf8
         
     - name: Configure
       run: |
-        cmake -S . -B build/${{ matrix.cfg }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+        cmake -S . -B build/${{ matrix.cfg }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} -DCMAKE_MODULE_PATH="${{ github.workspace }}/cmake"
 
+  # Rest of the steps remain the same
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
 
