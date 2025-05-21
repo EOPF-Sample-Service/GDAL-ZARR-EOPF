@@ -121,43 +121,34 @@ jobs:
     - name: Install OSGeo4W
       shell: pwsh
       run: |
-            $osgeoDir = "C:\OSGeo4W"
-            New-Item -Path $osgeoDir -ItemType Directory -Force
-            Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
-            ".\osgeo4w-setup.exe",
+        $osgeoDir = "C:\OSGeo4W"
+        New-Item -Path $osgeoDir -ItemType Directory -Force
+        Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+        Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList @(
             "--advanced",
             "--quiet-mode",
             "--no-desktop",
             "--no-shortcuts",
-            "--root", "C:\OSGeo4W",
-            "--arch","x86_64",
-            "--site", "https://download.osgeo.org/osgeo4w/v2/" 
-            "--packages", "gdal,python3-gdal,cmake,ninja"
+            "--root", $osgeoDir,
+            "--arch", "x86_64",
+            "--site", "https://download.osgeo.org/osgeo4w/v2/",
+            "--packages", "gdal-devel,python3-gdal-devel,cmake,ninja"
+        ) -NoNewWindow -Wait
 
-      timeout-minutes: 10
+      timeout-minutes: 20
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
 
-    - name: Configure Environment
-      shell: pwsh
-      run: |
-            # Set core paths
-            echo "C:\OSGeo4W\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-            $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
-            $env:PROJ_LIB = "C:\OSGeo4W\share\proj"
-        
-            # Python configuration
-            $env:PATH = "C:\OSGeo4W\apps\Python310;C:\OSGeo4W\apps\Python310\Scripts;" + $env:PATH
-            python -m pip install --upgrade pip pytest
 
     - name: Configure CMake
       run: |
-            cmake -S . -B build/${{ matrix.cfg }} -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
-            -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+        cmake -S . -B build `
+          -G "Visual Studio 17 2022" `
+          -A x64 `
+          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
 
 
     - name: Build
