@@ -138,7 +138,7 @@ jobs:
               --debug-output
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config ${{ matrix.cfg }} --parallel
 
 
       - name: Upload Artifact
