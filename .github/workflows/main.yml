@@ -118,12 +118,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+
     - name: Install OSGeo4W
       shell: pwsh
       run: |
         $osgeoDir = "C:\OSGeo4W"
         New-Item -Path $osgeoDir -ItemType Directory -Force
         Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+    
+        # Execute with explicit argument array and license acceptance
         $installArgs = @(
           "--advanced",
           "--quiet-mode",
@@ -136,11 +139,10 @@ jobs:
           "--autoaccept",
           "--accept-license=*"
         )
-
+    
         Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList $installArgs -NoNewWindow -Wait -PassThru
         Get-ChildItem -Path $osgeoDir -Recurse -ErrorAction Continue | ForEach-Object { Write-Host "Installed: $($_.FullName)" }
-
-      timeout-minutes: 20
+      timeout-minutes: 15
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
