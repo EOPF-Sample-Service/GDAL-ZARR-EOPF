@@ -126,23 +126,33 @@ jobs:
         New-Item -Path $osgeoDir -ItemType Directory -Force
         Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
     
-        # Execute with explicit argument array and license acceptance
         $installArgs = @(
           "--advanced",
-          "--quiet-mode",
+          "--arch=x86_64",
+          "--autoaccept",
+          "--accept-license=*",
+          "--delete-orphans",
           "--no-desktop",
           "--no-shortcuts",
-          "--root", $osgeoDir,
-          "--arch", "x86_64",
-          "--site", "https://download.osgeo.org/osgeo4w/v2/",
-          "--packages", "gdal-devel,python3-gdal-devel,cmake,ninja",
-          "--autoaccept",
-          "--accept-license=*"
+          "--quiet-mode",
+          "--root=C:\OSGeo4W",
+          "--site=https://download.osgeo.org/osgeo4w/v2/",
+          "--packages=gdal-devel,python3-gdal-devel,cmake,ninja",
+          "--upgrade-also"
         )
+
+        $process = Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList $installArgs -PassThru -NoNewWindow -Wait
+        Write-Host "Exit code: $($process.ExitCode)"
     
-        Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList $installArgs -NoNewWindow -Wait -PassThru
-        Get-ChildItem -Path $osgeoDir -Recurse -ErrorAction Continue | ForEach-Object { Write-Host "Installed: $($_.FullName)" }
-      timeout-minutes: 15
+        # Verify installation
+        if (Test-Path "$osgeoDir\bin\gdalinfo.exe") {
+          Write-Host "Installation verified"
+        } else {
+          Write-Error "Installation failed"
+          exit 1
+        }
+      timeout-minutes: 10
+
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
