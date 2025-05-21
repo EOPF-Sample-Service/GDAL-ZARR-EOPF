@@ -123,13 +123,14 @@ jobs:
       run: |
             $osgeoDir = "C:\OSGeo4W"
             New-Item -Path $osgeoDir -ItemType Directory -Force
-            Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe" .\osgeo4w-setup.exe ^
-            --advanced ^
-            --quiet-mode ^
-            --no-desktop ^
-            --no-shortcuts ^
-            --root "C:\OSGeo4W" ^
-            --arch x86_64 ^
+            Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+            ".\osgeo4w-setup.exe",
+            "--advanced",
+            "--quiet-mode",
+            "--no-desktop",
+            "--no-shortcuts",
+            --root "C:\OSGeo4W",
+            --arch x86_64,
             --site "https://download.osgeo.org/osgeo4w/v2/" 
             --packages gdal,python3-gdal,cmake,ninja
       timeout-minutes: 10
