@@ -124,16 +124,15 @@ jobs:
             $osgeoDir = "C:\OSGeo4W"
             New-Item -Path $osgeoDir -ItemType Directory -Force
             Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
-            Start-Process -FilePath ".\osgeo4w-setup.exe" -ArgumentList @(
-                "--advanced",
-                "--quiet-mode",
-                "--no-desktop",
-                "--no-shortcuts",
-                "--root", $osgeoDir,
-                "--arch", "x86_64",
-                "--site", "https://download.osgeo.org/osgeo4w/v2/",
-                "--packages", "gdal-devel,python3-gdal-devel,cmake,ninja"
-            ) -NoNewWindow -Wait
+            ".\osgeo4w-setup.exe",
+            "--advanced",
+            "--quiet-mode",
+            "--no-desktop",
+            "--no-shortcuts",
+            "--root", "C:\OSGeo4W",
+            "--arch","x86_64",
+            "--site", "https://download.osgeo.org/osgeo4w/v2/" 
+            "--packages", "gdal,python3-gdal,cmake,ninja"
 
       timeout-minutes: 10
 
@@ -157,16 +156,13 @@ jobs:
     - name: Configure CMake
       run: |
             cmake -S . -B build/${{ matrix.cfg }} -G "Visual Studio 17 2022" -A x64 `
-              -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
-              -DGDAL_DIR="C:/OSGeo4W/cmake" `
-              -DCMAKE_PREFIX_PATH="C:/OSGeo4W"
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
+            -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
 
 
     - name: Build
-      run: cmake --build build --config Release
-      env:
-        # Required for VS Generator
-        PATH: ${{ github.workspace }}\build
+      run: cmake --build build/${{ matrix.cfg }} --parallel
+
 
     - name: Validate Build
       shell: pwsh
