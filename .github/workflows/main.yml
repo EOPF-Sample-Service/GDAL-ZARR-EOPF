@@ -147,3 +147,9 @@ jobs:
           name: win-gdal_EOPFZarr-${{ matrix.cfg }}
           path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
 
+      - name: Validate Architecture
+        shell: pwsh
+        run: |
+            dumpbin /headers "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll" | findstr "machine"
+            if (-not $?) { exit 1 }
+
