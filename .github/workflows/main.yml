@@ -185,7 +185,7 @@ jobs:
         shell: bash -el {0}
         run: |
           mkdir -p bundle
-          cp build/gdal_EOPFZarr.dll bundle/
+          cp build/Release/gdal_EOPFZarr.dll bundle/
           # Copy all collected dependencies; avoid error if deps is empty
           cp deps/* bundle/ 2>/dev/null || echo "No dependencies from deps/ to copy"
           
@@ -237,5 +237,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gdal_EOPFZarr-${{ matrix.cfg }}-plugin-only-windows
-          path: build/gdal_EOPFZarr.dll
+          path: build/Release/gdal_EOPFZarr.dll
 
