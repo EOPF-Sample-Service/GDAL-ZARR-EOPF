@@ -150,20 +150,16 @@ jobs:
         with:
           arch: x64
 
-      - name: Configure CMake
-        shell: bash -el {0}
-        run: |
-          cmake -S . -B build \
-            -G "Ninja" \
-            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
-            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
-            -DCMAKE_VERBOSE_MAKEFILE=ON
+      - name: Configure CMake with Visual Studio Generator
+        shell: cmd
+        run: CALL "%VCVARSALL_PATH%" amd64
+             cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} -DCMAKE_PREFIX_PATH="%CONDA_PREFIX_LIB%;%CONDA_PREFIX_INCLUDE%;%CONDA_PREFIX_BIN%;%CONDA_PREFIX%" -DCMAKE_VERBOSE_MAKEFILE=ON
 
-      - name: Build
-        shell: bash -el {0}
+      - name: Build with MSBuild (via CMake)
+        shell: cmd
         run: |
+          CALL "%VCVARSALL_PATH%" amd64
           cmake --build build --config ${{ matrix.cfg }} --parallel
-
 
       - name: Collect Dependencies
         shell: bash -el {0}
