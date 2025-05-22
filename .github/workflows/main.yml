@@ -144,8 +144,10 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: win-gdal_EOPFZarr-${{ matrix.cfg }}
-          path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
+          name: win-gdal_EOPFZarr-${{ matrix.cfg }}-bundled
+          path: build\${{ matrix.cfg }}\gdal_EOPFZarr.dll
+                $env:CONDA_PREFIX\Library\bin\msvcp140.dll
+                $env:CONDA_PREFIX\Library\bin\vcruntime140.dll
 
       - name: Validate Architecture
         shell: pwsh
