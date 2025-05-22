@@ -14,6 +14,7 @@ private:
     char* mProjectionRef;
     char** mSubdatasets;
     mutable OGRSpatialReference* mCachedSpatialRef = nullptr;
+    char** m_papszDefaultDomainFilteredMetadata = nullptr;
 
 public:
     EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver* selfDrv);
@@ -29,7 +30,8 @@ public:
     char** GetMetadata(const char* pszDomain = nullptr) override;
     CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
     CPLErr SetGeoTransform(double* padfTransform) override;
-    
+   
+        
     // Override geospatial methods to correctly handle coordinate transformations
     const OGRSpatialReference* GetSpatialRef() const override;
     CPLErr GetGeoTransform(double* padfTransform) override;
