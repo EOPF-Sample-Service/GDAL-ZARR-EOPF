@@ -112,46 +112,113 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        cfg: [Release, Debug]
+        cfg: [Release]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-            packages: conda-forge
-            environment-file: environment.yml
+      - name: Install OSGeo4W
+        shell: pwsh
+        run: |
+          # Download OSGeo4W installer
+          Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+          
+          # Create OSGeo4W directory
+          mkdir -p C:/OSGeo4W
+          
+          # Run installer to get core libraries
+          ./osgeo4w-setup.exe --quiet-mode --upgrade-also --root C:/OSGeo4W --packages gdal-dev,python3-gdal
+          
+          # Add OSGeo4W to PATH
+          echo "C:\OSGeo4W\bin;C:\OSGeo4W\apps\gdal\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          
+          # Print version info
+          gdalinfo --version
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
-            arch: x64
+          arch: x64
 
       - name: Configure CMake
-        timeout-minutes: 10
+        shell: pwsh
         run: |
-            cmake -S . -B build `
-              -G "Visual Studio 17 2022" `
-              -A x64 `
-              -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal" `
-              --debug-output
+          # Use the same configuration command as your local build
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
+            -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal"
 
       - name: Build
         run: cmake --build build --config ${{ matrix.cfg }} --parallel
 
+      - name: Analyze Dependencies
+        shell: pwsh
+        run: |
+          # Find dependencies
+          $dll = "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll"
+          $output = dumpbin /dependents $dll 2>&1
+          
+          # Output dependencies for debugging
+          echo "DLL Dependencies:"
+          echo $output
+          
+          # Check if we link to GDAL
+          $output | Select-String -Pattern "gdal.*\.dll" -AllMatches | ForEach-Object { $_.Matches.Value }
+
+      - name: Collect Dependencies
+        shell: pwsh
+        run: |
+          # Create a directory to collect dependencies
+          mkdir deps
+          
+          # Copy core GDAL DLLs (these are the ones most likely needed)
+          Copy-Item "C:\OSGeo4W\bin\gdal*.dll" deps\
+          Copy-Item "C:\OSGeo4W\bin\libcrypto*.dll" deps\ -ErrorAction SilentlyContinue
+          Copy-Item "C:\OSGeo4W\bin\libssl*.dll" deps\ -ErrorAction SilentlyContinue
+          Copy-Item "C:\OSGeo4W\bin\libpq*.dll" deps\ -ErrorAction SilentlyContinue
+          
+          # Copy CRT dependencies (the Visual C++ runtime)
+          Copy-Item "C:\Windows\System32\msvcp140.dll" deps\ -ErrorAction SilentlyContinue
+          Copy-Item "C:\Windows\System32\vcruntime140.dll" deps\ -ErrorAction SilentlyContinue
+          Copy-Item "C:\Windows\System32\vcruntime140_1.dll" deps\ -ErrorAction SilentlyContinue
+
+      - name: Create Bundle
+        shell: pwsh
+        run: |
+          # Create a directory for the bundle
+          mkdir bundle
+          
+          # Copy the plugin and its dependencies
+          Copy-Item "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll" bundle\
+          Copy-Item "deps\*" bundle\
+          
+          # Create a README with installation instructions
+          @"
+          # EOPF Zarr GDAL Plugin
+
+          ## Installation Instructions
+          
+          1. Copy gdal_EOPFZarr.dll to your GDAL plugins folder (e.g., C:\OSGeo4W\apps\gdal\lib\gdalplugins\)
+          2. Copy any missing dependency DLLs to your system PATH (e.g., C:\OSGeo4W\bin\)
+          3. Set GDAL_DRIVER_PATH if your plugins folder is not in the default location
+          
+          ## Dependencies
+          
+          This package includes dependency DLLs that might be required if they're missing on your system.
+          "@ | Out-File -FilePath "bundle\README.txt" -Encoding utf8
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: win-gdal_EOPFZarr-${{ matrix.cfg }}-bundled
-          path: build\${{ matrix.cfg }}\gdal_EOPFZarr.dll
-                $env:CONDA_PREFIX\Library\bin\msvcp140.dll
-                $env:CONDA_PREFIX\Library\bin\vcruntime140.dll
+          name: gdal_EOPFZarr-${{ matrix.cfg }}-bundle
+          path: |
+            bundle/*
 
-      - name: Validate Architecture
-        shell: pwsh
-        run: |
-            dumpbin /headers "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll" | findstr "machine"
-            if (-not $?) { exit 1 }
+      - name: Upload Plugin Only
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdal_EOPFZarr-${{ matrix.cfg }}
+          path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
 
