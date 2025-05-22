@@ -117,63 +117,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download OSGeo4W
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+      # Use Conda to install GDAL - much more reliable than OSGeo4W in CI
+      - name: Setup Conda with GDAL
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: '3.10'
+          channels: conda-forge
+          activate-environment: gdal-env
 
-      - name: Install OSGeo4W
-        shell: cmd
+      - name: Install GDAL with Conda
+        shell: bash -el {0}
         run: |
-          mkdir C:\OSGeo4W
-          osgeo4w-setup.exe --quiet-mode --no-desktop --no-startmenu --no-shortcuts --upgrade-also --root C:\OSGeo4W --packages gdal-dev,python3-gdal
-
-      - name: Setup Environment
-        shell: pwsh
-        run: |
-          # Add OSGeo4W bin directories to PATH
-          echo "C:\OSGeo4W\bin;C:\OSGeo4W\apps\gdal\bin;C:\OSGeo4W\apps\Qt5\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          
-          # Set GDAL environment variables
-          echo "GDAL_DATA=C:\OSGeo4W\share\gdal" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
-          # Run OSGeo4W shell setup
-          if (Test-Path "C:\OSGeo4W\OSGeo4W.bat") {
-            # Extract environment variables from OSGeo4W.bat
-            $tempFile = "env_vars.txt"
-            cmd /c "C:\OSGeo4W\OSGeo4W.bat && set > $tempFile"
-            
-            # Read the environment variables
-            Get-Content $tempFile | ForEach-Object {
-              if ($_ -match "^(.*?)=(.*)$") {
-                $name = $matches[1]
-                $value = $matches[2]
-                
-                # Skip some variables
-                if ($name -notin @("PROMPT", "CMDLINE", "COMSPEC", "PS1")) {
-                  # Set important environment variables
-                  if ($name -in @("PATH", "GDAL_DATA", "GDAL_DRIVER_PATH", "PROJ_LIB")) {
-                    echo "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append
-                  }
-                }
-              }
-            }
-            
-            # Clean up
-            Remove-Item $tempFile
-          }
-          
-      - name: Verify GDAL Installation
-        shell: cmd
-        run: |
-          echo "GDAL executable location:"
-          where gdalinfo
-          echo "GDAL version:"
+          conda install -y gdal=3.6.2 cmake ninja
+          conda info
+          conda list
+          which gdal-config
+          gdal-config --version
           gdalinfo --version
-          echo "PATH environment variable:"
-          echo %PATH%
-          echo "Directory listing of OSGeo4W\bin:"
-          dir C:\OSGeo4W\bin\*.dll
+          echo "GDAL_ROOT=$CONDA_PREFIX" >> $GITHUB_ENV
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -181,72 +143,82 @@ jobs:
           arch: x64
 
       - name: Configure CMake
-        shell: cmd
+        shell: bash -el {0}
         run: |
-          cmake -S . -B build ^
-            -G "Visual Studio 17 2022" ^
-            -A x64 ^
-            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
-            -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" ^
-            -DGDAL_INCLUDE_DIR="C:/OSGeo4W/include" ^
-            -DGDAL_LIBRARY="C:/OSGeo4W/lib/gdal_i.lib"
+          export GDAL_ROOT=$CONDA_PREFIX
+          
+          cmake -S . -B build \
+            -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
+            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+            -DGDAL_INCLUDE_DIR="$CONDA_PREFIX/include" \
+            -DGDAL_LIBRARY="$CONDA_PREFIX/lib/gdal.lib" \
+            -DCMAKE_VERBOSE_MAKEFILE=ON
 
       - name: Build
-        run: cmake --build build --config ${{ matrix.cfg }} --parallel
+        shell: bash -el {0}
+        run: |
+          cmake --build build --config ${{ matrix.cfg }} --parallel
 
       - name: Analyze Dependencies
-        shell: cmd
+        shell: bash -el {0}
         run: |
-          dumpbin /dependents build\${{ matrix.cfg }}\gdal_EOPFZarr.dll
+          # Using objdump from conda environment instead of dumpbin
+          echo "DLL Dependencies:"
+          $CONDA_PREFIX/Library/bin/objdump -p build/gdal_EOPFZarr.dll | grep "DLL Name:"
 
       - name: Collect Dependencies
-        shell: cmd
+        shell: bash -el {0}
         run: |
-          mkdir deps
-          copy C:\OSGeo4W\bin\gdal*.dll deps\
-          copy C:\Windows\System32\msvcp140.dll deps\
-          copy C:\Windows\System32\vcruntime140.dll deps\
-          copy C:\Windows\System32\vcruntime140_1.dll deps\
+          mkdir -p deps
+          # Copy GDAL DLLs from the conda environment
+          cp $CONDA_PREFIX/Library/bin/gdal*.dll deps/ || echo "No GDAL DLLs found"
+          # Copy CRT DLLs
+          cp $CONDA_PREFIX/Library/bin/vcruntime140*.dll deps/ || echo "No vcruntime DLLs found"
+          cp $CONDA_PREFIX/Library/bin/msvcp140*.dll deps/ || echo "No msvcp DLLs found"
+          
+          # List collected dependencies
+          ls -la deps/
 
       - name: Create Bundle
-        shell: pwsh
+        shell: bash -el {0}
         run: |
-          mkdir bundle
-          Copy-Item "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll" bundle\
-          Copy-Item "deps\*" bundle\
+          mkdir -p bundle
+          cp build/gdal_EOPFZarr.dll bundle/
+          cp deps/* bundle/ || echo "No dependencies to copy"
           
-          @"
+          cat > bundle/README.txt << 'EOL'
           # EOPF Zarr GDAL Plugin
 
           ## Installation Instructions
           
           1. Copy gdal_EOPFZarr.dll to your GDAL plugins folder (C:\OSGeo4W\apps\gdal\lib\gdalplugins\)
-          2. Copy any missing dependency DLLs to your system PATH (C:\OSGeo4W\bin\)
+          2. Copy all DLLs from this package to your PATH (C:\OSGeo4W\bin\)
           
           ## Troubleshooting
           
           If you get error 126 (module not found):
           
-          1. Make sure your OSGeo4W GDAL version matches the one used to build this plugin
+          1. Make sure your OSGeo4W/GDAL version matches the one used to build this plugin (3.6.2)
           2. Copy all DLLs from this package to the same folder as the plugin
           3. Use 'depends.exe' tool to identify any missing dependencies
-          "@ | Out-File -FilePath "bundle\README.txt" -Encoding utf8
+          EOL
 
       - name: Test Plugin Loading
-        shell: cmd
+        shell: bash -el {0}
         run: |
-          set GDAL_DRIVER_PATH=%CD%\build\${{ matrix.cfg }}
-          gdalinfo --formats | findstr "EOPFZARR" || echo EOPFZARR driver not found
+          export GDAL_DRIVER_PATH=$(pwd)/build
+          gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found"
 
       - name: Upload Bundle Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gdal_EOPFZarr-${{ matrix.cfg }}-bundle
+          name: gdal_EOPFZarr-${{ matrix.cfg }}-conda-bundle
           path: bundle/*
 
       - name: Upload Plugin Only
         uses: actions/upload-artifact@v4
         with:
           name: gdal_EOPFZarr-${{ matrix.cfg }}
-          path: build/${{ matrix.cfg }}/gdal_EOPFZarr.dll
+          path: build/gdal_EOPFZarr.dll
 
