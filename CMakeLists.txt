@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
 project(EOPFZarr LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
-# Use MODULE mode instead of CONFIG mode
+# Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
 add_library(gdal_EOPFZarr MODULE
@@ -11,17 +11,25 @@ add_library(gdal_EOPFZarr MODULE
     src/eopf_metadata.cpp
 )
 
-# Use correct variables for MODULE mode
-target_include_directories(gdal_EOPFZarr PRIVATE ${GDAL_INCLUDE_DIRS})
-target_link_libraries(gdal_EOPFZarr PRIVATE ${GDAL_LIBRARIES})
+target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
-# produce gdal_EOPFZarr.so (no "lib" prefix – mandatory for plugins)
-set_target_properties(gdal_EOPFZarr PROPERTIES
-    PREFIX ""                      # no lib
-    # DO NOT override OUTPUT_NAME, or set it to "gdal_EOPFZarr"
-    SUFFIX ".so")
+# Output properties for plugin
+if (WIN32)
+    set_target_properties(gdal_EOPFZarr PROPERTIES
+        PREFIX ""
+        OUTPUT_NAME "gdal_EOPFZarr"
+        SUFFIX ".dll")
+else()
+    set_target_properties(gdal_EOPFZarr PROPERTIES
+        PREFIX ""
+        SUFFIX ".so")
+endif()
 
-# Add test to verify driver registration
 enable_testing()
-add_test(NAME driver_registration 
-         COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
+if(WIN32)
+    add_test(NAME driver_registration 
+             COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
+else()
+    add_test(NAME driver_registration 
+             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
+endif()

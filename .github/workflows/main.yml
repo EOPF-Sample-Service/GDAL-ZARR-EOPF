@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  linux-build:
+    name: Linux Build
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
@@ -31,13 +32,16 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends \
              gdal-bin libgdal-dev cmake ninja-build build-essential
+
     - name: Configure
       run: |
         cmake -S . -B build/${{ matrix.cfg }} \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
+
 
     - name: Smoke test
       run: |
@@ -102,3 +106,46 @@ jobs:
       with:
         name: gdal_EOPFZarr-${{ matrix.cfg }}
         path: build/${{ matrix.cfg }}/gdal_EOPFZarr.so
+
+  windows-build:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install OSGeo4W (GDAL + Dev Tools)
+      uses: echoix/setup-OSGeo4W@v0.2.0
+      with:
+        packages: gdal-devel cmake ninja
+        site: https://download.osgeo.org/osgeo4w/v2/
+        root: C:\OSGeo4W
+        arch: x86_64
+        upgrade-also: false
+
+    - name: Setup MSVC 2022
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+        vcvars_ver: 14.3
+
+    - name: Build Plugin
+      run: |
+        cmake -S . -B build `
+          -G "Ninja" `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_CXX_FLAGS="/MT" `
+          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+        cmake --build build --config Release
+
+    - name: Package Artifacts
+      run: |
+        mkdir dist
+        cp build/Release/gdal_EOPFZarr.dll dist/
+        objdump -p dist/gdal_EOPFZarr.dll | findstr "DLL Name"
+        
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal-plugin-universal
+        path: dist/*
+
