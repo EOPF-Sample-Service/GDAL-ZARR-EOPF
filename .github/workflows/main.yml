@@ -117,11 +117,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install OSGeo4W
-        uses: echoix/setup-OSGeo4W@v0.2.0
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v2
         with:
-            packages: gdal-devel python3-gdal-devel cmake ninja
-            site: https://download.osgeo.org/osgeo4w/v2/
+            packages: conda-forge
+            environment-file: environment.yml
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
