@@ -120,7 +120,7 @@ jobs:
       - name: Install OSGeo4W
         uses: echoix/setup-OSGeo4W@v0.2.0
         with:
-          packages: >-
+          packages:
             gdal-devel
             cmake
             ninja
