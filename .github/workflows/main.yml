@@ -117,23 +117,63 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install OSGeo4W
+      - name: Download OSGeo4W
         shell: pwsh
         run: |
-          # Download OSGeo4W installer
           Invoke-WebRequest -Uri "https://download.osgeo.org/osgeo4w/v2/osgeo4w-setup.exe" -OutFile "osgeo4w-setup.exe"
+
+      - name: Install OSGeo4W
+        shell: cmd
+        run: |
+          mkdir C:\OSGeo4W
+          osgeo4w-setup.exe --quiet-mode --no-desktop --no-startmenu --no-shortcuts --upgrade-also --root C:\OSGeo4W --packages gdal-dev,python3-gdal
+
+      - name: Setup Environment
+        shell: pwsh
+        run: |
+          # Add OSGeo4W bin directories to PATH
+          echo "C:\OSGeo4W\bin;C:\OSGeo4W\apps\gdal\bin;C:\OSGeo4W\apps\Qt5\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
           
-          # Create OSGeo4W directory
-          mkdir -p C:/OSGeo4W
+          # Set GDAL environment variables
+          echo "GDAL_DATA=C:\OSGeo4W\share\gdal" | Out-File -FilePath $env:GITHUB_ENV -Append
           
-          # Run installer to get core libraries
-          ./osgeo4w-setup.exe --quiet-mode --upgrade-also --root C:/OSGeo4W --packages gdal-dev,python3-gdal
+          # Run OSGeo4W shell setup
+          if (Test-Path "C:\OSGeo4W\OSGeo4W.bat") {
+            # Extract environment variables from OSGeo4W.bat
+            $tempFile = "env_vars.txt"
+            cmd /c "C:\OSGeo4W\OSGeo4W.bat && set > $tempFile"
+            
+            # Read the environment variables
+            Get-Content $tempFile | ForEach-Object {
+              if ($_ -match "^(.*?)=(.*)$") {
+                $name = $matches[1]
+                $value = $matches[2]
+                
+                # Skip some variables
+                if ($name -notin @("PROMPT", "CMDLINE", "COMSPEC", "PS1")) {
+                  # Set important environment variables
+                  if ($name -in @("PATH", "GDAL_DATA", "GDAL_DRIVER_PATH", "PROJ_LIB")) {
+                    echo "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append
+                  }
+                }
+              }
+            }
+            
+            # Clean up
+            Remove-Item $tempFile
+          }
           
-          # Add OSGeo4W to PATH
-          echo "C:\OSGeo4W\bin;C:\OSGeo4W\apps\gdal\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          
-          # Print version info
+      - name: Verify GDAL Installation
+        shell: cmd
+        run: |
+          echo "GDAL executable location:"
+          where gdalinfo
+          echo "GDAL version:"
           gdalinfo --version
+          echo "PATH environment variable:"
+          echo %PATH%
+          echo "Directory listing of OSGeo4W\bin:"
+          dir C:\OSGeo4W\bin\*.dll
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -141,80 +181,68 @@ jobs:
           arch: x64
 
       - name: Configure CMake
-        shell: pwsh
+        shell: cmd
         run: |
-          # Use the same configuration command as your local build
-          cmake -S . -B build `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
-            -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal"
+          cmake -S . -B build ^
+            -G "Visual Studio 17 2022" ^
+            -A x64 ^
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
+            -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" ^
+            -DGDAL_INCLUDE_DIR="C:/OSGeo4W/include" ^
+            -DGDAL_LIBRARY="C:/OSGeo4W/lib/gdal_i.lib"
 
       - name: Build
         run: cmake --build build --config ${{ matrix.cfg }} --parallel
 
       - name: Analyze Dependencies
-        shell: pwsh
+        shell: cmd
         run: |
-          # Find dependencies
-          $dll = "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll"
-          $output = dumpbin /dependents $dll 2>&1
-          
-          # Output dependencies for debugging
-          echo "DLL Dependencies:"
-          echo $output
-          
-          # Check if we link to GDAL
-          $output | Select-String -Pattern "gdal.*\.dll" -AllMatches | ForEach-Object { $_.Matches.Value }
+          dumpbin /dependents build\${{ matrix.cfg }}\gdal_EOPFZarr.dll
 
       - name: Collect Dependencies
-        shell: pwsh
+        shell: cmd
         run: |
-          # Create a directory to collect dependencies
           mkdir deps
-          
-          # Copy core GDAL DLLs (these are the ones most likely needed)
-          Copy-Item "C:\OSGeo4W\bin\gdal*.dll" deps\
-          Copy-Item "C:\OSGeo4W\bin\libcrypto*.dll" deps\ -ErrorAction SilentlyContinue
-          Copy-Item "C:\OSGeo4W\bin\libssl*.dll" deps\ -ErrorAction SilentlyContinue
-          Copy-Item "C:\OSGeo4W\bin\libpq*.dll" deps\ -ErrorAction SilentlyContinue
-          
-          # Copy CRT dependencies (the Visual C++ runtime)
-          Copy-Item "C:\Windows\System32\msvcp140.dll" deps\ -ErrorAction SilentlyContinue
-          Copy-Item "C:\Windows\System32\vcruntime140.dll" deps\ -ErrorAction SilentlyContinue
-          Copy-Item "C:\Windows\System32\vcruntime140_1.dll" deps\ -ErrorAction SilentlyContinue
+          copy C:\OSGeo4W\bin\gdal*.dll deps\
+          copy C:\Windows\System32\msvcp140.dll deps\
+          copy C:\Windows\System32\vcruntime140.dll deps\
+          copy C:\Windows\System32\vcruntime140_1.dll deps\
 
       - name: Create Bundle
         shell: pwsh
         run: |
-          # Create a directory for the bundle
           mkdir bundle
-          
-          # Copy the plugin and its dependencies
           Copy-Item "build\${{ matrix.cfg }}\gdal_EOPFZarr.dll" bundle\
           Copy-Item "deps\*" bundle\
           
-          # Create a README with installation instructions
           @"
           # EOPF Zarr GDAL Plugin
 
           ## Installation Instructions
           
-          1. Copy gdal_EOPFZarr.dll to your GDAL plugins folder (e.g., C:\OSGeo4W\apps\gdal\lib\gdalplugins\)
-          2. Copy any missing dependency DLLs to your system PATH (e.g., C:\OSGeo4W\bin\)
-          3. Set GDAL_DRIVER_PATH if your plugins folder is not in the default location
+          1. Copy gdal_EOPFZarr.dll to your GDAL plugins folder (C:\OSGeo4W\apps\gdal\lib\gdalplugins\)
+          2. Copy any missing dependency DLLs to your system PATH (C:\OSGeo4W\bin\)
           
-          ## Dependencies
+          ## Troubleshooting
           
-          This package includes dependency DLLs that might be required if they're missing on your system.
+          If you get error 126 (module not found):
+          
+          1. Make sure your OSGeo4W GDAL version matches the one used to build this plugin
+          2. Copy all DLLs from this package to the same folder as the plugin
+          3. Use 'depends.exe' tool to identify any missing dependencies
           "@ | Out-File -FilePath "bundle\README.txt" -Encoding utf8
 
-      - name: Upload Artifact
+      - name: Test Plugin Loading
+        shell: cmd
+        run: |
+          set GDAL_DRIVER_PATH=%CD%\build\${{ matrix.cfg }}
+          gdalinfo --formats | findstr "EOPFZARR" || echo EOPFZARR driver not found
+
+      - name: Upload Bundle Artifact
         uses: actions/upload-artifact@v4
         with:
           name: gdal_EOPFZarr-${{ matrix.cfg }}-bundle
-          path: |
-            bundle/*
+          path: bundle/*
 
       - name: Upload Plugin Only
         uses: actions/upload-artifact@v4
