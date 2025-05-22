@@ -216,7 +216,7 @@ jobs:
       - name: Test Plugin Loading
         shell: bash -el {0}
         run: |
-          export GDAL_DRIVER_PATH="$(pwd)/build"
+          export GDAL_DRIVER_PATH="$(pwd)/build/Release"
           echo "--- GDAL_DRIVER_PATH: ${GDAL_DRIVER_PATH} ---"
           echo "--- Testing gdalinfo --formats ---"
           gdalinfo --formats | grep "EOPFZARR" || (echo "EOPFZARR driver not found in gdalinfo --formats!" && exit 1)
