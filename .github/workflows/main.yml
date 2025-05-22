@@ -141,6 +141,9 @@ jobs:
           # Set GDAL_DATA and PROJ_LIB, which are often needed by GDAL runtime
           echo "GDAL_DATA=$CONDA_PREFIX/share/gdal" >> $GITHUB_ENV
           echo "PROJ_LIB=$CONDA_PREFIX/share/proj" >> $GITHUB_ENV
+          echo "CONDA_PREFIX_LIB=$CONDA_PREFIX/Library/lib" >> $GITHUB_ENV
+          echo "CONDA_PREFIX_INCLUDE=$CONDA_PREFIX/Library/include" >> $GITHUB_ENV
+          echo "CONDA_PREFIX_BIN=$CONDA_PREFIX/Library/bin" >> $GITHUB_ENV
 
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
