@@ -136,8 +136,6 @@ jobs:
           conda list
           echo "--- gdal-config location ---"
           which gdal-config
-          echo "--- gdal-config version ---"
-          gdal-config --version
           echo "--- gdalinfo version ---"
           gdalinfo --version
           # Set GDAL_DATA and PROJ_LIB, which are often needed by GDAL runtime
