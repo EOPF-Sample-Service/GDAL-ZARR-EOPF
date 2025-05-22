@@ -117,125 +117,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Use Conda to install GDAL - much more reliable than OSGeo4W in CI
-      - name: Setup Conda with GDAL
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Install OSGeo4W
+        uses: echoix/setup-OSGeo4W@v0.2.0
         with:
-          auto-update-conda: true
-          python-version: '3.10'
-          channels: conda-forge
-          activate-environment: gdal-env
+          packages: >-
+            gdal-devel
+            cmake
+            ninja
+          site: https://download.osgeo.org/osgeo4w/v2/
+          root: C:\OSGeo4W
 
-      - name: Install GDAL and build tools with Conda
-        shell: bash -el {0}
-        run: |
-          conda install -y gdal=3.6.2 cmake ninja
-          echo "--- Conda Info ---"
-          conda info
-          echo "--- Conda List ---"
-          conda list
-          echo "--- gdal-config location ---"
-          which gdal-config
-          echo "--- gdalinfo version ---"
-          gdalinfo --version
-          # Set GDAL_DATA and PROJ_LIB, which are often needed by GDAL runtime
-          echo "GDAL_DATA=$CONDA_PREFIX/share/gdal" >> $GITHUB_ENV
-          echo "PROJ_LIB=$CONDA_PREFIX/share/proj" >> $GITHUB_ENV
-          echo "CONDA_PREFIX_LIB=$CONDA_PREFIX/Library/lib" >> $GITHUB_ENV
-          echo "CONDA_PREFIX_INCLUDE=$CONDA_PREFIX/Library/include" >> $GITHUB_ENV
-          echo "CONDA_PREFIX_BIN=$CONDA_PREFIX/Library/bin" >> $GITHUB_ENV
-
-      - name: Setup MSVC Developer Command Prompt
+      - name: Setup MSVC Environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Configure CMake with Visual Studio Generator
+      - name: Configure CMake
         run: |
-           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} -DCMAKE_PREFIX_PATH="%CONDA_PREFIX_LIB%;%CONDA_PREFIX_INCLUDE%;%CONDA_PREFIX_BIN%;%CONDA_PREFIX%" -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} `
+            -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
 
+      - name: Build Plugin
+        run: cmake --build build --config ${{ matrix.cfg }} --parallel
 
-      - name: Build with MSBuild (via CMake)
+      - name: Test Plugin in CI
         shell: cmd
         run: |
-          CALL "%VCVARSALL_PATH%" amd64
-          cmake --build build --config ${{ matrix.cfg }} --parallel
+          set GDAL_DRIVER_PATH=C:\OSGeo4W\apps\gdal\lib\gdalplugins
+          copy build\${{ matrix.cfg }}\gdal_EOPFZarr.dll %GDAL_DRIVER_PATH%
+          C:\OSGeo4W\bin\gdalinfo --formats | findstr EOPFZARR
 
-      - name: Collect Dependencies
-        shell: bash -el {0}
-        run: |
-          mkdir -p deps
-          # Copy GDAL DLL and its direct dependencies from the conda environment
-          # This list might need adjustment based on the exact GDAL version and its deps
-          cp "$CONDA_PREFIX/Library/bin/gdal*.dll" deps/ || echo "No GDAL DLLs found"
-          cp "$CONDA_PREFIX/Library/bin/proj*.dll" deps/ || echo "No PROJ DLLs found"
-          cp "$CONDA_PREFIX/Library/bin/sqlite3.dll" deps/ || echo "No sqlite3.dll found"
-          # Add other known direct dependencies of gdal.dll if necessary (e.g., tiff.dll, geotiff.dll, etc.)
-          
-          # Copy required MSVC runtime DLLs
-          cp "$CONDA_PREFIX/Library/bin/vcruntime140.dll" deps/ || echo "vcruntime140.dll not found"
-          cp "$CONDA_PREFIX/Library/bin/vcruntime140_1.dll" deps/ 2>/dev/null || echo "vcruntime140_1.dll not found (optional)"
-          cp "$CONDA_PREFIX/Library/bin/msvcp140.dll" deps/ || echo "msvcp140.dll not found"
-          # Add other msvcp140_*.dll if needed by your build or GDAL's dependencies
-          
-          echo "--- Collected Dependencies ---"
-          ls -la deps/
-
-      - name: Create Bundle
-        shell: bash -el {0}
-        run: |
-          mkdir -p bundle
-          cp build/Release/gdal_EOPFZarr.dll bundle/
-          # Copy all collected dependencies; avoid error if deps is empty
-          cp deps/* bundle/ 2>/dev/null || echo "No dependencies from deps/ to copy"
-          
-          cat > bundle/README.txt << 'EOL'
-          # EOPF Zarr GDAL Plugin (Windows)
-
-          ## Bundle Contents
-          This bundle contains gdal_EOPFZarr.dll and its direct dependencies
-          from the Conda environment (GDAL 3.6.2).
-
-          ## Installation
-          1. Place `gdal_EOPFZarr.dll` into your GDAL plugin directory
-             (e.g., `C:\OSGeo4W\apps\gdal\lib\gdalplugins\` or similar for your GDAL installation).
-          2. Ensure that the accompanying DLLs (like `gdalXYZ.dll`, `proj_X_Y.dll`, MSVC runtimes)
-             are accessible by GDAL. This usually means they should be in the same directory
-             as `gdal.exe` / `gdalXYZ.dll` (e.g., `C:\OSGeo4W\bin\`) or in a directory
-             that is on the system's PATH *before* other conflicting DLLs.
-
-          ## Troubleshooting
-          - **Error 126 (Module Not Found):** A dependency of `gdal_EOPFZarr.dll` or `gdalXYZ.dll` is missing.
-            Use a tool like "Dependencies" (depends.exe successor) to inspect `gdal_EOPFZarr.dll`
-            in the target environment to identify missing DLLs.
-          - Ensure the GDAL version you are using matches the one this plugin was built against (3.6.2).
-          EOL
-          echo "--- Bundle Contents ---"
-          ls -la bundle/
-
-      - name: Test Plugin Loading
-        shell: bash -el {0}
-        run: |
-          export GDAL_DRIVER_PATH="$(pwd)/build/Release"
-          echo "--- GDAL_DRIVER_PATH: ${GDAL_DRIVER_PATH} ---"
-          echo "--- Testing gdalinfo --formats ---"
-          gdalinfo --formats | grep "EOPFZARR" || (echo "EOPFZARR driver not found in gdalinfo --formats!" && exit 1)
-          echo "EOPFZARR driver successfully listed."
-          
-          echo "--- Testing opening sample data ---"
-          # Ensure the sample data path is correct and accessible
-          gdalinfo -oo EOPF_PROCESS=YES "$GITHUB_WORKSPACE/src/sample_data" | grep -i "Driver: EOPFZARR" || (echo "Failed to open sample data with EOPFZARR or driver not reported as EOPFZARR!" && exit 1)
-          echo "Successfully opened sample data with EOPFZARR driver."
-
-      - name: Upload Bundle Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gdal_EOPFZarr-${{ matrix.cfg }}-conda-bundle-windows
-          path: bundle/*
-
-      - name: Upload Plugin Only Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: gdal_EOPFZarr-${{ matrix.cfg }}-plugin-only-windows
-          path: build/Release/gdal_EOPFZarr.dll
-
+            name: gdal_EOPFZarr-${{ matrix.cfg }}
+            path: build\${{ matrix.cfg }\gdal_EOPFZarr.dll
