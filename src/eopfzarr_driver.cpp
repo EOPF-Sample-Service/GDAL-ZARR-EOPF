@@ -10,6 +10,7 @@
 #include "cpl_vsi.h"
 #include "cpl_string.h" // Added for CSL functions (CSLRemove, CSLDuplicate, etc.)
 #include <string>
+#include "eopf_metadata.h"
 
  // Add Windows-specific export declarations without redefining CPL macros
 #ifdef _WIN32
@@ -74,19 +75,12 @@ static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
         }
     }
 
-    // Only attempt to identify if it's a directory (typical for Zarr stores)
-    // or if EOPF_PROCESS=YES (allowing more flexibility if user forces it)
     if (!bIsDirectory && (pszProcessEOPFOption == nullptr || !EQUAL(pszProcessEOPFOption, "YES"))) {
-        // If not a directory and not explicitly told to process,
-        // let the standard Zarr driver handle potentially more complex path resolutions.
         return FALSE;
     }
 
-    // If EOPF_PROCESS=YES, we are more lenient with identification,
-    // otherwise, we are stricter (e.g. requiring a directory with markers).
     if (pszProcessEOPFOption != nullptr && EQUAL(pszProcessEOPFOption, "YES")) {
-        // If user forces with EOPF_PROCESS=YES, be more optimistic.
-        // Check for markers or .zarr extension.
+
         const char* markers[] = { ".zgroup", ".zarray", ".zmetadata", ".zattrs" };
         for (const char* m : markers) {
             // Ensure rootPath has a trailing slash if it's a directory before appending marker
@@ -95,9 +89,7 @@ static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
                 fullMarkerPath += '/';
             }
             else if (!bIsDirectory && !fullMarkerPath.empty() && fullMarkerPath.back() == '/') {
-                // If it's not a directory but ends with a slash (e.g. user provided "path/to/store/"),
-                // it's fine. If it doesn't end with a slash, CPLGetDirname might be needed if we
-                // were to treat it like a directory. But for HasFile, direct concatenation is okay.
+ 
             }
             fullMarkerPath += m;
             if (HasFile(fullMarkerPath)) {
@@ -113,9 +105,6 @@ static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
         return TRUE; // Be optimistic if EOPF_PROCESS=YES
     }
 
-
-    // Default identification logic (if EOPF_PROCESS is not YES or NO)
-    // Requires it to be a directory containing Zarr markers.
     if (bIsDirectory) {
         const char* markers[] = { ".zgroup", ".zarray", ".zmetadata", ".zattrs" };
         for (const char* m : markers) {
@@ -143,26 +132,34 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         return nullptr; // Default behavior: let other drivers (like standard Zarr) handle it.
     }
 
+    // Parse mode parameter
+    const char* pszMode = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "MODE");
+    EOPF::Mode eMode = EOPF::Mode::ANALYSIS;  // Default to ANALYSIS mode
+    
+    if (pszMode != nullptr) {
+        if (EQUAL(pszMode, "NATIVE"))
+            eMode = EOPF::Mode::NATIVE;
+        else if (EQUAL(pszMode, "ANALYSIS"))
+            eMode = EOPF::Mode::ANALYSIS;
+        else {
+            CPLError(CE_Warning, CPLE_AppDefined,
+                "Unknown mode '%s', defaulting to ANALYSIS mode", pszMode);
+        }
+    }
+
     // Re-check identify, now that EOPF_PROCESS=YES is confirmed.
-    // This ensures that if open options were not available to Identify initially,
-    // it gets a chance to re-evaluate with them.
     char** papszIdentifyOpenOptions = CSLSetNameValue(nullptr, "EOPF_PROCESS", "YES");
     GDALOpenInfo oIdentifyOpenInfo(poOpenInfo->pszFilename, poOpenInfo->nOpenFlags, papszIdentifyOpenOptions);
-    // Keep other open options if they were relevant for Identify, though EOPF_PROCESS is primary here.
-    // For simplicity, we are only explicitly setting EOPF_PROCESS for this re-check.
-    // A more robust way would be to pass all original open options to EOPFIdentify.
-    // However, EOPFIdentify itself fetches from poOpenInfo->papszOpenOptions.
-    // The main check is that EOPF_PROCESS=YES is now active.
 
-    if (!EOPFIdentify(&oIdentifyOpenInfo)) { // Pass the GDALOpenInfo with EOPF_PROCESS=YES
+    if (!EOPFIdentify(&oIdentifyOpenInfo)) {
         CSLDestroy(papszIdentifyOpenOptions);
         CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES, but EOPFIdentify still returned FALSE for %s even with option explicitly set. This is unexpected.", poOpenInfo->pszFilename);
         return nullptr;
     }
     CSLDestroy(papszIdentifyOpenOptions);
 
-
-    CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES. Attempting to open %s with EOPF wrapper.", poOpenInfo->pszFilename);
+    CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES. Attempting to open %s with EOPF wrapper in %s mode.", 
+             poOpenInfo->pszFilename, (eMode == EOPF::Mode::NATIVE) ? "NATIVE" : "ANALYSIS");
 
     char* const azDrvList[] = { (char*)"Zarr", nullptr };
     GDALDataset* poUnderlyingDataset = nullptr;
@@ -170,6 +167,12 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     // Filter out EOPF_PROCESS from open options passed to the underlying Zarr driver
     char** papszFilteredOpenOptions = CSLDuplicate(poOpenInfo->papszOpenOptions);
     int nIdx = CSLFindName(papszFilteredOpenOptions, "EOPF_PROCESS");
+    if (nIdx != -1) {
+        papszFilteredOpenOptions = RemoveString(papszFilteredOpenOptions, nIdx);
+    }
+    
+    // Remove our MODE from the Zarr driver options too
+    nIdx = CSLFindName(papszFilteredOpenOptions, "MODE");
     if (nIdx != -1) {
         papszFilteredOpenOptions = RemoveString(papszFilteredOpenOptions, nIdx);
     }
@@ -187,12 +190,9 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         CSLDestroy(papszSkippedDrivers);
         if (bZarrSkipped) {
             CPLDebug("EOPFZARR", "EOPFOpen: GDAL_SKIP contains Zarr, temporarily removing it for underlying GDALOpenEx call.");
-            // Create a new list without GDAL_SKIP=Zarr or modify existing one carefully
-            // For simplicity, if Zarr is in GDAL_SKIP, we remove the GDAL_SKIP option entirely for this call.
             papszFilteredOpenOptions = CSLSetNameValue(papszFilteredOpenOptions, "GDAL_SKIP", nullptr);
         }
     }
-
 
     poUnderlyingDataset = static_cast<GDALDataset*>(
         GDALOpenEx(poOpenInfo->pszFilename,
@@ -217,7 +217,15 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         return nullptr;
     }
 
-    return EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
+    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
+    
+    // Set the mode used to open this dataset
+    poDS->SetMetadataItem("EOPF_MODE", (eMode == EOPF::Mode::NATIVE) ? "NATIVE" : "ANALYSIS");
+    
+    // Store the mode for internal use
+    poDS->SetMode(eMode);
+    
+    return poDS;
 }
 
 /* -------------------------------------------------------------------- */
@@ -242,13 +250,17 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     gEOPFDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST,
         "<OpenOptionList>"
         "  <Option name='EOPF_PROCESS' type='boolean' description='Process as EOPF Zarr. Set to YES to activate this EOPF wrapper driver. Default: NO.' default='NO'/>"
+        "  <Option name='MODE' type='string-select' description='Access mode for EOPF data' default='ANALYSIS'>"
+        "    <Value>NATIVE</Value>"
+        "    <Value>ANALYSIS</Value>"
+        "  </Option>"
         "</OpenOptionList>");
 
     gEOPFDriver->pfnIdentify = EOPFIdentify;
     gEOPFDriver->pfnOpen = EOPFOpen;
 
     GetGDALDriverManager()->RegisterDriver(gEOPFDriver);
-    CPLDebug("EOPFZARR", "EOPFZarr driver registered with EOPF_PROCESS open option.");
+    CPLDebug("EOPFZARR", "EOPFZarr driver registered with EOPF_PROCESS open option and MODE option.");
 }
 
 extern "C" EOPFZARR_DLL void GDALRegisterMe()
