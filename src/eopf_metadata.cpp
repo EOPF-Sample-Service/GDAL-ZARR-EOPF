@@ -551,78 +551,40 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
         const char* pszDesc = CSLFetchNameValue(papszZarrSubdatasets, descKey);
 
         if (pszName && pszDesc) {
-            // Parse the subdataset path to extract hierarchical components
             CPLString eopfName;
-            CPLString hierarchicalName;
-            CPLString internalPath;
 
             // Extract the internal path from the Zarr subdataset URL
             // Format is typically: ZARR:"/path/to/dataset.zarr":/internal/path
             if (STARTS_WITH_CI(pszName, "ZARR:")) {
-                const char* pszInternalPath = strstr(pszName + 5, ":/");
-                if (pszInternalPath && strlen(pszInternalPath) > 2) {
-                    internalPath = pszInternalPath + 1; // Skip the colon
-
-                    // Build hierarchical name using path components separated by colons
-                    if (!internalPath.empty() && internalPath[0] == '/') {
-                        // Remove leading slash
-                        internalPath = internalPath.substr(1);
-                    }
-
-                    // Replace slashes with colons for hierarchical naming
-                    hierarchicalName = internalPath;
-                    for (size_t j = 0; j < hierarchicalName.size(); ++j) {
-                        if (hierarchicalName[j] == '/') {
-                            hierarchicalName[j] = ':';
-                        }
-                    }
-
-                    // Create EOPF URL with the original path but EOPF driver
+                const char* pszInternalPath = strstr(pszName + 5, ":");
+                if (pszInternalPath) {
+                    // Extract the path part (before the internal path)
                     CPLString pathPart(pszName + 5, pszInternalPath - (pszName + 5));
-                    eopfName.Printf("EOPFZARR:%s:%s", pathPart.c_str(), internalPath.c_str());
+                    // Build the EOPF URL using the same format as ZARR
+                    eopfName.Printf("EOPFZARR:%s%s", pathPart.c_str(), pszInternalPath);
                 }
                 else {
-                    // Fallback if we can't parse the internal path
+                    // Fallback if no internal path
                     eopfName.Printf("EOPFZARR:%s", pszName + 5);
-                    hierarchicalName = "unknown"; // Default if we can't extract a hierarchy
                 }
             }
             else {
                 // Just prefix with EOPFZARR if not already a ZARR URL
                 eopfName.Printf("EOPFZARR:%s", pszName);
-                hierarchicalName = "unknown"; // Default if we can't extract a hierarchy
             }
-
-            // Create a more descriptive name using the hierarchical structure
-            CPLString nameWithHierarchy;
-            nameWithHierarchy.Printf("%s=%s", hierarchicalName.c_str(), eopfName.c_str());
 
             // Set the subdataset metadata on the main dataset 'ds'
-            ds.SetMetadataItem(nameKey, nameWithHierarchy);
+            ds.SetMetadataItem(nameKey, eopfName);
 
-            // Enhance description with dimension information if available
-            // Extract dimensions from description like "[512x512]"
-            CPLString enhancedDesc = pszDesc;
-            if (strstr(pszDesc, "[") && strstr(pszDesc, "]")) {
-                // The description already has dimension info, keep as is
-            }
-            else {
-                // Add a default description suffix
-                enhancedDesc.Printf("%s - %s", pszDesc, hierarchicalName.c_str());
-            }
+            // Keep the original description
+            ds.SetMetadataItem(descKey, pszDesc);
 
-            // Set the description
-            ds.SetMetadataItem(descKey, enhancedDesc);
-
-            CPLDebug("EOPFZARR", "Added hierarchical subdataset: %s = %s", nameKey.c_str(), nameWithHierarchy.c_str());
+            CPLDebug("EOPFZARR", "Added subdataset: %s = %s", nameKey.c_str(), eopfName.c_str());
         }
     }
 
     GDALClose(poZarrDS);
 }
-
-
-
 
 /* ------------------------------------------------------------------ */
 /*      AttachMetadata main entry                                      */
