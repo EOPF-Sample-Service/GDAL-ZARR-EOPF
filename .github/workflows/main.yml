@@ -131,12 +131,13 @@ jobs:
     - name: Create Test Zarr Dataset
       run: |
         mkdir -p C:/temp/test.zarr
-        echo {"zarr_format": 2} > C:/temp/test.zarr/.zgroup
-        echo {"metadata": {".zattrs": {}, ".zgroup": {"zarr_format": 2}}} > C:/temp/test.zarr/.zmetadata
+
+        echo '{"zarr_format": 2}' > C:/temp/test.zarr/.zgroup
+        echo '{"metadata": {".zattrs": {}, ".zgroup": {"zarr_format": 2}}}' > C:/temp/test.zarr/.zmetadata
         
         # Create a simple array
         mkdir -p C:/temp/test.zarr/data
-        echo {"chunks": [10, 10], "compressor": null, "dtype": "<f8", "fill_value": 0, "filters": null, "order": "C", "shape": [20, 30], "zarr_format": 2} > C:/temp/test.zarr/data/.zarray
+        echo '{"chunks": [10, 10], "compressor": null, "dtype": "<f8", "fill_value": 0, "filters": null, "order": "C", "shape": [20, 30], "zarr_format": 2}' > C:/temp/test.zarr/data/.zarray
         
         dir C:/temp/test.zarr
         dir C:/temp/test.zarr/data
