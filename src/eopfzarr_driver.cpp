@@ -132,21 +132,6 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         return nullptr; // Default behavior: let other drivers (like standard Zarr) handle it.
     }
 
-    // Parse mode parameter
-    const char* pszMode = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "MODE");
-    EOPF::Mode eMode = EOPF::Mode::ANALYSIS;  // Default to ANALYSIS mode
-    
-    if (pszMode != nullptr) {
-        if (EQUAL(pszMode, "NATIVE"))
-            eMode = EOPF::Mode::NATIVE;
-        else if (EQUAL(pszMode, "ANALYSIS"))
-            eMode = EOPF::Mode::ANALYSIS;
-        else {
-            CPLError(CE_Warning, CPLE_AppDefined,
-                "Unknown mode '%s', defaulting to ANALYSIS mode", pszMode);
-        }
-    }
-
     // Re-check identify, now that EOPF_PROCESS=YES is confirmed.
     char** papszIdentifyOpenOptions = CSLSetNameValue(nullptr, "EOPF_PROCESS", "YES");
     GDALOpenInfo oIdentifyOpenInfo(poOpenInfo->pszFilename, poOpenInfo->nOpenFlags, papszIdentifyOpenOptions);
@@ -158,8 +143,8 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     }
     CSLDestroy(papszIdentifyOpenOptions);
 
-    CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES. Attempting to open %s with EOPF wrapper in %s mode.", 
-             poOpenInfo->pszFilename, (eMode == EOPF::Mode::NATIVE) ? "NATIVE" : "ANALYSIS");
+    CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES. Attempting to open %s with EOPF wrapper.", 
+             poOpenInfo->pszFilename);
 
     char* const azDrvList[] = { (char*)"Zarr", nullptr };
     GDALDataset* poUnderlyingDataset = nullptr;
@@ -167,12 +152,6 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     // Filter out EOPF_PROCESS from open options passed to the underlying Zarr driver
     char** papszFilteredOpenOptions = CSLDuplicate(poOpenInfo->papszOpenOptions);
     int nIdx = CSLFindName(papszFilteredOpenOptions, "EOPF_PROCESS");
-    if (nIdx != -1) {
-        papszFilteredOpenOptions = RemoveString(papszFilteredOpenOptions, nIdx);
-    }
-    
-    // Remove our MODE from the Zarr driver options too
-    nIdx = CSLFindName(papszFilteredOpenOptions, "MODE");
     if (nIdx != -1) {
         papszFilteredOpenOptions = RemoveString(papszFilteredOpenOptions, nIdx);
     }
@@ -218,13 +197,29 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     }
 
     EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
-    
-    // Set the mode used to open this dataset
-    poDS->SetMetadataItem("EOPF_MODE", (eMode == EOPF::Mode::NATIVE) ? "NATIVE" : "ANALYSIS");
-    
-    // Store the mode for internal use
-    poDS->SetMode(eMode);
-    
+
+    // Simply copy all subdatasets from the ZARR driver without any modifications
+    char** papszZarrSubdatasets = poUnderlyingDataset->GetMetadata("SUBDATASETS");
+    if (papszZarrSubdatasets) {
+        int nSubdatasets = CSLCount(papszZarrSubdatasets) / 2; // Each subdataset has a NAME and DESC
+        for (int i = 1; i <= nSubdatasets; i++) {
+            CPLString nameKey, descKey;
+            nameKey.Printf("SUBDATASET_%d_NAME", i);
+            descKey.Printf("SUBDATASET_%d_DESC", i);
+
+            const char* pszName = CSLFetchNameValue(papszZarrSubdatasets, nameKey);
+            const char* pszDesc = CSLFetchNameValue(papszZarrSubdatasets, descKey);
+
+            if (pszName && pszDesc) {
+                // Keep original name and description
+                poDS->SetMetadataItem(nameKey, pszName);
+                poDS->SetMetadataItem(descKey, pszDesc);
+
+                CPLDebug("EOPFZARR", "Added subdataset: %s = %s", nameKey.c_str(), pszName);
+            }
+        }
+    }
+
     return poDS;
 }
 

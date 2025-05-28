@@ -4,13 +4,6 @@
 #include <string>
 
 namespace EOPF {
-
-    enum class Mode {
-        NATIVE,
-        ANALYSIS
-    };
-
-    void AttachMetadata(GDALDataset& ds, const std::string& rootPath, Mode mode = Mode::ANALYSIS);
-    void DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath, const CPLJSONObject& metadata, Mode mode=Mode::ANALYSIS);
+    void AttachMetadata(GDALDataset& ds, const std::string& rootPath);
+    void DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath, const CPLJSONObject& metadata);
 }
-

@@ -9,8 +9,7 @@
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner,
     GDALDriver* selfDrv)
     : mInner(std::move(inner)), mProjectionRef(nullptr), mCachedSpatialRef(nullptr),
-    m_papszDefaultDomainFilteredMetadata(nullptr), mSubdatasets(nullptr),
-    m_eMode(EOPF::Mode::ANALYSIS)  // Default to ANALYSIS mode
+    m_papszDefaultDomainFilteredMetadata(nullptr), mSubdatasets(nullptr)
 {
     // Initialize geotransform with identity transform
     mGeoTransform[0] = 0.0;
@@ -73,11 +72,9 @@ void EOPFZarrDataset::LoadEOPFMetadata()
         CPLDebug("EOPFZARR", "LoadEOPFMetadata: mInner is null.");
         return;
     }
-    CPLDebug("EOPFZARR", "Loading EOPF metadata in %s mode...", 
-             (m_eMode == EOPF::Mode::NATIVE) ? "NATIVE" : "ANALYSIS");
+    CPLDebug("EOPFZARR", "Loading EOPF metadata...");
     
-    // Pass the mode to AttachMetadata
-    EOPF::AttachMetadata(*this, mInner->GetDescription(), m_eMode);
+    EOPF::AttachMetadata(*this, mInner->GetDescription());
 
     // Get EPSG code and spatial reference from metadata
     // const char* pszEPSG = GetMetadataItem("EPSG");

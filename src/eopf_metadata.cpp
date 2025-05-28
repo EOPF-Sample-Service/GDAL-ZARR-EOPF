@@ -504,11 +504,12 @@ static bool LoadZMetadata(const std::string& rootPath, CPLJSONDocument& doc)
     return true;
 }
 
+
 /* ------------------------------------------------------------------ */
 /*      Discover and attach subdatasets                                */
 /* ------------------------------------------------------------------ */
 void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
-    const CPLJSONObject& metadata, EOPF::Mode mode)
+    const CPLJSONObject& metadata)
 {
     // Open the Zarr dataset directly to get subdatasets
     CPLString zarrPath;
@@ -536,8 +537,7 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
     }
 
     ds.SetMetadataItem("SUBDATASET_COUNT", CPLString().Printf("%d", nSubdatasets).c_str());
-    CPLDebug("EOPFZARR", "Found %d subdatasets in Zarr dataset (Mode: %s)", nSubdatasets, 
-             mode == Mode::NATIVE ? "NATIVE" : "ANALYSIS");
+    CPLDebug("EOPFZARR", "Found %d subdatasets in Zarr dataset", nSubdatasets);
 
     // Process each subdataset
     int nActualSubdatasets = 0;  // Count of subdatasets after filtering
@@ -551,118 +551,83 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
         const char* pszDesc = CSLFetchNameValue(papszZarrSubdatasets, descKey);
 
         if (pszName && pszDesc) {
-            // Depending on the mode, we might filter or transform subdatasets
-            bool includeSubdataset = true;
             CPLString subdatasetPath;
-            
+
             // Extract the internal path from the Zarr subdataset URL
             // Format is typically: ZARR:"/path/to/dataset.zarr":/internal/path
             if (STARTS_WITH_CI(pszName, "ZARR:")) {
                 const char* pszInternalPath = strstr(pszName + 5, ":");
                 if (pszInternalPath && strlen(pszInternalPath) > 1) {
                     subdatasetPath = pszInternalPath + 1;  // Skip the colon
-                    
-                    // In NATIVE mode, include all subdatasets
-                    // In ANALYSIS mode, filter or reorganize as needed
-                    if (mode == Mode::ANALYSIS) {
-                        // Example filtering rule for ANALYSIS mode:
-                        // Skip internal calibration or technical arrays
-                        if (strstr(subdatasetPath, "/internal/") || 
-                            strstr(subdatasetPath, "/calibration/") ||
-                            strstr(subdatasetPath, "/technical/")) {
-                            includeSubdataset = false;
-                            CPLDebug("EOPFZARR", "ANALYSIS mode: Filtering out technical subdataset: %s", subdatasetPath.c_str());
-                        }
-                    }
                 }
             }
 
-            if (includeSubdataset) {
-                nActualSubdatasets++;
-                CPLString eopfName;
-                
-                // Extract the internal path from the Zarr subdataset URL
-                if (STARTS_WITH_CI(pszName, "ZARR:")) {
-                    const char* pszInternalPath = strstr(pszName + 5, ":");
-                    if (pszInternalPath) {
-                        // Extract the path part (before the internal path)
-                        CPLString pathPart(pszName + 5, pszInternalPath - (pszName + 5));
-                        
-                        // Replace ZARR: with EOPFZARR: but keep the format the same
-                        eopfName.Printf("EOPFZARR:%s%s", pathPart.c_str(), pszInternalPath);
-                    }
-                    else {
-                        // Fallback if no internal path
-                        eopfName.Printf("EOPFZARR:%s", pszName + 5);
-                    }
+            nActualSubdatasets++;
+            CPLString eopfName;
+
+            // Extract the internal path from the Zarr subdataset URL
+            if (STARTS_WITH_CI(pszName, "ZARR:")) {
+                const char* pszInternalPath = strstr(pszName + 5, ":");
+                if (pszInternalPath) {
+                    // Extract the path part (before the internal path)
+                    CPLString pathPart(pszName + 5, pszInternalPath - (pszName + 5));
+
+                    // Replace ZARR: with EOPFZARR: but keep the format the same
+                    eopfName.Printf("EOPFZARR:%s%s", pathPart.c_str(), pszInternalPath);
                 }
                 else {
-                    // Just prefix with EOPFZARR if not already a ZARR URL
-                    eopfName.Printf("EOPFZARR:%s", pszName);
+                    // Fallback if no internal path
+                    eopfName.Printf("EOPFZARR:%s", pszName + 5);
                 }
-
-                // Create new keys with actual count 
-                CPLString actualNameKey, actualDescKey;
-                actualNameKey.Printf("SUBDATASET_%d_NAME", nActualSubdatasets);
-                actualDescKey.Printf("SUBDATASET_%d_DESC", nActualSubdatasets);
-                
-                // Set the subdataset metadata on the main dataset 'ds'
-                ds.SetMetadataItem(actualNameKey, eopfName);
-                
-                // For ANALYSIS mode, enhance description
-                if (mode == Mode::ANALYSIS && !subdatasetPath.empty()) {
-                    // Extract a simplified band name for the description
-                    // For example: "/measurement/band_01" → "Band 1"
-                    CPLString enhancedDesc = pszDesc;
-                    
-                    if (strstr(subdatasetPath, "/measurement/band_")) {
-                        const char* bandNumber = strstr(subdatasetPath, "band_") + 5;
-                        if (isdigit(bandNumber[0])) {
-                            enhancedDesc.Printf("Band %s", bandNumber);
-                        }
-                    }
-                    else if (strstr(subdatasetPath, "/geometry/")) {
-                        enhancedDesc.Printf("Geometry: %s", CPLGetFilename(subdatasetPath));
-                    }
-                    else {
-                        // Keep the original description
-                        enhancedDesc = pszDesc;
-                    }
-                    
-                    ds.SetMetadataItem(actualDescKey, enhancedDesc);
-                }
-                else if (mode == Mode::NATIVE) {
-                    // For NATIVE mode, use the original description without enhancements
-                    // Make sure the original Array /path description format is preserved
-                    ds.SetMetadataItem(actualDescKey, pszDesc);
-                }
-                else {
-                    // Fallback case
-                    ds.SetMetadataItem(actualDescKey, pszDesc);
-                }
-
-                CPLDebug("EOPFZARR", "Added subdataset (%s mode): %s = %s", 
-                         mode == Mode::NATIVE ? "NATIVE" : "ANALYSIS",
-                         actualNameKey.c_str(), eopfName.c_str());
             }
+            else {
+                // Just prefix with EOPFZARR if not already a ZARR URL
+                eopfName.Printf("EOPFZARR:%s", pszName);
+            }
+
+            // Create new keys with actual count 
+            CPLString actualNameKey, actualDescKey;
+            actualNameKey.Printf("SUBDATASET_%d_NAME", nActualSubdatasets);
+            actualDescKey.Printf("SUBDATASET_%d_DESC", nActualSubdatasets);
+
+            // Set the subdataset metadata on the main dataset 'ds'
+            ds.SetMetadataItem(actualNameKey, eopfName);
+
+            // Generic description for all modes
+            CPLString enhancedDesc = pszDesc;
+
+            if (!subdatasetPath.empty()) {
+                // Extract a simplified band name for the description
+                // For example: "/measurement/band_01" → "Band 1"
+                if (strstr(subdatasetPath, "/measurement/band_")) {
+                    const char* bandNumber = strstr(subdatasetPath, "band_") + 5;
+                    if (isdigit(bandNumber[0])) {
+                        enhancedDesc.Printf("Band %s", bandNumber);
+                    }
+                }
+                else if (strstr(subdatasetPath, "/geometry/")) {
+                    enhancedDesc.Printf("Geometry: %s", CPLGetFilename(subdatasetPath));
+                }
+            }
+
+            ds.SetMetadataItem(actualDescKey, enhancedDesc);
+
+            CPLDebug("EOPFZARR", "Added subdataset: %s = %s",
+                actualNameKey.c_str(), eopfName.c_str());
         }
     }
 
     // Update the count if we've filtered any subdatasets
     if (nActualSubdatasets != nSubdatasets) {
         ds.SetMetadataItem("SUBDATASET_COUNT", CPLString().Printf("%d", nActualSubdatasets).c_str());
-        CPLDebug("EOPFZARR", "Filtered subdatasets in %s mode: %d out of %d kept", 
-                 mode == Mode::NATIVE ? "NATIVE" : "ANALYSIS", 
-                 nActualSubdatasets, nSubdatasets);
+        CPLDebug("EOPFZARR", "Filtered subdatasets: %d out of %d kept",
+            nActualSubdatasets, nSubdatasets);
     }
 
     GDALClose(poZarrDS);
 }
 
-/* ------------------------------------------------------------------ */
-/*      AttachMetadata main entry                                      */
-/* ------------------------------------------------------------------ */
-void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath, EOPF::Mode mode)
+void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
 {
     CPLJSONDocument doc;
     bool hasMetadata = false;
@@ -689,27 +654,24 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath, EOPF::Mo
 
     // Mark as EOPF dataset
     ds.SetMetadataItem("EOPF_PRODUCT", "YES");
-    
-    // Add the mode to metadata
-    ds.SetMetadataItem("EOPF_ACCESS_MODE", mode == Mode::NATIVE ? "NATIVE" : "ANALYSIS");
 
     // Extract coordinate metadata either from loaded metadata or create defaults
     if (hasMetadata)
     {
         const CPLJSONObject& root = doc.GetRoot(); // This is .zattrs content now
         ExtractCoordinateMetadata(root, ds);
-        
-        // Pass the mode to the subdataset discovery
-        DiscoverSubdatasets(ds, rootPath, root, mode);
+
+        // Discover subdatasets
+        DiscoverSubdatasets(ds, rootPath, root);
     }
     else
     {
         CPLDebug("EOPFZARR", "No .zmetadata or .zattrs found in %s, creating defaults for coordinates.", rootPath.c_str());
         CPLJSONObject emptyObj;
         ExtractCoordinateMetadata(emptyObj, ds); // Setup default coordinate info
-        
-        // Pass the mode to the subdataset discovery
-        DiscoverSubdatasets(ds, rootPath, emptyObj, mode);
+
+        // Discover subdatasets with empty metadata
+        DiscoverSubdatasets(ds, rootPath, emptyObj);
     }
 
     // Apply spatial_ref to GEOLOCATION/GEOREFERENCING domains
