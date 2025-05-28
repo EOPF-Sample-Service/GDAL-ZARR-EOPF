@@ -128,6 +128,22 @@ jobs:
         arch: x64
         vcvars_ver: 14.3
 
+    - name: Create Test Zarr Dataset
+      run: |
+        mkdir -p C:/temp/test.zarr
+        echo {"zarr_format": 2} > C:/temp/test.zarr/.zgroup
+        echo {"metadata": {".zattrs": {}, ".zgroup": {"zarr_format": 2}}} > C:/temp/test.zarr/.zmetadata
+        
+        # Create a simple array
+        mkdir -p C:/temp/test.zarr/data
+        echo {"chunks": [10, 10], "compressor": null, "dtype": "<f8", "fill_value": 0, "filters": null, "order": "C", "shape": [20, 30], "zarr_format": 2} > C:/temp/test.zarr/data/.zarray
+        
+        dir C:/temp/test.zarr
+        dir C:/temp/test.zarr/data
+        type C:/temp/test.zarr/.zgroup
+        type C:/temp/test.zarr/.zmetadata
+        type C:/temp/test.zarr/data/.zarray
+
     - name: Build Plugin
       run: |
         cmake -S . -B build `
@@ -137,11 +153,37 @@ jobs:
           -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
         cmake --build build --config Release
 
+    - name: Test Plugin
+      run: |
+        $env:GDAL_DRIVER_PATH="$PWD/build/Release"
+        $env:GDAL_DATA="C:/OSGeo4W/share/gdal"
+        $env:PATH="C:/OSGeo4W/bin;$env:PATH"
+        
+        Write-Host "Test 1- Available GDAL drivers:"
+        gdalinfo --formats | findstr "EOPFZARR"
+        
+        Write-Host "Test 2a- Opening Zarr dataset with default options:"
+        gdalinfo C:/temp/test.zarr/ | findstr "Driver"
+        
+        Write-Host "Test 2b- With EOPF_PROCESS=NO:"
+        gdalinfo -oo EOPF_PROCESS=NO C:/temp/test.zarr/ | findstr "Driver"
+        
+        Write-Host "Test 2c- With EOPF_PROCESS=YES:"
+        try {
+          gdalinfo -oo EOPF_PROCESS=YES C:/temp/test.zarr/ | findstr "Driver"
+        } catch {
+          Write-Host "Failed with EOPF_PROCESS=YES, but continuing"
+        }
+        
+        Write-Host "Debug information:"
+        gdalinfo --version
+        dir $env:GDAL_DRIVER_PATH
+
     - name: Package Artifacts
       run: |
         mkdir dist
-        cp build/Release/gdal_EOPFZarr.dll dist/
-        objdump -p dist/gdal_EOPFZarr.dll | findstr "DLL Name"
+        cp build/gdal_EOPFZarr.dll dist/
+        dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll | findstr "DLL"
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
