@@ -610,7 +610,7 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
                 }
             }
 
-            ds.SetMetadataItem(actualDescKey, enhancedDesc);
+            ds.SetMetadataItem(actualDescKey, pszDesc);
 
             CPLDebug("EOPFZARR", "Added subdataset: %s = %s",
                 actualNameKey.c_str(), eopfName.c_str());
@@ -661,17 +661,14 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
         const CPLJSONObject& root = doc.GetRoot(); // This is .zattrs content now
         ExtractCoordinateMetadata(root, ds);
 
-        // Discover subdatasets
-        DiscoverSubdatasets(ds, rootPath, root);
     }
     else
     {
         CPLDebug("EOPFZARR", "No .zmetadata or .zattrs found in %s, creating defaults for coordinates.", rootPath.c_str());
         CPLJSONObject emptyObj;
         ExtractCoordinateMetadata(emptyObj, ds); // Setup default coordinate info
-
-        // Discover subdatasets with empty metadata
-        DiscoverSubdatasets(ds, rootPath, emptyObj);
+        
+       
     }
 
     // Apply spatial_ref to GEOLOCATION/GEOREFERENCING domains
@@ -691,7 +688,6 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
             }
             CPLFree(pszFinalWKT);
         }
-
 
         char** papszDomainList = ds.GetMetadataDomainList();
         if (papszDomainList)

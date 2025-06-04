@@ -26,6 +26,7 @@ public:
     // Load metadata from Zarr file
     void LoadEOPFMetadata();
 
+    char** GetFileList() override;
     // Override metadata method to handle subdatasets
     char** GetMetadata(const char* pszDomain = nullptr) override;
     CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
