@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.14)
 project(EOPFZarr LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
+# Configuration options
+option(USE_FILENAME_PREFIX "Use filename prefix to identify EOPF datasets" ON)
+set(EOPF_FILENAME_PREFIX "eopf:" CACHE STRING "Filename prefix to identify EOPF datasets")
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/eopfzarr_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/eopfzarr_config.h"
+)
+
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
@@ -9,6 +18,10 @@ add_library(gdal_EOPFZarr MODULE
     src/eopfzarr_driver.cpp
     src/eopfzarr_dataset.cpp
     src/eopf_metadata.cpp
+)
+
+target_include_directories(gdal_EOPFZarr PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
