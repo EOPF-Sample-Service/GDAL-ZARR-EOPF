@@ -508,121 +508,67 @@ static bool LoadZMetadata(const std::string& rootPath, CPLJSONDocument& doc)
 /* ------------------------------------------------------------------ */
 /*      Discover and attach subdatasets                                */
 /* ------------------------------------------------------------------ */
-void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath,
-    const CPLJSONObject& metadata)
+void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath, const CPLJSONObject& metadata)
 {
-    // Open the Zarr dataset directly to get subdatasets
+    // Open the Zarr dataset to get subdatasets
     CPLString zarrPath;
     zarrPath.Printf("ZARR:\"%s\"", rootPath.c_str());
-
     GDALDataset* poZarrDS = (GDALDataset*)GDALOpen(zarrPath.c_str(), GA_ReadOnly);
-    if (poZarrDS == nullptr) {
-        CPLDebug("EOPFZARR", "Failed to open Zarr dataset for subdataset discovery: %s", zarrPath.c_str());
+    if (!poZarrDS) {
+        CPLDebug("EOPFZARR", "Failed to open Zarr dataset: %s", zarrPath.c_str());
+        ds.SetMetadataItem("SUBDATASET_COUNT", "0");
         return;
     }
 
     // Get subdatasets from the Zarr driver
     char** papszZarrSubdatasets = poZarrDS->GetMetadata("SUBDATASETS");
-    if (papszZarrSubdatasets == nullptr) {
+    if (!papszZarrSubdatasets) {
         CPLDebug("EOPFZARR", "No subdatasets found in Zarr dataset: %s", zarrPath.c_str());
+        ds.SetMetadataItem("SUBDATASET_COUNT", "0");
         GDALClose(poZarrDS);
-        ds.SetMetadataItem("SUBDATASET_COUNT", "0"); // Explicitly set count to 0
         return;
     }
 
-    // Count subdatasets
-    int nSubdatasets = 0;
-    for (int i = 0; CSLFetchNameValue(papszZarrSubdatasets, CPLSPrintf("SUBDATASET_%d_NAME", i + 1)) != nullptr; ++i) {
-        nSubdatasets++;
-    }
+    // Clear any existing subdataset metadata
+    char* emptyList[1] = { nullptr };
+    ds.SetMetadata(emptyList, "SUBDATASETS");
 
-    ds.SetMetadataItem("SUBDATASET_COUNT", CPLString().Printf("%d", nSubdatasets).c_str());
-    CPLDebug("EOPFZARR", "Found %d subdatasets in Zarr dataset", nSubdatasets);
-
-    // Process each subdataset
-    int nActualSubdatasets = 0;  // Count of subdatasets after filtering
-
-    for (int i = 1; i <= nSubdatasets; i++) {
-        CPLString nameKey, descKey;
-        nameKey.Printf("SUBDATASET_%d_NAME", i);
-        descKey.Printf("SUBDATASET_%d_DESC", i);
-
-        const char* pszName = CSLFetchNameValue(papszZarrSubdatasets, nameKey);
-        const char* pszDesc = CSLFetchNameValue(papszZarrSubdatasets, descKey);
-
+    // Count and process subdatasets
+    int nActualSubdatasets = 0;
+    for (int i = 0; papszZarrSubdatasets[i] != nullptr; i++) {
+        const char* pszName = CSLFetchNameValue(papszZarrSubdatasets, CPLSPrintf("SUBDATASET_%d_NAME", i + 1));
+        const char* pszDesc = CSLFetchNameValue(papszZarrSubdatasets, CPLSPrintf("SUBDATASET_%d_DESC", i + 1));
         if (pszName && pszDesc) {
-            CPLString subdatasetPath;
-
-            // Extract the internal path from the Zarr subdataset URL
-            // Format is typically: ZARR:"/path/to/dataset.zarr":/internal/path
-            if (STARTS_WITH_CI(pszName, "ZARR:")) {
-                const char* pszInternalPath = strstr(pszName + 5, ":");
-                if (pszInternalPath && strlen(pszInternalPath) > 1) {
-                    subdatasetPath = pszInternalPath + 1;  // Skip the colon
-                }
-            }
-
             nActualSubdatasets++;
-            CPLString eopfName;
+            CPLString nameKey, descKey;
+            nameKey.Printf("SUBDATASET_%d_NAME", nActualSubdatasets);
+            descKey.Printf("SUBDATASET_%d_DESC", nActualSubdatasets);
 
-            // Extract the internal path from the Zarr subdataset URL
+            // Transform the subdataset name to use EOPFZARR prefix
+            CPLString eopfName;
             if (STARTS_WITH_CI(pszName, "ZARR:")) {
                 const char* pszInternalPath = strstr(pszName + 5, ":");
                 if (pszInternalPath) {
-                    // Extract the path part (before the internal path)
                     CPLString pathPart(pszName + 5, pszInternalPath - (pszName + 5));
-
-                    // Replace ZARR: with EOPFZARR: but keep the format the same
                     eopfName.Printf("EOPFZARR:%s%s", pathPart.c_str(), pszInternalPath);
                 }
                 else {
-                    // Fallback if no internal path
                     eopfName.Printf("EOPFZARR:%s", pszName + 5);
                 }
             }
             else {
-                // Just prefix with EOPFZARR if not already a ZARR URL
                 eopfName.Printf("EOPFZARR:%s", pszName);
             }
 
-            // Create new keys with actual count 
-            CPLString actualNameKey, actualDescKey;
-            actualNameKey.Printf("SUBDATASET_%d_NAME", nActualSubdatasets);
-            actualDescKey.Printf("SUBDATASET_%d_DESC", nActualSubdatasets);
-
-            // Set the subdataset metadata on the main dataset 'ds'
-            ds.SetMetadataItem(actualNameKey, eopfName);
-
-            // Generic description for all modes
-            CPLString enhancedDesc = pszDesc;
-
-            if (!subdatasetPath.empty()) {
-                // Extract a simplified band name for the description
-                // For example: "/measurement/band_01" → "Band 1"
-                if (strstr(subdatasetPath, "/measurement/band_")) {
-                    const char* bandNumber = strstr(subdatasetPath, "band_") + 5;
-                    if (isdigit(bandNumber[0])) {
-                        enhancedDesc.Printf("Band %s", bandNumber);
-                    }
-                }
-                else if (strstr(subdatasetPath, "/geometry/")) {
-                    enhancedDesc.Printf("Geometry: %s", CPLGetFilename(subdatasetPath));
-                }
-            }
-
-            ds.SetMetadataItem(actualDescKey, pszDesc);
-
-            CPLDebug("EOPFZARR", "Added subdataset: %s = %s",
-                actualNameKey.c_str(), eopfName.c_str());
+            // Set the metadata
+            ds.SetMetadataItem(nameKey, eopfName);
+            ds.SetMetadataItem(descKey, pszDesc);
+            CPLDebug("EOPFZARR", "Set %s = %s", nameKey.c_str(), eopfName.c_str());
         }
     }
 
-    // Update the count if we've filtered any subdatasets
-    if (nActualSubdatasets != nSubdatasets) {
-        ds.SetMetadataItem("SUBDATASET_COUNT", CPLString().Printf("%d", nActualSubdatasets).c_str());
-        CPLDebug("EOPFZARR", "Filtered subdatasets: %d out of %d kept",
-            nActualSubdatasets, nSubdatasets);
-    }
+    ds.SetMetadataItem("SUBDATASET_COUNT", CPLString().Printf("%d", nActualSubdatasets).c_str());
+    CPLDebug("EOPFZARR", "Set %d subdatasets", nActualSubdatasets);
 
     GDALClose(poZarrDS);
 }

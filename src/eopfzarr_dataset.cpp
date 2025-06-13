@@ -1,5 +1,6 @@
 ﻿#include "eopfzarr_dataset.h"
 #include "eopf_metadata.h"
+#include "eopfzarr_config.h" // Add this include
 #include "cpl_json.h"
 #include "cpl_vsi.h"
 #include "cpl_string.h"
@@ -247,7 +248,7 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
         // If not found in base dataset, try the inner dataset but with modified prefixes
         if (mInner)
         {
-            papszSubdatasets = mInner->GetMetadata(pszDomain);
+            papszSubdatasets = mInner->GetMetadata("SUBDATASETS");
             if (papszSubdatasets && CSLCount(papszSubdatasets) > 0)
             {
                 // Clean up any previous subdatasets
@@ -256,20 +257,20 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
                     CSLDestroy(mSubdatasets);
                     mSubdatasets = nullptr;
                 }
-                
-                // Create new list with EOPFZARR: prefixes
+
+                // Create new list with proper prefixes
                 for (int i = 0; papszSubdatasets[i] != nullptr; i++)
                 {
-                    char *pszKey = nullptr;
-                    const char *pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
-                    
+                    char* pszKey = nullptr;
+                    const char* pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
+
                     if (pszKey && pszValue)
                     {
-                        // If this is a NAME field and starts with ZARR:, replace with EOPFZARR:
-                        if (strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
+                        // If this is a NAME field, prepend EOPF_FILENAME_PREFIX
+                        if (pszValue && strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
                         {
-                            CPLString eopfValue("EOPFZARR:");
-                            eopfValue += (pszValue + 5); // Skip "ZARR:"
+                            CPLString eopfValue("EOPFZARR:"); // Use the correct driver prefix
+                            eopfValue += (pszValue + 5);      // Skip "ZARR:"
                             mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue);
                         }
                         else
@@ -280,22 +281,18 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
                     }
                     CPLFree(pszKey);
                 }
-                
-                // Save these for next time and return
+
                 return mSubdatasets;
             }
         }
-        
         // No subdatasets found
         return nullptr;
     }
 
     // For other domains, handle as before
-    // [rest of your original code...]
-    
     return GDALDataset::GetMetadata(pszDomain);
 }
-// Implement the method in eopfzarr_dataset.cpp:
+
 char **EOPFZarrDataset::GetFileList()
 {
     // First check if the inner dataset has a file list
@@ -309,7 +306,5 @@ char **EOPFZarrDataset::GetFileList()
         }
     }
 
-    // If inner dataset has no file list or is nullptr, fall back to base implementation
-    // which may use the dataset's filename/description
     return GDALDataset::GetFileList();
 }

@@ -183,15 +183,16 @@ jobs:
     - name: Package Artifacts
       run: |
         mkdir dist
-        # Add diagnostic output to verify file location
+        # Add diagnostic output to verify file location (using PowerShell syntax)
         Write-Host "Finding DLL location:"
-        dir build /s /b | findstr "gdal_EOPFZarr.dll"
+        Get-ChildItem -Path build -Recurse -Filter "gdal_EOPFZarr.dll" | ForEach-Object { $_.FullName }
         
         # Copy from the correct location for Visual Studio generator
         if (Test-Path "build/Release/gdal_EOPFZarr.dll") {
-          cp "build/Release/gdal_EOPFZarr.dll" dist/
+          Copy-Item "build/Release/gdal_EOPFZarr.dll" -Destination dist/
         } else {
           Write-Host "ERROR: DLL not found at expected path"
+          dir build -Recurse | Where-Object { $_.Name -like "*.dll" } | ForEach-Object { $_.FullName }
           exit 1
         }
         
