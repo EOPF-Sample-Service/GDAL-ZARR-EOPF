@@ -128,6 +128,15 @@ jobs:
         arch: x64
         vcvars_ver: 14.3
 
+    - name: Build Plugin
+      run: |
+        cmake -S . -B build `
+          -G "Visual Studio 17 2022" `
+          -A x64 `
+          -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" `
+          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+        cmake --build build --config Release
+
     - name: Create Test Zarr Dataset
       run: |
         mkdir -p C:/temp/test.zarr
@@ -144,15 +153,6 @@ jobs:
         type C:/temp/test.zarr/.zgroup
         type C:/temp/test.zarr/.zmetadata
         type C:/temp/test.zarr/data/.zarray
-
-    - name: Build Plugin
-      run: |
-        cmake -S . -B build `
-          -G "Ninja" `
-          -DCMAKE_BUILD_TYPE=Release `
-          -DCMAKE_CXX_FLAGS="/MT" `
-          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-        cmake --build build --config Release
 
     - name: Test Plugin
       run: |
@@ -183,7 +183,18 @@ jobs:
     - name: Package Artifacts
       run: |
         mkdir dist
-        cp build/gdal_EOPFZarr.dll dist/
+        # Add diagnostic output to verify file location
+        Write-Host "Finding DLL location:"
+        dir build /s /b | findstr "gdal_EOPFZarr.dll"
+        
+        # Copy from the correct location for Visual Studio generator
+        if (Test-Path "build/Release/gdal_EOPFZarr.dll") {
+          cp "build/Release/gdal_EOPFZarr.dll" dist/
+        } else {
+          Write-Host "ERROR: DLL not found at expected path"
+          exit 1
+        }
+        
         dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll | findstr "DLL"
         
     - name: Upload Artifact
