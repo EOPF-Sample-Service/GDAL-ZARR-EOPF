@@ -113,24 +113,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Install Dependencies
-      run: |
-        .\osgeo4w-setup.exe --advanced --autoaccept --quiet-mode --site https://download.osgeo.org/osgeo4w/v2/ --root C:\OSGeo4W --packages cmake,gdal-devel,ninja
-        $Env:PATH = $Env:PATH -replace ";[^;]+?osgeo4w[^;]*", ""
-
-    - name: Install Dependencies
-      run: |
-        .\osgeo4w-setup.exe --advanced --autoaccept --quiet-mode --site https://download.osgeo.org/osgeo4w/v2/ --root C:\OSGeo4W --packages cmake,gdal-devel,ninja
-        $Env:PATH = $Env:PATH -replace ";[^;]+?osgeo4w[^;]*", ""
+    - name: Install OSGeo4W (GDAL + Dev Tools)
+      uses: echoix/setup-OSGeo4W@v0.2.0
+      with:
+        packages: gdal-devel cmake ninja
+        site: https://download.osgeo.org/osgeo4w/v2/
+        root: C:\OSGeo4W
+        arch: x86_64
+        upgrade-also: false
 
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
         vcvars_ver: 14.3
-
-    - name: Configure CMake
-      run: cmake -DGDAL_LIBRARY="C:/OSGeo4W/lib/gdal.lib" -DGDAL_INCLUDE_DIR="C:/OSGeo4W/include" ..
 
     - name: Create Test Zarr Dataset
       run: |
@@ -195,4 +191,3 @@ jobs:
       with:
         name: gdal-plugin-universal
         path: dist/*
-
