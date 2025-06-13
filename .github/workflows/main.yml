@@ -122,6 +122,11 @@ jobs:
         arch: x86_64
         upgrade-also: false
 
+    - name: Install Dependencies
+      run: |
+        .\osgeo4w-setup.exe --advanced --autoaccept --quiet-mode --site https://download.osgeo.org/osgeo4w/v2/ --root C:\OSGeo4W --packages cmake,gdal-devel,ninja
+        $Env:PATH = $Env:PATH -replace ";[^;]+?osgeo4w[^;]*", ""
+
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
       with:

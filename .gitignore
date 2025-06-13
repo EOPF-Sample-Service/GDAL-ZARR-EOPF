@@ -5,3 +5,4 @@ cdse-venv/
 /CMakeSettings.json
 /out/build
 /build
+/src/zarrdriver_original.cpp
