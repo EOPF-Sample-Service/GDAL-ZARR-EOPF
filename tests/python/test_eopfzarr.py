@@ -24,7 +24,8 @@ def test_open_sample_dataset():
         pytest.skip("GDAL_DRIVER_PATH not set - plugin may not be found")
     
     zarr_path = SAMPLE_DATA_DIR
-    ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY, open_options=['EOPF_PROCESS=YES'])
+    zarr_path = "eopf:"+zarr_path
+    ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY)
     
     assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
     
