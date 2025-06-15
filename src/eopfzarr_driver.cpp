@@ -2,228 +2,226 @@
  *  EOPF‑Zarr GDAL driver — registration, Identify(), Open()
  *
  *  This file contains only the pieces that interact directly with
- *  GDAL’s Driver Manager.  All wrapper‑dataset logic lives in
+ *  GDAL's Driver Manager.  All wrapper‑dataset logic lives in
  *  eopfzarr_dataset.*.
  **********************************************************************/
-
 #include "eopfzarr_dataset.h"
 #include "gdal_priv.h"
 #include "cpl_vsi.h"
 #include "cpl_string.h" // Added for CSL functions (CSLRemove, CSLDuplicate, etc.)
 #include <string>
+#include "eopf_metadata.h"
+#include "eopfzarr_config.h"
 
-static GDALDriver* gEOPFDriver = nullptr;   /* global ptr for reuse */
+// Add Windows-specific export declarations without redefining CPL macros
+#ifdef _WIN32
+#define EOPFZARR_DLL __declspec(dllexport)
+#else
+#define EOPFZARR_DLL
+#endif
+
+static GDALDriver *gEOPFDriver = nullptr; /* global ptr for reuse */
 
 /* -------------------------------------------------------------------- */
 /*  Tiny helper: does a file exist (works for /vsicurl/, /vsis3/)        */
 /* -------------------------------------------------------------------- */
-static bool HasFile(const std::string& path)
+static bool HasFile(const std::string &path)
 {
     VSIStatBufL sStat; // Use VSIStatBufL for VSIStatL
     return VSIStatL(path.c_str(), &sStat) == 0;
 }
 
 /* -------------------------------------------------------------------- */
-/*      Identify — accept any Zarr‑V2 root (.zgroup|.zarray|.zmetadata)  */
+/*      Identify — only accept Zarr files with the EOPF prefix           */
 /* -------------------------------------------------------------------- */
-
-// Helper function to remove the i-th element from a CSL array.
-static char** RemoveString(char** papszOptions, int iIndex)
-{
-    if (papszOptions == nullptr)
-        return nullptr;
-    int nCount = CSLCount(papszOptions);
-    if (iIndex < 0 || iIndex >= nCount)
-        return papszOptions;
-    for (int i = iIndex; i < nCount - 1; i++)
-    {
-        papszOptions[i] = papszOptions[i + 1];
-    }
-    papszOptions[nCount - 1] = nullptr;
-    return papszOptions;
-}
-
-static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
+static int EOPFIdentify(GDALOpenInfo *poOpenInfo)
 {
     if (poOpenInfo->eAccess == GA_Update)
         return FALSE;
 
-    // If EOPF_PROCESS is explicitly NO, this driver should not identify.
-    const char* pszProcessEOPFOption = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
-    if (pszProcessEOPFOption != nullptr && EQUAL(pszProcessEOPFOption, "NO"))
-    {
-        CPLDebug("EOPFZARR", "EOPFIdentify: EOPF_PROCESS=NO, declining to identify.");
-        return FALSE;
-    }
+    // Check for filename prefix if enabled - ONLY accept this case
+#if USE_FILENAME_PREFIX
+    const char *pszPrefix = EOPF_FILENAME_PREFIX;
+    const size_t nPrefixLen = strlen(pszPrefix);
 
-    std::string rootPath(poOpenInfo->pszFilename);
-    VSIStatBufL sStat;
-    bool bIsDirectory = false;
-    if (VSIStatL(rootPath.c_str(), &sStat) == 0 && VSI_ISDIR(sStat.st_mode))
+    // Only accept files explicitly starting with our prefix
+    if (EQUALN(poOpenInfo->pszFilename, pszPrefix, nPrefixLen))
     {
-        bIsDirectory = true;
-        if (!rootPath.empty() && rootPath.back() != '/')
+        // Also verify there's something after the prefix
+        if (strlen(poOpenInfo->pszFilename) > nPrefixLen)
         {
-            rootPath += '/';
-        }
-    }
-
-    // Only attempt to identify if it's a directory (typical for Zarr stores)
-    // or if EOPF_PROCESS=YES (allowing more flexibility if user forces it)
-    if (!bIsDirectory && (pszProcessEOPFOption == nullptr || !EQUAL(pszProcessEOPFOption, "YES"))) {
-        // If not a directory and not explicitly told to process,
-        // let the standard Zarr driver handle potentially more complex path resolutions.
-        return FALSE;
-    }
-
-    // If EOPF_PROCESS=YES, we are more lenient with identification,
-    // otherwise, we are stricter (e.g. requiring a directory with markers).
-    if (pszProcessEOPFOption != nullptr && EQUAL(pszProcessEOPFOption, "YES")) {
-        // If user forces with EOPF_PROCESS=YES, be more optimistic.
-        // Check for markers or .zarr extension.
-        const char* markers[] = { ".zgroup", ".zarray", ".zmetadata", ".zattrs" };
-        for (const char* m : markers) {
-            // Ensure rootPath has a trailing slash if it's a directory before appending marker
-            std::string fullMarkerPath = rootPath;
-            if (bIsDirectory && !fullMarkerPath.empty() && fullMarkerPath.back() != '/') {
-                fullMarkerPath += '/';
-            }
-            else if (!bIsDirectory && !fullMarkerPath.empty() && fullMarkerPath.back() == '/') {
-                // If it's not a directory but ends with a slash (e.g. user provided "path/to/store/"),
-                // it's fine. If it doesn't end with a slash, CPLGetDirname might be needed if we
-                // were to treat it like a directory. But for HasFile, direct concatenation is okay.
-            }
-            fullMarkerPath += m;
-            if (HasFile(fullMarkerPath)) {
-                CPLDebug("EOPFZARR", "EOPFIdentify: EOPF_PROCESS=YES and found marker %s in %s", m, rootPath.c_str());
-                return TRUE;
-            }
-        }
-        if (EQUAL(CPLGetExtension(poOpenInfo->pszFilename), "zarr")) {
-            CPLDebug("EOPFZARR", "EOPFIdentify: EOPF_PROCESS=YES and path ends with .zarr: %s", poOpenInfo->pszFilename);
+            CPLDebug("EOPFZARR", "EOPFIdentify: Prefix %s detected in filename %s, accepting dataset.",
+                    pszPrefix, poOpenInfo->pszFilename);
             return TRUE;
         }
-        CPLDebug("EOPFZARR", "EOPFIdentify: EOPF_PROCESS=YES, assuming it's a Zarr store for %s", poOpenInfo->pszFilename);
-        return TRUE; // Be optimistic if EOPF_PROCESS=YES
-    }
-
-
-    // Default identification logic (if EOPF_PROCESS is not YES or NO)
-    // Requires it to be a directory containing Zarr markers.
-    if (bIsDirectory) {
-        const char* markers[] = { ".zgroup", ".zarray", ".zmetadata", ".zattrs" };
-        for (const char* m : markers) {
-            if (HasFile(rootPath + m)) { // rootPath already has trailing slash
-                CPLDebug("EOPFZARR", "EOPFIdentify: Found marker %s in directory %s", m, rootPath.c_str());
-                return TRUE;
-            }
+        else
+        {
+            CPLDebug("EOPFZARR", "EOPFIdentify: Prefix only with no path detected, declining: %s", 
+                    poOpenInfo->pszFilename);
+            return FALSE;
         }
     }
+#endif
 
-    CPLDebug("EOPFZARR", "EOPFIdentify: Conditions not met for EOPF Zarr identification of %s", poOpenInfo->pszFilename);
+    // Everything else is rejected
+    CPLDebug("EOPFZARR", "EOPFIdentify: No valid prefix detected, declining to handle: %s", 
+             poOpenInfo->pszFilename);
     return FALSE;
 }
 
 /* -------------------------------------------------------------------- */
 /*      Open — delegate to the core Zarr driver, then wrap it            */
 /* -------------------------------------------------------------------- */
-static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
+static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
 {
-    const char* pszProcessEOPFOption = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
-
-    if (pszProcessEOPFOption == nullptr || !EQUAL(pszProcessEOPFOption, "YES"))
+    // Double check that we're only handling prefixed paths
+    const char *pszFilename = poOpenInfo->pszFilename;
+    
+    // If the path doesn't have our prefix, immediately return nullptr
+    const char *pszPrefix = EOPF_FILENAME_PREFIX;
+    const size_t nPrefixLen = strlen(pszPrefix);
+    
+    if (!EQUALN(pszFilename, pszPrefix, nPrefixLen))
     {
-        CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS option not set to YES. EOPFZarr driver will not open this dataset. Letting standard Zarr driver proceed if available.");
-        return nullptr; // Default behavior: let other drivers (like standard Zarr) handle it.
-    }
-
-    // Re-check identify, now that EOPF_PROCESS=YES is confirmed.
-    // This ensures that if open options were not available to Identify initially,
-    // it gets a chance to re-evaluate with them.
-    char** papszIdentifyOpenOptions = CSLSetNameValue(nullptr, "EOPF_PROCESS", "YES");
-    GDALOpenInfo oIdentifyOpenInfo(poOpenInfo->pszFilename, poOpenInfo->nOpenFlags, papszIdentifyOpenOptions);
-    // Keep other open options if they were relevant for Identify, though EOPF_PROCESS is primary here.
-    // For simplicity, we are only explicitly setting EOPF_PROCESS for this re-check.
-    // A more robust way would be to pass all original open options to EOPFIdentify.
-    // However, EOPFIdentify itself fetches from poOpenInfo->papszOpenOptions.
-    // The main check is that EOPF_PROCESS=YES is now active.
-
-    if (!EOPFIdentify(&oIdentifyOpenInfo)) { // Pass the GDALOpenInfo with EOPF_PROCESS=YES
-        CSLDestroy(papszIdentifyOpenOptions);
-        CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES, but EOPFIdentify still returned FALSE for %s even with option explicitly set. This is unexpected.", poOpenInfo->pszFilename);
+        CPLError(CE_Failure, CPLE_AppDefined, 
+                 "EOPFZARR driver should only be used with %s prefix", pszPrefix);
+        CPLDebug("EOPFZARR", "EOPFOpen: Path doesn't start with %s, rejecting: %s", 
+                 pszPrefix, pszFilename);
         return nullptr;
     }
-    CSLDestroy(papszIdentifyOpenOptions);
 
+    // Process filename prefix if enabled
+#if USE_FILENAME_PREFIX
+    CPLDebug("EOPFZARR", "EOPFOpen: Prefix %s detected in filename %s",
+             pszPrefix, pszFilename);
 
-    CPLDebug("EOPFZARR", "EOPFOpen: EOPF_PROCESS=YES. Attempting to open %s with EOPF wrapper.", poOpenInfo->pszFilename);
-
-    char* const azDrvList[] = { (char*)"Zarr", nullptr };
-    GDALDataset* poUnderlyingDataset = nullptr;
-
-    // Filter out EOPF_PROCESS from open options passed to the underlying Zarr driver
-    char** papszFilteredOpenOptions = CSLDuplicate(poOpenInfo->papszOpenOptions);
-    int nIdx = CSLFindName(papszFilteredOpenOptions, "EOPF_PROCESS");
-    if (nIdx != -1) {
-        papszFilteredOpenOptions = RemoveString(papszFilteredOpenOptions, nIdx);
+    // Extract the actual path after the prefix
+    const char *pszActualFilename = pszFilename + nPrefixLen;
+    
+    if (strlen(pszActualFilename) == 0)
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, 
+                 "No path specified after %s prefix", pszPrefix);
+        return nullptr;
     }
 
-    nIdx = CSLFindName(papszFilteredOpenOptions, "GDAL_SKIP");
-    if (nIdx != -1) {
-        char** papszSkippedDrivers = CSLTokenizeString2(CSLFetchNameValue(papszFilteredOpenOptions, "GDAL_SKIP"), ",", CSLT_HONOURSTRINGS);
-        bool bZarrSkipped = false;
-        for (int i = 0; papszSkippedDrivers && papszSkippedDrivers[i]; ++i) {
-            if (EQUAL(papszSkippedDrivers[i], "Zarr")) {
-                bZarrSkipped = true;
-                break;
-            }
-        }
-        CSLDestroy(papszSkippedDrivers);
-        if (bZarrSkipped) {
-            CPLDebug("EOPFZARR", "EOPFOpen: GDAL_SKIP contains Zarr, temporarily removing it for underlying GDALOpenEx call.");
-            // Create a new list without GDAL_SKIP=Zarr or modify existing one carefully
-            // For simplicity, if Zarr is in GDAL_SKIP, we remove the GDAL_SKIP option entirely for this call.
-            papszFilteredOpenOptions = CSLSetNameValue(papszFilteredOpenOptions, "GDAL_SKIP", nullptr);
+    CPLDebug("EOPFZARR", "Extracted path after prefix: %s", pszActualFilename);
+
+    // For Windows paths, check if it's a valid path
+    // If the path doesn't have proper drive letter format, it might need fixing
+#ifdef _WIN32
+    // If path starts with single backslash, it's likely a Windows path with escaped backslashes
+    // We'll need to convert it properly
+    std::string fixedPath = pszActualFilename;
+
+    // Check if GDAL already fixed the path
+    VSIStatBufL sStat;
+    if (VSIStatL(pszActualFilename, &sStat) != 0)
+    {
+        CPLDebug("EOPFZARR", "Path after prefix doesn't exist directly: %s", pszActualFilename);
+
+        // Try standard VSI path
+        std::string vsiPath = "/vsifs/";
+        vsiPath += pszActualFilename;
+        if (VSIStatL(vsiPath.c_str(), &sStat) == 0)
+        {
+            fixedPath = vsiPath;
+            CPLDebug("EOPFZARR", "Using VSI filesystem path: %s", fixedPath.c_str());
         }
     }
+    pszActualFilename = CPLStrdup(fixedPath.c_str());
+#endif
 
+    CPLDebug("EOPFZARR", "Using actual path: %s", pszActualFilename);
 
-    poUnderlyingDataset = static_cast<GDALDataset*>(
-        GDALOpenEx(poOpenInfo->pszFilename,
-            poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
-            azDrvList,
-            papszFilteredOpenOptions,
-            nullptr));
+    // Open the Zarr dataset directly, explicitly requiring the Zarr driver
+    char *const azDrvList[] = {(char *)"Zarr", nullptr};
 
-    CSLDestroy(papszFilteredOpenOptions);
+    // Create option list for zarr driver
+    char **papszOpenOptionsCopy = CSLDuplicate(poOpenInfo->papszOpenOptions);
+    
+    // Add an option to ensure the EOPFZARR driver isn't recursively called
+    papszOpenOptionsCopy = CSLSetNameValue(papszOpenOptionsCopy, "GDAL_SKIP", "EOPFZARR");
+
+    GDALDataset *poUnderlyingDataset = static_cast<GDALDataset *>(
+        GDALOpenEx(pszActualFilename,
+                   poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                   azDrvList,
+                   papszOpenOptionsCopy,
+                   nullptr));
+
+    CSLDestroy(papszOpenOptionsCopy);
+#ifdef _WIN32
+    CPLFree((void *)pszActualFilename);
+#endif
 
     if (!poUnderlyingDataset)
     {
-        CPLDebug("EOPFZARR", "EOPFOpen: Core Zarr driver could not open %s even with EOPF_PROCESS=YES.", poOpenInfo->pszFilename);
+        CPLDebug("EOPFZARR", "EOPFOpen: Core Zarr driver could not open %s.", pszActualFilename);
+        CPLError(CE_Failure, CPLE_OpenFailed, 
+                 "EOPFZARR driver: Core Zarr driver could not open %s.", pszActualFilename);
         return nullptr;
     }
 
-    CPLDebug("EOPFZARR", "EOPFOpen: Successfully opened with core Zarr driver. Now creating EOPF wrapper for %s.", poOpenInfo->pszFilename);
+    CPLDebug("EOPFZARR", "EOPFOpen: Successfully opened with core Zarr driver. Creating EOPF wrapper.");
 
-    if (!gEOPFDriver) {
+    if (!gEOPFDriver)
+    {
         CPLDebug("EOPFZARR", "EOPFOpen: gEOPFDriver is null. Cannot create EOPFZarrDataset.");
+        CPLError(CE_Failure, CPLE_AppDefined, "EOPFZARR driver not properly initialized");
         GDALClose(poUnderlyingDataset);
         return nullptr;
     }
 
-    return EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
+    // Create the wrapper dataset
+    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
+    
+    // Set a property on the dataset to mark it as explicitly created by the EOPF driver
+    // This can help debugging and identification
+    if (poDS != nullptr)
+    {
+        poDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
+    }
+    
+    return poDS;
+#else
+    // If prefix support is disabled, this driver should not be used
+    CPLError(CE_Failure, CPLE_AppDefined, 
+             "EOPFZARR driver requires filename prefix support but it is disabled");
+    CPLDebug("EOPFZARR", "EOPFOpen: Filename prefix support is disabled, cannot open file: %s", 
+             pszFilename);
+    return nullptr;
+#endif
 }
 
 /* -------------------------------------------------------------------- */
 /*      GDALRegister_EOPFZarr — entry point called by Driver Manager     */
 /* -------------------------------------------------------------------- */
-extern "C" void GDALRegister_EOPFZarr()
+extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
 {
     if (GDALGetDriverByName("EOPFZARR") != nullptr)
         return;
 
     if (!GDAL_CHECK_VERSION("EOPFZARR"))
         return;
+
+    // Make sure the Zarr driver is registered first - try to register it if not present
+    GDALDriverManager *poDM = GetGDALDriverManager();
+    GDALDriver *poZarrDriver = poDM->GetDriverByName("Zarr");
+    if (poZarrDriver == nullptr)
+    {
+        CPLDebug("EOPFZARR", "Core Zarr driver not registered. Trying to register it.");
+        // Try to register the Zarr driver
+        GDALRegister_Zarr();
+        
+        // Check again
+        poZarrDriver = poDM->GetDriverByName("Zarr");
+        if (poZarrDriver == nullptr)
+        {
+            CPLError(CE_Warning, CPLE_AppDefined, 
+                     "Core Zarr driver could not be registered. EOPFZARR may not work correctly.");
+        }
+    }
 
     gEOPFDriver = new GDALDriver();
 
@@ -233,14 +231,29 @@ extern "C" void GDALRegister_EOPFZarr()
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     gEOPFDriver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
 
-    gEOPFDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST,
-        "<OpenOptionList>"
-        "  <Option name='EOPF_PROCESS' type='boolean' description='Process as EOPF Zarr. Set to YES to activate this EOPF wrapper driver. Default: NO.' default='NO'/>"
-        "</OpenOptionList>");
+#if USE_FILENAME_PREFIX
+    // Register the connection prefix for our driver
+    gEOPFDriver->SetMetadataItem(GDAL_DMD_CONNECTION_PREFIX, EOPF_FILENAME_PREFIX);
+
+    // Add description about the prefix usage
+    CPLString prefixDescription;
+    prefixDescription.Printf("EOPF datasets can be accessed using the '%s' prefix, e.g.: %sdata.zarr",
+                             EOPF_FILENAME_PREFIX, EOPF_FILENAME_PREFIX);
+    gEOPFDriver->SetMetadataItem("PREFIX_USAGE", prefixDescription.c_str());
+#endif
 
     gEOPFDriver->pfnIdentify = EOPFIdentify;
     gEOPFDriver->pfnOpen = EOPFOpen;
 
-    GetGDALDriverManager()->RegisterDriver(gEOPFDriver);
-    CPLDebug("EOPFZARR", "EOPFZarr driver registered with EOPF_PROCESS open option.");
+    // Register the driver after the core Zarr driver
+    // Note: RegisterDriver appends to the end of the list, ensuring it's after Zarr
+    poDM->RegisterDriver(gEOPFDriver);
+
+    CPLDebug("EOPFZARR", "EOPFZarr driver registered with filename prefix support: %s",
+             USE_FILENAME_PREFIX ? EOPF_FILENAME_PREFIX : "(disabled)");
+}
+
+extern "C" EOPFZARR_DLL void GDALRegisterMe()
+{
+    GDALRegister_EOPFZarr();
 }
