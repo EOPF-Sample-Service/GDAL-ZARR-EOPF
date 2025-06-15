@@ -16,11 +16,16 @@ def test_driver_registration():
     driver = gdal.GetDriverByName('EOPFZARR')
     assert driver is not None, "EOPFZARR driver not found - check GDAL_DRIVER_PATH"
     assert driver.GetDescription() == 'EOPFZARR'
+
+def test_open_sample_dataset():
+    """Test opening a sample dataset with the EOPFZARR driver."""
+    if 'GDAL_DRIVER_PATH' not in os.environ:
+        pytest.skip("GDAL_DRIVER_PATH not set - plugin may not be found")
     
-    # For now, we'll just check if the dataset object is valid
-    # Later you can uncomment the raster band checks once that's implemented
+    zarr_path = SAMPLE_DATA_DIR
+    zarr_path = "eopf:"+zarr_path
+    ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY)
     
-    # If raster bands are expected (uncomment when implemented):
-    # assert ds.RasterCount > 0, "Dataset has no raster bands"
-    # band = ds.GetRasterBand(1)
-    # assert band is not None, "Could not get first raster band"
+    if ds is None:
+        print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
+    assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
