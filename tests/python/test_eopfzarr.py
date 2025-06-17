@@ -37,12 +37,12 @@ def test_subdatasets():
     
     # Test opening first subdataset if any exist
     if subdatasets:
-        subds_path = subdatasets[0][0]
+        subds_path = subdatasets[138][0].replace("ZARR:", "EOPFZARR:")
         print(f"Testing subdataset: {subds_path}")
         subds = gdal.Open(subds_path)
         assert subds is not None, f"Failed to open subdataset: {subds_path}"
         print(f"✓ Successfully opened subdataset {subds_path}")
     
     if subds is None:
-        print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
-    assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
+        print(f"Failed to open dataset at {SAMPLE_DATA_DIR}. Check if the plugin and sample data are correctly set up.")
+    assert ds is not None, f"Failed to open sample dataset at {SAMPLE_DATA_DIR}"
