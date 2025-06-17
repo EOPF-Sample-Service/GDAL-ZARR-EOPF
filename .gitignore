@@ -4,3 +4,7 @@ cdse-venv/
 /out/build/Linux-GCC-Debug
 /CMakeSettings.json
 /out/build
+/build
+/src/zarrdriver_original.cpp
+/venv
+venv/bin/adig
