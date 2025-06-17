@@ -23,9 +23,26 @@ def test_open_sample_dataset():
         pytest.skip("GDAL_DRIVER_PATH not set - plugin may not be found")
     
     zarr_path = SAMPLE_DATA_DIR
-    zarr_path = zarr_path
     ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY)
     
     if ds is None:
+        print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
+    assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
+
+def test_subdatasets():
+    # Test listing subdatasets
+    ds = gdal.Open(SAMPLE_DATA_DIR)
+    subdatasets = ds.GetSubDatasets()
+    print(f"Found {len(subdatasets)} subdatasets")
+    
+    # Test opening first subdataset if any exist
+    if subdatasets:
+        subds_path = subdatasets[0][0]
+        print(f"Testing subdataset: {subds_path}")
+        subds = gdal.Open(subds_path)
+        assert subds is not None, f"Failed to open subdataset: {subds_path}"
+        print(f"✓ Successfully opened subdataset {subds_path}")
+    
+    if subds is None:
         print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
     assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
