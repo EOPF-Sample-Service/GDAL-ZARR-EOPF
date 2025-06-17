@@ -231,21 +231,21 @@ const OGRSpatialReference *EOPFZarrDataset::GetSpatialRef() const
     return mCachedSpatialRef;
 }
 
-char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
+char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
 {
     // For subdatasets, return the subdataset metadata
     if (pszDomain != nullptr && EQUAL(pszDomain, "SUBDATASETS"))
     {
         // First try from GDALDataset - this would be the subdatasets set by EOPFOpen
-        char **papszSubdatasets = GDALDataset::GetMetadata(pszDomain);
+        char** papszSubdatasets = GDALDataset::GetMetadata(pszDomain);
         if (papszSubdatasets && CSLCount(papszSubdatasets) > 0)
         {
-            CPLDebug("EOPFZARR", "GetMetadata(SUBDATASETS): Returning %d subdataset items from base dataset", 
-                     CSLCount(papszSubdatasets));
+            CPLDebug("EOPFZARR", "GetMetadata(SUBDATASETS): Returning %d subdataset items from base dataset",
+                CSLCount(papszSubdatasets));
             return papszSubdatasets;
         }
-        
-        // If not found in base dataset, try the inner dataset but with modified prefixes
+
+        // If not found in base dataset, try the inner dataset but with modified formats
         if (mInner)
         {
             papszSubdatasets = mInner->GetMetadata("SUBDATASETS");
@@ -258,7 +258,7 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
                     mSubdatasets = nullptr;
                 }
 
-                // Create new list with proper prefixes
+                // Create new list with updated format
                 for (int i = 0; papszSubdatasets[i] != nullptr; i++)
                 {
                     char* pszKey = nullptr;
@@ -266,10 +266,10 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
 
                     if (pszKey && pszValue)
                     {
-                        // If this is a NAME field, prepend EOPF_FILENAME_PREFIX
+                        // If this is a NAME field, convert ZARR: to EOPFZARR:
                         if (pszValue && strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
                         {
-                            CPLString eopfValue("EOPFZARR:"); // Use the correct driver prefix
+                            CPLString eopfValue("EOPFZARR:");
                             eopfValue += (pszValue + 5);      // Skip "ZARR:"
                             mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue);
                         }

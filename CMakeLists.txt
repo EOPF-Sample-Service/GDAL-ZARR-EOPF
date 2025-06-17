@@ -3,8 +3,8 @@ project(EOPFZarr LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 # Configuration options
-option(USE_FILENAME_PREFIX "Use filename prefix to identify EOPF datasets" ON)
-set(EOPF_FILENAME_PREFIX "eopf:" CACHE STRING "Filename prefix to identify EOPF datasets")
+# option(USE_FILENAME_PREFIX "Use filename prefix to identify EOPF datasets" ON)
+# set(EOPF_FILENAME_PREFIX "eopf:" CACHE STRING "Filename prefix to identify EOPF datasets")
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/eopfzarr_config.h.in"
