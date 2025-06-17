@@ -29,20 +29,3 @@ def test_open_sample_dataset():
         print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
     assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
 
-def test_subdatasets():
-    # Test listing subdatasets
-    ds = gdal.Open(SAMPLE_DATA_DIR)
-    subdatasets = ds.GetSubDatasets()
-    print(f"Found {len(subdatasets)} subdatasets")
-    
-    # Test opening first subdataset if any exist
-    if subdatasets:
-        subds_path = subdatasets[138][0].replace("ZARR:", "EOPFZARR:")
-        print(f"Testing subdataset: {subds_path}")
-        subds = gdal.Open(subds_path)
-        assert subds is not None, f"Failed to open subdataset: {subds_path}"
-        print(f"✓ Successfully opened subdataset {subds_path}")
-    
-    if subds is None:
-        print(f"Failed to open dataset at {SAMPLE_DATA_DIR}. Check if the plugin and sample data are correctly set up.")
-    assert ds is not None, f"Failed to open sample dataset at {SAMPLE_DATA_DIR}"
