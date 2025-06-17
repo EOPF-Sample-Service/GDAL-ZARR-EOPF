@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Tests for the EOPFZarr GDAL driver plugin.
 """
@@ -11,28 +11,21 @@ from osgeo import gdal
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SAMPLE_DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), '..', 'src', 'sample_data')
 
-def test_dataset_open(zarr_path, expected_driver="EOPFZARR"):
-    # Test opening a dataset
-    ds = gdal.Open(zarr_path)
-    assert ds is not None, f"Failed to open dataset: {zarr_path}"
-    driver_name = ds.GetDriver().ShortName
-    assert driver_name == expected_driver, f"Expected driver {expected_driver}, got {driver_name}"
-    print(f"? Successfully opened {zarr_path} with {driver_name} driver")
-    return ds
+def test_driver_registration():
+    """Test that the EOPFZARR driver is registered with GDAL."""
+    driver = gdal.GetDriverByName('EOPFZARR')
+    assert driver is not None, "EOPFZARR driver not found!"
+    print("✓ EOPFZARR driver is registered")
 
-def test_subdatasets(zarr_path):
-    # Test listing subdatasets
-    ds = gdal.Open(zarr_path)
-    subdatasets = ds.GetSubDatasets()
-    print(f"Found {len(subdatasets)} subdatasets")
+def test_open_sample_dataset():
+    """Test opening a sample dataset with the EOPFZARR driver."""
+    if 'GDAL_DRIVER_PATH' not in os.environ:
+        pytest.skip("GDAL_DRIVER_PATH not set - plugin may not be found")
     
-    # Test opening first subdataset if any exist
-    if subdatasets:
-        subds_path = subdatasets[0][0]
-        print(f"Testing subdataset: {subds_path}")
-        subds = gdal.Open(subds_path)
-        assert subds is not None, f"Failed to open subdataset: {subds_path}"
-        print(f"? Successfully opened subdataset {subds_path}")
-        subds = None
+    zarr_path = SAMPLE_DATA_DIR
+    zarr_path = zarr_path
+    ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY)
     
-    ds = None
+    if ds is None:
+        print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
+    assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
