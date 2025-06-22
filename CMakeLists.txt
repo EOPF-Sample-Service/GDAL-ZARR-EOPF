@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Include CTest for testing capabilities
 include(CTest)
-enable_testing()
+
 
 # Configuration options
 option(USE_FILENAME_PREFIX "Use filename prefix to identify EOPF datasets" ON)
@@ -58,7 +58,7 @@ if(WIN32)
              COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
 elseif(APPLE)
     add_test(NAME driver_registration 
-             COMMAND bash -c "export GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | grep -q EOPFZARR")
+             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 else()
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
