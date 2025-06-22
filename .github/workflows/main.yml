@@ -218,7 +218,7 @@ jobs:
       run: |
           export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
           echo "Test 1- Checking for EOPFZARR driver in available formats:"
-          gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
+          gdalinfo --formats | grep "EOPFZARR"
           echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
           echo "Test 3- Verifying dataset properties:"
