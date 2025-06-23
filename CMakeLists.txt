@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.14)
 project(EOPFZarr LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
+# Include CTest for testing capabilities
+include(CTest)
+
+
 # Configuration options
 # option(USE_FILENAME_PREFIX "Use filename prefix to identify EOPF datasets" ON)
 # set(EOPF_FILENAME_PREFIX "eopf:" CACHE STRING "Filename prefix to identify EOPF datasets")
@@ -32,6 +36,10 @@ if (WIN32)
         PREFIX ""
         OUTPUT_NAME "gdal_EOPFZarr"
         SUFFIX ".dll")
+elseif (APPLE)
+    set_target_properties(gdal_EOPFZarr PROPERTIES
+        PREFIX ""
+        SUFFIX ".dylib")
 else()
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
@@ -39,9 +47,18 @@ else()
 endif()
 
 enable_testing()
+# Set the test environment to find gdalinfo command
+find_program(GDALINFO_EXECUTABLE gdalinfo)
+if(NOT GDALINFO_EXECUTABLE)
+    message(WARNING "gdalinfo not found, tests may fail")
+endif()
+
 if(WIN32)
-    add_test(NAME driver_registration 
+    add_test(NAME driver_registration
              COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
+elseif(APPLE)
+    add_test(NAME driver_registration 
+             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 else()
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")

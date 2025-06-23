@@ -199,3 +199,71 @@ jobs:
       with:
         name: gdal-plugin-universal
         path: dist/*
+
+  macos-build:
+    name: macOS Build
+    runs-on: macos-13
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Install GDAL
+      run: |
+        brew update
+        brew install gdal cmake ninja
+    - name: Configure
+      run: |
+        cmake -S . -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_PREFIX_PATH=$(brew --prefix gdal)
+    - name: Build
+      run: cmake --build build --parallel
+    - name: Smoke test
+      run: |
+          export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+          echo "Test 1- Checking for EOPFZARR driver in available formats:"
+          gdalinfo --formats | grep "EOPFZARR"
+          echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
+          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
+          echo "Test 3- Verifying dataset properties:"
+          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
+          echo "Test 4- Sample of dataset info:"
+          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Get the system GDAL version first
+        GDAL_VERSION=$(gdal-config --version)
+        echo "System GDAL version: ${GDAL_VERSION}"
+        # Install the matching GDAL Python bindings
+        pip install gdal==${GDAL_VERSION}
+        # Install other requirements but exclude GDAL
+        grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin
+    - name: Run Python tests
+      run: |
+        # Set the driver path so Python tests can find the plugin
+        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+        # Run pytest
+        cd tests
+        pytest -xvs python/
+    - name: Debug info
+      if: failure()
+      run: |
+        echo "Listing available GDAL drivers:"
+        gdalinfo --formats
+        echo "Listing contents of the driver path:"
+        ls -la $GITHUB_WORKSPACE/build
+        echo "Listing contents of test Zarr dataset:"
+        ls -la /tmp/test.zarr/
+        echo "GDAL version information:"
+        gdalinfo --version
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal_EOPFZarr
+        path: build/*.dylib
+        
