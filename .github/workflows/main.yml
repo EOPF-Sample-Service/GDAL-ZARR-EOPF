@@ -43,19 +43,23 @@ jobs:
           # Create a more complete Zarr test dataset
           echo "Testing with sample data from repository:"
           ls -la $GITHUB_WORKSPACE/src/sample_data/
-          echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
-
+ 
+          echo "Test 2- Opening sample Zarr dataset with EOPF detection:"
           # Use CPL_DEBUG for detailed driver selection info
           export CPL_DEBUG=OFF
-          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
+          gdalinfo $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
       
+          # Test with explicit EOPF_PROCESS=YES
+          echo "Test 3- Explicitly using EOPF_PROCESS=YES:"
+          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
+
           # Verify dimensions or other expected properties of your sample data
-          echo "Test 3- Verifying dataset properties:"
+          echo "Test 4- Verifying dataset properties:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
 
           # Optional: Show a sample of the full output
-          echo "Test 4- Sample of dataset info:"
-          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
+          echo "Test 5- Sample of dataset info:"
+          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 70 || echo "Failed to retrieve dataset info"
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -155,7 +159,7 @@ jobs:
         Write-Host "Test 1- Available GDAL drivers:"
         gdalinfo --formats | findstr "EOPFZARR"
         
-        Write-Host "Test 2a- Opening Zarr dataset with default options:"
+        Write-Host "Test 2a- Opening Zarr dataset with automatic detection:"
         gdalinfo C:/temp/test.zarr/ | findstr "Driver"
         
         Write-Host "Test 2b- With EOPF_PROCESS=NO:"

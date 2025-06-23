@@ -22,6 +22,8 @@
 
 static GDALDriver *gEOPFDriver = nullptr; /* global ptr for reuse */
 
+
+
 /* -------------------------------------------------------------------- */
 /*  Tiny helper: does a file exist (works for /vsicurl/, /vsis3/)        */
 /* -------------------------------------------------------------------- */
@@ -31,135 +33,439 @@ static bool HasFile(const std::string &path)
     return VSIStatL(path.c_str(), &sStat) == 0;
 }
 
-/* -------------------------------------------------------------------- */
-/*      Identify — only accept Zarr files with the EOPF prefix           */
-/* -------------------------------------------------------------------- */
-static int EOPFIdentify(GDALOpenInfo *poOpenInfo)
-{
-    if (poOpenInfo->eAccess == GA_Update)
-        return FALSE;
-
-    // Check for filename prefix if enabled - ONLY accept this case
-#if USE_FILENAME_PREFIX
-    const char *pszPrefix = EOPF_FILENAME_PREFIX;
-    const size_t nPrefixLen = strlen(pszPrefix);
-
-    // Only accept files explicitly starting with our prefix
-    if (EQUALN(poOpenInfo->pszFilename, pszPrefix, nPrefixLen))
-    {
-        // Also verify there's something after the prefix
-        if (strlen(poOpenInfo->pszFilename) > nPrefixLen)
-        {
-            CPLDebug("EOPFZARR", "EOPFIdentify: Prefix %s detected in filename %s, accepting dataset.",
-                    pszPrefix, poOpenInfo->pszFilename);
-            return TRUE;
+// helper function to create consistently formatted paths for QGIS
+static std::string CreateQGISCompatiblePath(const std::string& path) {
+    std::string qgisPath = path;
+    
+#ifdef _WIN32
+    // Replace forward slashes with backslashes for consistent Windows paths
+    for (char& c : qgisPath) {
+        if (c == '/') c = '\\';
+    }
+    
+    // Handle network paths consistently
+    if (qgisPath.length() >= 2 && qgisPath[0] == '\\' && qgisPath[1] != '\\') {
+        // If it starts with a single backslash but not a UNC path
+        if (qgisPath.length() > 2 && qgisPath[2] == ':') {
+            // This is a path with leading slash before drive letter - remove it
+            qgisPath = qgisPath.substr(1);
         }
-        else
-        {
-            CPLDebug("EOPFZARR", "EOPFIdentify: Prefix only with no path detected, declining: %s", 
-                    poOpenInfo->pszFilename);
-            return FALSE;
-        }
+    }
+    
+    // Ensure UNC paths have double backslashes
+    if (qgisPath.length() >= 2 && qgisPath[0] == '\\' && qgisPath[1] == '\\') {
+        // This is already a proper UNC path - keep it
+    }
+    
+    // Handle trailing backslash consistently (remove unless root drive)
+    if (qgisPath.length() > 3 && qgisPath.back() == '\\') {
+        qgisPath.pop_back();
     }
 #endif
 
-    // Everything else is rejected
-    CPLDebug("EOPFZARR", "EOPFIdentify: No valid prefix detected, declining to handle: %s", 
-             poOpenInfo->pszFilename);
+    return qgisPath;
+}
+
+static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPath, std::string& subdatasetPath)
+{
+    // Debug the original path
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: Parsing path: %s", fullPath.c_str());
+
+    // First, check for EOPFZARR: prefix
+    const char* pszPrefix = "EOPFZARR:";
+    std::string pathWithoutPrefix = fullPath;
+    if (STARTS_WITH_CI(fullPath.c_str(), pszPrefix)) {
+        pathWithoutPrefix = fullPath.substr(strlen(pszPrefix));
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Removed prefix, now: %s", pathWithoutPrefix.c_str());
+    }
+
+    // Check for quoted path format: "path":subds
+    size_t startQuote = pathWithoutPrefix.find('\"');
+    if (startQuote != std::string::npos) {
+        size_t endQuote = pathWithoutPrefix.find('\"', startQuote + 1);
+        if (endQuote != std::string::npos && endQuote > startQuote + 1) {
+            // We have a quoted path - extract it
+            mainPath = pathWithoutPrefix.substr(startQuote + 1, endQuote - startQuote - 1);
+
+            // Now check if there's a subdataset part after the quoted path
+            if (endQuote + 1 < pathWithoutPrefix.length() && pathWithoutPrefix[endQuote + 1] == ':') {
+                // We have a subdataset part - everything after the colon
+                subdatasetPath = pathWithoutPrefix.substr(endQuote + 2);
+                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path with subdataset - Main: %s, Subds: %s",
+                    mainPath.c_str(), subdatasetPath.c_str());
+
+                // Fix Windows paths - replace forward slashes with backward slashes
+#ifdef _WIN32
+                // Replace forward slashes with backslashes
+                for (size_t i = 0; i < mainPath.length(); ++i) {
+                    if (mainPath[i] == '/') {
+                        mainPath[i] = '\\';
+                    }
+                }
+
+                // Remove leading slash if present in Windows paths (e.g., /C:/...)
+                if (!mainPath.empty() && mainPath[0] == '\\' &&
+                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+                    mainPath = mainPath.substr(1);
+                }
+
+                // Remove trailing slash if present
+                if (!mainPath.empty() && mainPath.back() == '\\') {
+                    mainPath.pop_back();
+                }
+#endif
+                return true;
+            }
+            // No subdataset part, just a quoted path
+            else {
+                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path without subdataset - Main: %s", mainPath.c_str());
+                subdatasetPath = "";
+#ifdef _WIN32
+                // Fix Windows paths - same as above
+                for (size_t i = 0; i < mainPath.length(); ++i) {
+                    if (mainPath[i] == '/') {
+                        mainPath[i] = '\\';
+                    }
+                }
+
+                if (!mainPath.empty() && mainPath[0] == '\\' &&
+                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+                    mainPath = mainPath.substr(1);
+                }
+
+                if (!mainPath.empty() && mainPath.back() == '\\') {
+                    mainPath.pop_back();
+                }
+#endif
+                return false;
+            }
+        }
+    }
+
+    // Check for simple path with subdataset separator (e.g., EOPFZARR:path:subds)
+    // This is complicated on Windows due to drive letters (C:)
+    std::string tmpPath = pathWithoutPrefix;
+    size_t colonPos = tmpPath.find(':');
+
+#ifdef _WIN32
+    // On Windows, the first colon might be the drive letter
+    if (colonPos != std::string::npos && colonPos == 1) {
+        // This is likely a drive letter - look for another colon
+        colonPos = tmpPath.find(':', colonPos + 1);
+    }
+#endif
+
+    if (colonPos != std::string::npos) {
+        mainPath = tmpPath.substr(0, colonPos);
+        subdatasetPath = tmpPath.substr(colonPos + 1);
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found simple path with subdataset - Main: %s, Subds: %s",
+            mainPath.c_str(), subdatasetPath.c_str());
+
+#ifdef _WIN32
+        // Fix Windows paths - same as above
+        for (size_t i = 0; i < mainPath.length(); ++i) {
+            if (mainPath[i] == '/') {
+                mainPath[i] = '\\';
+            }
+        }
+
+        if (!mainPath.empty() && mainPath[0] == '\\' &&
+            mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+            mainPath = mainPath.substr(1);
+        }
+
+        if (!mainPath.empty() && mainPath.back() == '\\') {
+            mainPath.pop_back();
+        }
+#endif
+        return true;
+    }
+
+    // Not a subdataset path
+    mainPath = pathWithoutPrefix;
+    subdatasetPath = "";
+
+#ifdef _WIN32
+    // Fix Windows paths - same as above
+    for (size_t i = 0; i < mainPath.length(); ++i) {
+        if (mainPath[i] == '/') {
+            mainPath[i] = '\\';
+        }
+    }
+
+    if (!mainPath.empty() && mainPath[0] == '\\' &&
+        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+        mainPath = mainPath.substr(1);
+    }
+
+    if (!mainPath.empty() && mainPath.back() == '\\') {
+        mainPath.pop_back();
+    }
+#endif
+
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: No subdataset found - Main: %s", mainPath.c_str());
+    return false;
+}
+
+static bool IsEOPFZarr(const std::string& path) {
+    // Extract main path if this is a subdataset reference
+    std::string mainPath, subdatasetPath;
+    ParseSubdatasetPath(path, mainPath, subdatasetPath);
+
+    // Use the main path for detection
+    std::string pathToCheck = mainPath;
+
+    // 1. Check for .zmetadata file
+    std::string zmetaPath = CPLFormFilename(pathToCheck.c_str(), ".zmetadata", nullptr);
+    if (HasFile(zmetaPath)) {
+        CPLJSONDocument doc;
+        if (doc.Load(zmetaPath)) {
+            const CPLJSONObject& root = doc.GetRoot();
+            const CPLJSONObject& metadata = root.GetObj("metadata");
+            if (metadata.IsValid()) {
+                const CPLJSONObject& zattrs = metadata.GetObj(".zattrs");
+                if (zattrs.IsValid() &&
+                    (zattrs.GetObj("stac_discovery").IsValid() ||
+                        !zattrs.GetString("eopf_category").empty() ||
+                        !zattrs.GetString("eopf:resolutions").empty())) {
+                    CPLDebug("EOPFZARR", "Dataset at %s identified as EOPF by .zmetadata markers", pathToCheck.c_str());
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 2. Check if it's a subdataset path with EOPFZARR prefix
+    if (STARTS_WITH_CI(path.c_str(), "EOPFZARR:")) {
+        CPLDebug("EOPFZARR", "Path starts with EOPFZARR: prefix, accepting");
+        return true;
+    }
+
+    return false;
+}
+/* -------------------------------------------------------------------- */
+/*      Identify — only accept Zarr files with the EOPF prefix           */
+/* -------------------------------------------------------------------- */
+static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
+{
+    if (poOpenInfo->eAccess == GA_Update)
+    {
+        CPLDebug("EOPFZARR", "EOPFIdentify: Update mode not supported");
+        return FALSE;
+    }
+
+    const char* pszFilename = poOpenInfo->pszFilename;
+
+    // Only identify in two very specific cases:
+    
+    // Case 1: Explicit EOPFZARR prefix (when someone explicitly wants this driver)
+    if (STARTS_WITH_CI(pszFilename, "EOPFZARR:")) {
+        CPLDebug("EOPFZARR", "EOPFIdentify: Found EOPFZARR prefix, accepting");
+        return TRUE;
+    }
+
+    // Case 2: Explicit EOPF_PROCESS=YES option is provided
+    const char* pszEOPFProcess = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
+    if (pszEOPFProcess && 
+        (EQUAL(pszEOPFProcess, "YES") || EQUAL(pszEOPFProcess, "TRUE") || EQUAL(pszEOPFProcess, "1")))
+    {
+        CPLDebug("EOPFZARR", "EOPFIdentify: EOPF_PROCESS option is set to YES, accepting");
+        return TRUE;
+    }
+    
+    // For all other cases, decline - let other drivers (including Zarr) handle them
+    CPLDebug("EOPFZARR", "EOPFIdentify: No explicit EOPF selection, declining");
     return FALSE;
 }
 
 /* -------------------------------------------------------------------- */
 /*      Open — delegate to the core Zarr driver, then wrap it            */
 /* -------------------------------------------------------------------- */
-static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
+static GDALDataset* OpenSubdataset(const std::string& mainPath, 
+                                 const std::string& subdatasetPath,
+                                 unsigned int nOpenFlags, 
+                                 char** papszOpenOptions)
 {
-    // Double check that we're only handling prefixed paths
-    const char *pszFilename = poOpenInfo->pszFilename;
+    char* const azDrvList[] = { (char*)"Zarr", nullptr };
     
-    // If the path doesn't have our prefix, immediately return nullptr
-    const char *pszPrefix = EOPF_FILENAME_PREFIX;
-    const size_t nPrefixLen = strlen(pszPrefix);
-    
-    if (!EQUALN(pszFilename, pszPrefix, nPrefixLen))
-    {
-        CPLError(CE_Failure, CPLE_AppDefined, 
-                 "EOPFZARR driver should only be used with %s prefix", pszPrefix);
-        CPLDebug("EOPFZARR", "EOPFOpen: Path doesn't start with %s, rejecting: %s", 
-                 pszPrefix, pszFilename);
-        return nullptr;
-    }
-
-    // Process filename prefix if enabled
-#if USE_FILENAME_PREFIX
-    CPLDebug("EOPFZARR", "EOPFOpen: Prefix %s detected in filename %s",
-             pszPrefix, pszFilename);
-
-    // Extract the actual path after the prefix
-    const char *pszActualFilename = pszFilename + nPrefixLen;
-    
-    if (strlen(pszActualFilename) == 0)
-    {
-        CPLError(CE_Failure, CPLE_AppDefined, 
-                 "No path specified after %s prefix", pszPrefix);
-        return nullptr;
-    }
-
-    CPLDebug("EOPFZARR", "Extracted path after prefix: %s", pszActualFilename);
-
-    // For Windows paths, check if it's a valid path
-    // If the path doesn't have proper drive letter format, it might need fixing
+    // Try direct path first - most reliable for QGIS
+    std::string directPath = mainPath;
+    if (!directPath.empty() && directPath.back() != '/' && directPath.back() != '\\')
 #ifdef _WIN32
-    // If path starts with single backslash, it's likely a Windows path with escaped backslashes
-    // We'll need to convert it properly
-    std::string fixedPath = pszActualFilename;
-
-    // Check if GDAL already fixed the path
-    VSIStatBufL sStat;
-    if (VSIStatL(pszActualFilename, &sStat) != 0)
-    {
-        CPLDebug("EOPFZARR", "Path after prefix doesn't exist directly: %s", pszActualFilename);
-
-        // Try standard VSI path
-        std::string vsiPath = "/vsifs/";
-        vsiPath += pszActualFilename;
-        if (VSIStatL(vsiPath.c_str(), &sStat) == 0)
-        {
-            fixedPath = vsiPath;
-            CPLDebug("EOPFZARR", "Using VSI filesystem path: %s", fixedPath.c_str());
+        directPath += '\\';
+#else
+        directPath += '/';
+#endif
+    directPath += subdatasetPath;
+    
+    CPLDebug("EOPFZARR", "Attempting to open subdataset directly: %s", directPath.c_str());
+    GDALDataset* poDS = static_cast<GDALDataset*>(GDALOpenEx(directPath.c_str(), 
+        nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY, azDrvList, papszOpenOptions, nullptr));
+        
+    if (poDS)
+        return poDS;
+        
+    // If direct access fails, try opening parent and then finding the subdataset
+    CPLDebug("EOPFZARR", "Direct access failed, trying through parent dataset");
+    
+    // Open parent dataset
+    GDALDataset* poParentDS = static_cast<GDALDataset*>(GDALOpenEx(mainPath.c_str(), 
+        nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY, azDrvList, papszOpenOptions, nullptr));
+    
+    if (!poParentDS) {
+        CPLDebug("EOPFZARR", "Failed to open parent dataset: %s", mainPath.c_str());
+        return nullptr;
+    }
+    
+    std::unique_ptr<GDALDataset> parentGuard(poParentDS);
+    
+    // Find the subdataset
+    char** papszSubdatasets = poParentDS->GetMetadata("SUBDATASETS");
+    if (!papszSubdatasets) {
+        CPLDebug("EOPFZARR", "No subdatasets found in parent dataset");
+        return nullptr;
+    }
+    
+    // Prepare subdataset path for matching - normalize for comparison
+    std::string cleanSubdsPath = subdatasetPath;
+    if (!cleanSubdsPath.empty() && 
+        (cleanSubdsPath.front() == '/' || cleanSubdsPath.front() == '\\')) {
+        cleanSubdsPath = cleanSubdsPath.substr(1);
+    }
+    
+    // Search for matching subdataset
+    for (int i = 0; papszSubdatasets[i]; i++) {
+        if (strstr(papszSubdatasets[i], "_NAME=") == nullptr)
+            continue;
+            
+        char* pszKey = nullptr;
+        const char* pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
+        if (pszKey && pszValue && STARTS_WITH_CI(pszValue, "ZARR:")) {
+            // Try to extract subdataset path from ZARR path
+            std::string extractedPath = pszValue;
+            size_t pathEndPos = extractedPath.find("\":", 5);  // Look for ": after ZARR:
+            
+            if (pathEndPos != std::string::npos) {
+                std::string subdsComponent = extractedPath.substr(pathEndPos + 2);
+                
+                // Normalize subdataset paths for comparison
+                if (!subdsComponent.empty() && 
+                    (subdsComponent.front() == '/' || subdsComponent.front() == '\\')) {
+                    subdsComponent = subdsComponent.substr(1);
+                }
+                
+                if (subdsComponent == cleanSubdsPath) {
+                    // Found a matching subdataset, open it directly
+                    CPLDebug("EOPFZARR", "Found matching subdataset: %s", pszValue);
+                    
+                    CPLErrorHandler oldHandler = CPLSetErrorHandler(CPLQuietErrorHandler);
+                    poDS = static_cast<GDALDataset*>(GDALOpenEx(pszValue, 
+                        nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY, 
+                        azDrvList, papszOpenOptions, nullptr));
+                    CPLSetErrorHandler(oldHandler);
+                    
+                    if (poDS) {
+                        return poDS;
+                    }
+                }
+            }
         }
+        CPLFree(pszKey);
     }
-    pszActualFilename = CPLStrdup(fixedPath.c_str());
-#endif
-
-    CPLDebug("EOPFZARR", "Using actual path: %s", pszActualFilename);
-
-    // Open the Zarr dataset directly, explicitly requiring the Zarr driver
-    char *const azDrvList[] = {(char *)"Zarr", nullptr};
-
-    // Create option list for zarr driver
-    char **papszOpenOptionsCopy = CSLDuplicate(poOpenInfo->papszOpenOptions);
     
-    // Add an option to ensure the EOPFZARR driver isn't recursively called
-    papszOpenOptionsCopy = CSLSetNameValue(papszOpenOptionsCopy, "GDAL_SKIP", "EOPFZARR");
+    CPLDebug("EOPFZARR", "No matching subdataset found for: %s", subdatasetPath.c_str());
+    return nullptr;
+}
 
-    GDALDataset *poUnderlyingDataset = static_cast<GDALDataset *>(
-        GDALOpenEx(pszActualFilename,
-                   poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
-                   azDrvList,
-                   papszOpenOptionsCopy,
-                   nullptr));
+static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
+{
+    const char* pszFilename = poOpenInfo->pszFilename;
+    CPLDebug("EOPFZARR", "EOPFOpen: Opening file: %s", pszFilename);
 
+    // Parse the filename to check if it's a subdataset reference
+    std::string mainPath, subdatasetPath;
+    bool isSubdataset = ParseSubdatasetPath(pszFilename, mainPath, subdatasetPath);
+
+    // If this is a subdataset path with our prefix, strip the prefix - this should already be handled in ParseSubdatasetPath
+    if (STARTS_WITH_CI(mainPath.c_str(), "EOPFZARR:")) {
+        mainPath = mainPath.substr(9); // Skip "EOPFZARR:"
+        CPLDebug("EOPFZARR", "EOPFOpen: Removed EOPFZARR prefix, main path: %s", mainPath.c_str());
+    }
+
+    CPLDebug("EOPFZARR", "EOPFOpen: After parsing - Main path: %s, Subdataset path: %s",
+        mainPath.c_str(), subdatasetPath.c_str());
+
+    // Verify that the main path exists
+    VSIStatBufL sStat;
+    if (VSIStatL(mainPath.c_str(), &sStat) != 0) {
+        CPLDebug("EOPFZARR", "EOPFOpen: Main path does not exist: %s", mainPath.c_str());
+        CPLError(CE_Failure, CPLE_OpenFailed, "EOPFZARR driver: Main path '%s' does not exist", mainPath.c_str());
+        return nullptr;
+    }
+
+    // Create option list for zarr driver - DO NOT pass EOPF_PROCESS to underlying driver
+    char** papszOpenOptionsCopy = nullptr;
+    for (char** papszIter = poOpenInfo->papszOpenOptions; papszIter && *papszIter; ++papszIter)
+    {
+        char* pszKey = nullptr;
+        const char* pszValue = CPLParseNameValue(*papszIter, &pszKey);
+        if (pszKey && !EQUAL(pszKey, "EOPF_PROCESS"))
+        {
+            papszOpenOptionsCopy = CSLSetNameValue(papszOpenOptionsCopy, pszKey, pszValue);
+        }
+        CPLFree(pszKey);
+    }
+
+    // Use a config option (not open option) to temporarily disable EOPFZARR driver
+    // Store the previous value first
+    const char* pszOldSkip = CPLGetConfigOption("GDAL_SKIP", nullptr);
+    CPLString osOldSkip = pszOldSkip ? pszOldSkip : "";
+
+    // Add EOPFZARR to the list of skipped drivers
+    CPLString osNewSkip = osOldSkip;
+    if (!osNewSkip.empty()) {
+        osNewSkip += ",";
+    }
+    osNewSkip += "EOPFZARR";
+
+    // Set the new GDAL_SKIP config option
+    CPLSetConfigOption("GDAL_SKIP", osNewSkip.c_str());
+
+    // Different handling for main dataset vs subdataset
+    GDALDataset* poUnderlyingDataset = nullptr;
+
+    if (!isSubdataset || subdatasetPath.empty()) {
+        // Open the Zarr dataset directly, explicitly requiring the Zarr driver
+        char* const azDrvList[] = { (char*)"Zarr", nullptr };
+
+        CPLDebug("EOPFZARR", "EOPFOpen: Opening main dataset with core Zarr driver: %s", mainPath.c_str());
+        poUnderlyingDataset = static_cast<GDALDataset*>(
+            GDALOpenEx(mainPath.c_str(),
+                poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                azDrvList,
+                papszOpenOptionsCopy,
+                nullptr));
+    }
+    else {
+        // For subdatasets, use the helper function for better handling
+        poUnderlyingDataset = OpenSubdataset(mainPath, subdatasetPath, poOpenInfo->nOpenFlags, papszOpenOptionsCopy);
+    }
+
+    // Restore the original GDAL_SKIP config option
+    CPLSetConfigOption("GDAL_SKIP", osOldSkip.empty() ? nullptr : osOldSkip.c_str());
+
+    // Clean up
     CSLDestroy(papszOpenOptionsCopy);
-#ifdef _WIN32
-    CPLFree((void *)pszActualFilename);
-#endif
 
     if (!poUnderlyingDataset)
     {
-        CPLDebug("EOPFZARR", "EOPFOpen: Core Zarr driver could not open %s.", pszActualFilename);
-        CPLError(CE_Failure, CPLE_OpenFailed, 
-                 "EOPFZARR driver: Core Zarr driver could not open %s.", pszActualFilename);
+        CPLDebug("EOPFZARR", "EOPFOpen: Core Zarr driver could not open %s %s",
+            mainPath.c_str(), isSubdataset ? "or subdataset not found" : "");
+        CPLError(CE_Failure, CPLE_OpenFailed,
+            "EOPFZARR driver: Core Zarr driver could not open %s%s%s",
+            mainPath.c_str(),
+            isSubdataset ? " or subdataset " : "",
+            isSubdataset ? subdatasetPath.c_str() : "");
         return nullptr;
     }
 
@@ -175,23 +481,19 @@ static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
 
     // Create the wrapper dataset
     EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
-    
+
     // Set a property on the dataset to mark it as explicitly created by the EOPF driver
-    // This can help debugging and identification
     if (poDS != nullptr)
     {
         poDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
+
+        // If this was a subdataset, store the subdataset path for reference
+        if (isSubdataset && !subdatasetPath.empty()) {
+            poDS->SetMetadataItem("SUBDATASET_PATH", subdatasetPath.c_str());
+        }
     }
-    
+
     return poDS;
-#else
-    // If prefix support is disabled, this driver should not be used
-    CPLError(CE_Failure, CPLE_AppDefined, 
-             "EOPFZARR driver requires filename prefix support but it is disabled");
-    CPLDebug("EOPFZARR", "EOPFOpen: Filename prefix support is disabled, cannot open file: %s", 
-             pszFilename);
-    return nullptr;
-#endif
 }
 
 /* -------------------------------------------------------------------- */
@@ -205,52 +507,71 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     if (!GDAL_CHECK_VERSION("EOPFZARR"))
         return;
 
-    // Make sure the Zarr driver is registered first - try to register it if not present
-    GDALDriverManager *poDM = GetGDALDriverManager();
-    GDALDriver *poZarrDriver = poDM->GetDriverByName("Zarr");
+    // Make sure the Zarr driver is registered first
+    GDALDriverManager* poDM = GetGDALDriverManager();
+    GDALDriver* poZarrDriver = poDM->GetDriverByName("Zarr");
     if (poZarrDriver == nullptr)
     {
         CPLDebug("EOPFZARR", "Core Zarr driver not registered. Trying to register it.");
-        // Try to register the Zarr driver
         GDALRegister_Zarr();
-        
-        // Check again
+
         poZarrDriver = poDM->GetDriverByName("Zarr");
         if (poZarrDriver == nullptr)
         {
-            CPLError(CE_Warning, CPLE_AppDefined, 
-                     "Core Zarr driver could not be registered. EOPFZARR may not work correctly.");
+            CPLError(CE_Warning, CPLE_AppDefined,
+                "Core Zarr driver could not be registered. EOPFZARR may not work correctly.");
         }
     }
+    
+    // ==== INJECT THE OPTION DIRECTLY INTO THE ZARR DRIVER ====
+    if (poZarrDriver) {
+        const char* pszExistingOptions = poZarrDriver->GetMetadataItem(GDAL_DMD_OPENOPTIONLIST);
+        
+        // Only add if EOPF_PROCESS doesn't already exist
+        if (pszExistingOptions == nullptr || strstr(pszExistingOptions, "EOPF_PROCESS") == nullptr) {
+            const char* pszAddOption = 
+                "  <Option name='EOPF_PROCESS' type='boolean' default='NO' description='Enable EOPF features'>"
+                "    <Value>YES</Value>"
+                "    <Value>NO</Value>"
+                "  </Option>";
+                
+            if (pszExistingOptions && strlen(pszExistingOptions) > 20) {
+                // Find where to insert our option
+                const char* pszInsertPoint = strstr(pszExistingOptions, "</OpenOptionList>");
+                if (pszInsertPoint) {
+                    size_t insertPos = pszInsertPoint - pszExistingOptions;
+                    std::string newOptions(pszExistingOptions);
+                    newOptions.insert(insertPos, pszAddOption);
+                    poZarrDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, newOptions.c_str());
+                    CPLDebug("EOPFZARR", "Injected EOPF_PROCESS option into Zarr driver options");
+                }
+            } else {
+                CPLString osOptions;
+                osOptions.Printf("<OpenOptionList>%s</OpenOptionList>", pszAddOption);
+                poZarrDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, osOptions.c_str());
+                CPLDebug("EOPFZARR", "Created new options list with EOPF_PROCESS for Zarr driver");
+            }
+        }
+        
+        // Force this option to be visible
+        poZarrDriver->SetMetadataItem("EOPF_PROCESS_OPTION_AVAILABLE", "YES");
+    }
 
+    // ==== REGISTER OUR OWN DRIVER AS USUAL ====
     gEOPFDriver = new GDALDriver();
-
     gEOPFDriver->SetDescription("EOPFZARR");
     gEOPFDriver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver");
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     gEOPFDriver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     gEOPFDriver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
-
-#if USE_FILENAME_PREFIX
-    // Register the connection prefix for our driver
-    gEOPFDriver->SetMetadataItem(GDAL_DMD_CONNECTION_PREFIX, EOPF_FILENAME_PREFIX);
-
-    // Add description about the prefix usage
-    CPLString prefixDescription;
-    prefixDescription.Printf("EOPF datasets can be accessed using the '%s' prefix, e.g.: %sdata.zarr",
-                             EOPF_FILENAME_PREFIX, EOPF_FILENAME_PREFIX);
-    gEOPFDriver->SetMetadataItem("PREFIX_USAGE", prefixDescription.c_str());
-#endif
+    gEOPFDriver->SetMetadataItem(GDAL_DMD_SUBDATASETS, "YES");
 
     gEOPFDriver->pfnIdentify = EOPFIdentify;
     gEOPFDriver->pfnOpen = EOPFOpen;
 
-    // Register the driver after the core Zarr driver
-    // Note: RegisterDriver appends to the end of the list, ensuring it's after Zarr
     poDM->RegisterDriver(gEOPFDriver);
-
-    CPLDebug("EOPFZARR", "EOPFZarr driver registered with filename prefix support: %s",
-             USE_FILENAME_PREFIX ? EOPF_FILENAME_PREFIX : "(disabled)");
+    
+    CPLDebug("EOPFZARR", "EOPFZarr driver registered and injected EOPF_PROCESS into Zarr driver options");
 }
 
 extern "C" EOPFZARR_DLL void GDALRegisterMe()

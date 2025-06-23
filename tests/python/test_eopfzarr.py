@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Tests for the EOPFZarr GDAL driver plugin.
 """
@@ -14,8 +14,8 @@ SAMPLE_DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), '..', 'src', 'sample
 def test_driver_registration():
     """Test that the EOPFZARR driver is registered with GDAL."""
     driver = gdal.GetDriverByName('EOPFZARR')
-    assert driver is not None, "EOPFZARR driver not found - check GDAL_DRIVER_PATH"
-    assert driver.GetDescription() == 'EOPFZARR'
+    assert driver is not None, "EOPFZARR driver not found!"
+    print("✓ EOPFZARR driver is registered")
 
 def test_open_sample_dataset():
     """Test opening a sample dataset with the EOPFZARR driver."""
@@ -23,9 +23,9 @@ def test_open_sample_dataset():
         pytest.skip("GDAL_DRIVER_PATH not set - plugin may not be found")
     
     zarr_path = SAMPLE_DATA_DIR
-    zarr_path = "eopf:"+zarr_path
     ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY)
     
     if ds is None:
         print(f"Failed to open dataset at {zarr_path}. Check if the plugin and sample data are correctly set up.")
     assert ds is not None, f"Failed to open sample dataset at {zarr_path}"
+

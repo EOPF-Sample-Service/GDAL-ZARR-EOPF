@@ -5,11 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 # Include CTest for testing capabilities
 include(CTest)
 
-
-# Configuration options
-option(USE_FILENAME_PREFIX "Use filename prefix to identify EOPF datasets" ON)
-set(EOPF_FILENAME_PREFIX "eopf:" CACHE STRING "Filename prefix to identify EOPF datasets")
-
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/eopfzarr_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/include/eopfzarr_config.h"
@@ -18,6 +13,7 @@ configure_file(
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
+# Main driver library (MODULE)
 add_library(gdal_EOPFZarr MODULE
     src/eopfzarr_driver.cpp
     src/eopfzarr_dataset.cpp
@@ -36,6 +32,15 @@ if (WIN32)
         PREFIX ""
         OUTPUT_NAME "gdal_EOPFZarr"
         SUFFIX ".dll")
+
+    # Simplified .def file - just export the standard entry points
+    set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/eopfzarr_exports.def")
+    file(WRITE ${DEF_FILE} "EXPORTS\n")
+    file(APPEND ${DEF_FILE} "    GDALRegisterMe\n")
+    file(APPEND ${DEF_FILE} "    GDALRegister_EOPFZarr\n")
+
+    # Add the .def file to the library
+    target_link_options(gdal_EOPFZarr PRIVATE "/DEF:${DEF_FILE}")
 elseif (APPLE)
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
@@ -45,6 +50,20 @@ else()
         PREFIX ""
         SUFFIX ".so")
 endif()
+
+# Install to GDAL plugins directory
+if(WIN32)
+    set(GDAL_PLUGINS_DIR "$ENV{GDAL_DRIVER_PATH}" CACHE PATH "Directory where GDAL plugins are installed")
+    if(NOT GDAL_PLUGINS_DIR)
+        set(GDAL_PLUGINS_DIR "$ENV{PROGRAMDATA}/GDAL/plugins")
+    endif()
+else()
+    set(GDAL_PLUGINS_DIR "${CMAKE_INSTALL_PREFIX}/lib/gdalplugins" CACHE PATH "Directory where GDAL plugins are installed")
+endif()
+
+install(TARGETS gdal_EOPFZarr 
+    LIBRARY DESTINATION ${GDAL_PLUGINS_DIR}
+)
 
 enable_testing()
 # Set the test environment to find gdalinfo command
