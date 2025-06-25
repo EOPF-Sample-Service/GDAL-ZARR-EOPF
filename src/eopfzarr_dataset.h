@@ -1,6 +1,7 @@
 #pragma once
 #include "gdal_priv.h"
 #include "gdal_pam.h"
+#include "gdal_proxy.h"
 #include <memory>
 
 namespace EOPF {

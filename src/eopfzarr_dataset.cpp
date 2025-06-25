@@ -33,7 +33,7 @@ EOPFZarrDataset::~EOPFZarrDataset()
     if (mSubdatasets)
         CSLDestroy(mSubdatasets);
 
-    if (mSubdatasets)
+    if (mCachedSpatialRef)
     {
         delete mCachedSpatialRef;
         mCachedSpatialRef = nullptr;
@@ -79,10 +79,19 @@ EOPFZarrDataset *EOPFZarrDataset::Create(GDALDataset *inner, GDALDriver *drv)
 
 void EOPFZarrDataset::LoadEOPFMetadata()
 {
-    // In LoadEOPFMetadata
+    // Get the directory path where the dataset is stored
+    std::string rootPath = mInner->GetDescription();
+    
+    // Use the EOPF AttachMetadata function to load all metadata
+    EOPF::AttachMetadata(*this, rootPath);
+    
+    // After metadata is attached, make sure geospatial info is processed
+    
+    // Check for geotransform in metadata
     const char *pszGeoTransform = GetMetadataItem("geo_transform");
     if (pszGeoTransform)
     {
+        CPLDebug("EOPFZARR", "Found geo_transform metadata: %s", pszGeoTransform);
         double adfGeoTransform[6] = {0};
         char **papszTokens = CSLTokenizeString2(pszGeoTransform, ",", 0);
         if (CSLCount(papszTokens) == 6)
@@ -90,27 +99,148 @@ void EOPFZarrDataset::LoadEOPFMetadata()
             for (int i = 0; i < 6; i++)
                 adfGeoTransform[i] = CPLAtof(papszTokens[i]);
 
-            // Use the parent class method to set the geotransform
+            // Set the geotransform
             GDALPamDataset::SetGeoTransform(adfGeoTransform);
+            CPLDebug("EOPFZARR", "Set geotransform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", 
+                     adfGeoTransform[0], adfGeoTransform[1], adfGeoTransform[2],
+                     adfGeoTransform[3], adfGeoTransform[4], adfGeoTransform[5]);
+        }
+        else
+        {
+            CPLDebug("EOPFZARR", "Invalid geo_transform format, expected 6 elements");
         }
         CSLDestroy(papszTokens);
     }
 
-    // Similarly for projection
+    // Check for spatial reference (projection) in metadata
     const char *pszSpatialRef = GetMetadataItem("spatial_ref");
     if (pszSpatialRef && strlen(pszSpatialRef) > 0)
     {
+        CPLDebug("EOPFZARR", "Found spatial_ref metadata: %s", pszSpatialRef);
+        
+        // Create OGR spatial reference from WKT
         OGRSpatialReference oSRS;
         if (oSRS.importFromWkt(pszSpatialRef) == OGRERR_NONE)
         {
+            // Set the projection
             GDALPamDataset::SetSpatialRef(&oSRS);
+            CPLDebug("EOPFZARR", "Set spatial reference from WKT");
         }
+        else
+        {
+            CPLDebug("EOPFZARR", "Failed to import WKT: %s", pszSpatialRef);
+        }
+    }
+
+    // Check for EPSG code
+    const char *pszEPSG = GetMetadataItem("EPSG");
+    if (pszEPSG && strlen(pszEPSG) > 0 && !GetSpatialRef())
+    {
+        CPLDebug("EOPFZARR", "Found EPSG metadata: %s", pszEPSG);
+        int nEPSG = atoi(pszEPSG);
+        if (nEPSG > 0)
+        {
+            OGRSpatialReference oSRS;
+            if (oSRS.importFromEPSG(nEPSG) == OGRERR_NONE)
+            {
+                // Set the projection
+                GDALPamDataset::SetSpatialRef(&oSRS);
+                CPLDebug("EOPFZARR", "Set spatial reference from EPSG: %d", nEPSG);
+            }
+        }
+    }
+
+    // Check for corner coordinates that might be available in various metadata items
+    
+    // UTM coordinates
+    bool hasUtmCorners = false;
+    double utmMinX = 0, utmMaxX = 0, utmMinY = 0, utmMaxY = 0;
+    
+    const char *pszUtmMinX = GetMetadataItem("utm_easting_min");
+    const char *pszUtmMaxX = GetMetadataItem("utm_easting_max");
+    const char *pszUtmMinY = GetMetadataItem("utm_northing_min");
+    const char *pszUtmMaxY = GetMetadataItem("utm_northing_max");
+    
+    if (pszUtmMinX && pszUtmMaxX && pszUtmMinY && pszUtmMaxY)
+    {
+        utmMinX = CPLAtof(pszUtmMinX);
+        utmMaxX = CPLAtof(pszUtmMaxX);
+        utmMinY = CPLAtof(pszUtmMinY);
+        utmMaxY = CPLAtof(pszUtmMaxY);
+        hasUtmCorners = true;
+        
+        CPLDebug("EOPFZARR", "Found UTM corners: MinX=%.2f, MaxX=%.2f, MinY=%.2f, MaxY=%.2f",
+                utmMinX, utmMaxX, utmMinY, utmMaxY);
+    }
+    
+    // Geographic coordinates
+    bool hasGeographicCorners = false;
+    double lonMin = 0, lonMax = 0, latMin = 0, latMax = 0;
+    
+    const char *pszLonMin = GetMetadataItem("geospatial_lon_min");
+    const char *pszLonMax = GetMetadataItem("geospatial_lon_max");
+    const char *pszLatMin = GetMetadataItem("geospatial_lat_min");
+    const char *pszLatMax = GetMetadataItem("geospatial_lat_max");
+    
+    if (pszLonMin && pszLonMax && pszLatMin && pszLatMax)
+    {
+        lonMin = CPLAtof(pszLonMin);
+        lonMax = CPLAtof(pszLonMax);
+        latMin = CPLAtof(pszLatMin);
+        latMax = CPLAtof(pszLatMax);
+        hasGeographicCorners = true;
+        
+        CPLDebug("EOPFZARR", "Found geographic corners: LonMin=%.6f, LonMax=%.6f, LatMin=%.6f, LatMax=%.6f",
+                lonMin, lonMax, latMin, latMax);
+    }
+    
+    // If we have corner coordinates but no geotransform, calculate one
+    if (!pszGeoTransform && (hasUtmCorners || hasGeographicCorners))
+    {
+        double adfGeoTransform[6] = {0};
+        
+        // Use UTM corners if available, otherwise use geographic corners
+        double minX = hasUtmCorners ? utmMinX : lonMin;
+        double maxX = hasUtmCorners ? utmMaxX : lonMax;
+        double minY = hasUtmCorners ? utmMinY : latMin;
+        double maxY = hasUtmCorners ? utmMaxY : latMax;
+        
+        int width = GetRasterXSize();
+        int height = GetRasterYSize();
+        
+        if (width > 0 && height > 0)
+        {
+            adfGeoTransform[0] = minX;                     // top left x
+            adfGeoTransform[1] = (maxX - minX) / width;    // w-e pixel resolution
+            adfGeoTransform[2] = 0.0;                      // rotation, 0 if image is "north up"
+            adfGeoTransform[3] = maxY;                     // top left y
+            adfGeoTransform[4] = 0.0;                      // rotation, 0 if image is "north up"
+            adfGeoTransform[5] = -std::fabs((maxY - minY) / height);  // n-s pixel resolution (negative value)
+            
+            GDALPamDataset::SetGeoTransform(adfGeoTransform);
+            CPLDebug("EOPFZARR", "Created geotransform from corner coordinates: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]",
+                    adfGeoTransform[0], adfGeoTransform[1], adfGeoTransform[2],
+                    adfGeoTransform[3], adfGeoTransform[4], adfGeoTransform[5]);
+        }
+    }
+    
+    // Ensure there's valid georeference info for OSGeo4W shell
+    double adfGeoTransform[6];
+    if (GDALPamDataset::GetGeoTransform(adfGeoTransform) != CE_None && !GetSpatialRef())
+    {
+        // Log that no georeference info was found
+        CPLDebug("EOPFZARR", "No georeference information found in metadata");
     }
 }
 
 CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
 {
-    return GDALPamDataset::GetGeoTransform(padfTransform);
+    CPLErr eErr = GDALPamDataset::GetGeoTransform(padfTransform);
+    if (eErr == CE_None)
+        return eErr;
+
+    // Fall back to inner dataset
+    return mInner->GetGeoTransform(padfTransform);
 }
 
 CPLErr EOPFZarrDataset::SetSpatialRef(const OGRSpatialReference *poSRS)
@@ -127,7 +257,13 @@ CPLErr EOPFZarrDataset::SetGeoTransform(double *padfTransform)
 
 const OGRSpatialReference* EOPFZarrDataset::GetSpatialRef() const
 {
-    return GDALPamDataset::GetSpatialRef();
+    // First check PAM
+    const OGRSpatialReference* poSRS = GDALPamDataset::GetSpatialRef();
+    if (poSRS)
+        return poSRS;
+
+    // Fall back to inner dataset
+    return mInner->GetSpatialRef();
 }
 
 char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
@@ -188,8 +324,45 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
         return nullptr;
     }
 
+    else if (pszDomain == nullptr || EQUAL(pszDomain, ""))
+    {
+        // If not already cached, get inner metadata and merge with our own
+        if (m_papszDefaultDomainFilteredMetadata == nullptr)
+        {
+            // Get our metadata first
+            m_papszDefaultDomainFilteredMetadata = CSLDuplicate(GDALPamDataset::GetMetadata());
+
+            // Get metadata from inner dataset
+            char** papszInnerMeta = mInner->GetMetadata();
+            for (char** papszIter = papszInnerMeta; papszIter && *papszIter; ++papszIter)
+            {
+                char* pszKey = nullptr;
+                const char* pszValue = CPLParseNameValue(*papszIter, &pszKey);
+                if (pszKey && pszValue)
+                {
+                    m_papszDefaultDomainFilteredMetadata =
+                        CSLSetNameValue(m_papszDefaultDomainFilteredMetadata, pszKey, pszValue);
+                }
+                CPLFree(pszKey);
+            }
+        }
+        return m_papszDefaultDomainFilteredMetadata;
+    }
+
+    else
+    {
+        // First try PAM
+        char** papszMD = GDALPamDataset::GetMetadata(pszDomain);
+        if (papszMD && CSLCount(papszMD) > 0)
+            return papszMD;
+
+        // Fall back to inner dataset
+        if (mInner)
+            return mInner->GetMetadata(pszDomain);
+    }
+
     // For other domains, handle as before
-    return GDALDataset::GetMetadata(pszDomain);
+    return GDALPamDataset::GetMetadata(pszDomain);
 }
 
 char **EOPFZarrDataset::GetFileList()
