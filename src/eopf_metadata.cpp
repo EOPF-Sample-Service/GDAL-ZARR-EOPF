@@ -4,6 +4,15 @@
 #include <cstdlib>              // strtol
 #include <functional>
 #include <cmath>                // For fabs
+#include <mutex>
+
+namespace EOPF {
+    // Add a mutex for AttachMetadata
+
+    static std::mutex gMetadataMutex;
+
+    
+}
 
 /* ------------------------------------------------------------------ */
 /*      Extract coordinate-related metadata from JSON                  */
@@ -351,10 +360,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
         // Create source (WGS84, assuming input bounds were geographic if not from proj:bbox)
         // and target (UTM) spatial references
         OGRSpatialReference srcSRS_transform, tgtSRS_transform;
-        // Heuristic: if bounds are small and look like lat/lon, assume WGS84
-        // This is tricky; ideally, the source CRS of these bounds should be known.
-        // For now, let's assume if isUTM is true, but we didn't use proj:bbox,
-        // the minX/minY etc. might still be geographic.
+
         bool boundsLookGeographic = (std::abs(minX) <= 180 && std::abs(maxX) <= 180 &&
             std::abs(minY) <= 90 && std::abs(maxY) <= 90);
 
@@ -575,6 +581,9 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds, const std::string& rootPath, con
 
 void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
 {
+    // Lock the mutex during metadata attachment
+    std::lock_guard<std::mutex> lock(gMetadataMutex);
+
     CPLJSONDocument doc;
     bool hasMetadata = false;
 
@@ -606,15 +615,12 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
     {
         const CPLJSONObject& root = doc.GetRoot(); // This is .zattrs content now
         ExtractCoordinateMetadata(root, ds);
-
     }
     else
     {
         CPLDebug("EOPFZARR", "No .zmetadata or .zattrs found in %s, creating defaults for coordinates.", rootPath.c_str());
         CPLJSONObject emptyObj;
         ExtractCoordinateMetadata(emptyObj, ds); // Setup default coordinate info
-        
-       
     }
 
     // Apply spatial_ref to GEOLOCATION/GEOREFERENCING domains
@@ -622,8 +628,6 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
     if (pszSpatialRef && strlen(pszSpatialRef) > 0)
     {
         // Ensure the main dataset has its projection set directly
-        // This might be redundant if ExtractCoordinateMetadata already called SetProjection
-        // but it's safer to ensure it.
         OGRSpatialReference oSRS_final;
         if (oSRS_final.SetFromUserInput(pszSpatialRef) == OGRERR_NONE) {
             char* pszFinalWKT = nullptr;
@@ -654,3 +658,4 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
         CPLDebug("EOPFZARR", "spatial_ref metadata item is empty or null, cannot set SRS in domains.");
     }
 }
+

@@ -8,28 +8,66 @@
 #include "eopfzarr_dataset.h"
 #include "gdal_priv.h"
 #include "cpl_vsi.h"
-#include "cpl_string.h" // Added for CSL functions (CSLRemove, CSLDuplicate, etc.)
+#include "cpl_string.h"
 #include <string>
+#include <mutex>
+#include <atomic>
+#include <unordered_map>
+#include <memory>
 #include "eopf_metadata.h"
 #include "eopfzarr_config.h"
 
-// Add Windows-specific export declarations without redefining CPL macros
+
 #ifdef _WIN32
 #define EOPFZARR_DLL __declspec(dllexport)
 #else
 #define EOPFZARR_DLL
 #endif
 
-static GDALDriver *gEOPFDriver = nullptr; /* global ptr for reuse */
+// Thread-safe global variables
+static std::atomic<GDALDriver*> gEOPFDriver{nullptr};
+static std::once_flag gEOPFDriverInitFlag;
+static std::mutex gCacheMutex;
+static std::unordered_map<std::string, bool> gIsEOPFZarrCache;
+static std::mutex gSkipMutex;
 
+// Thread-safe GDAL_SKIP guard
+class GDALSkipGuard {
+private:
+    CPLString m_osOldSkip;
+    std::lock_guard<std::mutex> m_lock;
 
+public:
+    explicit GDALSkipGuard(const char* pszSkip) 
+#ifdef _MSC_VER
+        __pragma(warning(suppress: 26115)) // Suppress the warning about lock not being released
+#endif
+        : m_lock(gSkipMutex)
+    {
+        const char* pszOldSkip = CPLGetConfigOption("GDAL_SKIP", nullptr);
+        m_osOldSkip = pszOldSkip ? pszOldSkip : "";
+        
+        CPLString osNewSkip = m_osOldSkip;
+        if (!osNewSkip.empty()) {
+            osNewSkip += ",";
+        }
+        osNewSkip += pszSkip;
+        
+        CPLSetConfigOption("GDAL_SKIP", osNewSkip.c_str());
+    }
 
-/* -------------------------------------------------------------------- */
-/*  Tiny helper: does a file exist (works for /vsicurl/, /vsis3/)        */
-/* -------------------------------------------------------------------- */
+    ~GDALSkipGuard() {
+        CPLSetConfigOption("GDAL_SKIP", m_osOldSkip.empty() ? nullptr : m_osOldSkip.c_str());
+    }
+    
+    // Prevent copying
+    GDALSkipGuard(const GDALSkipGuard&) = delete;
+    GDALSkipGuard& operator=(const GDALSkipGuard&) = delete;
+};
+
 static bool HasFile(const std::string &path)
 {
-    VSIStatBufL sStat; // Use VSIStatBufL for VSIStatL
+    VSIStatBufL sStat;
     return VSIStatL(path.c_str(), &sStat) == 0;
 }
 
@@ -208,12 +246,22 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
 }
 
 static bool IsEOPFZarr(const std::string& path) {
+    // Thread-safe cache check
+    {
+        std::lock_guard<std::mutex> lock(gCacheMutex);
+        auto it = gIsEOPFZarrCache.find(path);
+        if (it != gIsEOPFZarrCache.end()) {
+            return it->second;
+        }
+    }
+
     // Extract main path if this is a subdataset reference
     std::string mainPath, subdatasetPath;
     ParseSubdatasetPath(path, mainPath, subdatasetPath);
 
     // Use the main path for detection
     std::string pathToCheck = mainPath;
+    bool isEOPF = false;
 
     // 1. Check for .zmetadata file
     std::string zmetaPath = CPLFormFilename(pathToCheck.c_str(), ".zmetadata", nullptr);
@@ -226,23 +274,30 @@ static bool IsEOPFZarr(const std::string& path) {
                 const CPLJSONObject& zattrs = metadata.GetObj(".zattrs");
                 if (zattrs.IsValid() &&
                     (zattrs.GetObj("stac_discovery").IsValid() ||
-                        !zattrs.GetString("eopf_category").empty() ||
-                        !zattrs.GetString("eopf:resolutions").empty())) {
+                     !zattrs.GetString("eopf_category").empty() ||
+                     !zattrs.GetString("eopf:resolutions").empty())) {
                     CPLDebug("EOPFZARR", "Dataset at %s identified as EOPF by .zmetadata markers", pathToCheck.c_str());
-                    return true;
+                    isEOPF = true;
                 }
             }
         }
     }
 
     // 2. Check if it's a subdataset path with EOPFZARR prefix
-    if (STARTS_WITH_CI(path.c_str(), "EOPFZARR:")) {
+    if (!isEOPF && STARTS_WITH_CI(path.c_str(), "EOPFZARR:")) {
         CPLDebug("EOPFZARR", "Path starts with EOPFZARR: prefix, accepting");
-        return true;
+        isEOPF = true;
     }
 
-    return false;
+    // Cache the result with mutex protection
+    {
+        std::lock_guard<std::mutex> lock(gCacheMutex);
+        gIsEOPFZarrCache[path] = isEOPF;
+    }
+
+    return isEOPF;
 }
+
 /* -------------------------------------------------------------------- */
 /*      Identify — only accept Zarr files with the EOPF prefix           */
 /* -------------------------------------------------------------------- */
@@ -386,7 +441,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     std::string mainPath, subdatasetPath;
     bool isSubdataset = ParseSubdatasetPath(pszFilename, mainPath, subdatasetPath);
 
-    // If this is a subdataset path with our prefix, strip the prefix - this should already be handled in ParseSubdatasetPath
+    // If this is a subdataset path with our prefix, strip the prefix
     if (STARTS_WITH_CI(mainPath.c_str(), "EOPFZARR:")) {
         mainPath = mainPath.substr(9); // Skip "EOPFZARR:"
         CPLDebug("EOPFZARR", "EOPFOpen: Removed EOPFZARR prefix, main path: %s", mainPath.c_str());
@@ -416,43 +471,30 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         CPLFree(pszKey);
     }
 
-    // Use a config option (not open option) to temporarily disable EOPFZARR driver
-    // Store the previous value first
-    const char* pszOldSkip = CPLGetConfigOption("GDAL_SKIP", nullptr);
-    CPLString osOldSkip = pszOldSkip ? pszOldSkip : "";
-
-    // Add EOPFZARR to the list of skipped drivers
-    CPLString osNewSkip = osOldSkip;
-    if (!osNewSkip.empty()) {
-        osNewSkip += ",";
-    }
-    osNewSkip += "EOPFZARR";
-
-    // Set the new GDAL_SKIP config option
-    CPLSetConfigOption("GDAL_SKIP", osNewSkip.c_str());
-
-    // Different handling for main dataset vs subdataset
+    // Use thread-safe guard for GDAL_SKIP
     GDALDataset* poUnderlyingDataset = nullptr;
+    {
+        // This RAII guard handles the GDAL_SKIP setting and restoration in a thread-safe way
+        GDALSkipGuard skipGuard("EOPFZARR");
+        
+        if (!isSubdataset || subdatasetPath.empty()) {
+            // Open the Zarr dataset directly, explicitly requiring the Zarr driver
+            char* const azDrvList[] = { (char*)"Zarr", nullptr };
 
-    if (!isSubdataset || subdatasetPath.empty()) {
-        // Open the Zarr dataset directly, explicitly requiring the Zarr driver
-        char* const azDrvList[] = { (char*)"Zarr", nullptr };
-
-        CPLDebug("EOPFZARR", "EOPFOpen: Opening main dataset with core Zarr driver: %s", mainPath.c_str());
-        poUnderlyingDataset = static_cast<GDALDataset*>(
-            GDALOpenEx(mainPath.c_str(),
-                poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
-                azDrvList,
-                papszOpenOptionsCopy,
-                nullptr));
+            CPLDebug("EOPFZARR", "EOPFOpen: Opening main dataset with core Zarr driver: %s", mainPath.c_str());
+            poUnderlyingDataset = static_cast<GDALDataset*>(
+                GDALOpenEx(mainPath.c_str(),
+                    poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                    azDrvList,
+                    papszOpenOptionsCopy,
+                    nullptr));
+        }
+        else {
+            // For subdatasets, use the helper function for better handling
+            poUnderlyingDataset = OpenSubdataset(mainPath, subdatasetPath, poOpenInfo->nOpenFlags, papszOpenOptionsCopy);
+        }
+        // skipGuard destructor will restore GDAL_SKIP here
     }
-    else {
-        // For subdatasets, use the helper function for better handling
-        poUnderlyingDataset = OpenSubdataset(mainPath, subdatasetPath, poOpenInfo->nOpenFlags, papszOpenOptionsCopy);
-    }
-
-    // Restore the original GDAL_SKIP config option
-    CPLSetConfigOption("GDAL_SKIP", osOldSkip.empty() ? nullptr : osOldSkip.c_str());
 
     // Clean up
     CSLDestroy(papszOpenOptionsCopy);
@@ -471,7 +513,9 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
 
     CPLDebug("EOPFZARR", "EOPFOpen: Successfully opened with core Zarr driver. Creating EOPF wrapper.");
 
-    if (!gEOPFDriver)
+    // Get driver in thread-safe way
+    GDALDriver* driver = gEOPFDriver.load();
+    if (!driver)
     {
         CPLDebug("EOPFZARR", "EOPFOpen: gEOPFDriver is null. Cannot create EOPFZarrDataset.");
         CPLError(CE_Failure, CPLE_AppDefined, "EOPFZARR driver not properly initialized");
@@ -480,7 +524,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     }
 
     // Create the wrapper dataset
-    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDataset, gEOPFDriver);
+    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDataset, driver);
 
     // Set a property on the dataset to mark it as explicitly created by the EOPF driver
     if (poDS != nullptr)
@@ -501,78 +545,161 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
 /* -------------------------------------------------------------------- */
 extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
 {
+    // Add protection for the entire function, not just the internal code
+    static std::mutex registrationMutex;
+    std::lock_guard<std::mutex> lock(registrationMutex);
+
+    // Already registered?
     if (GDALGetDriverByName("EOPFZARR") != nullptr)
         return;
 
-    if (!GDAL_CHECK_VERSION("EOPFZARR"))
-        return;
+    // Thread-safe driver registration using std::call_once
+    // Note: We're keeping call_once as an additional safety measure
+    std::call_once(gEOPFDriverInitFlag, []() {
+        // Version check
+        if (!GDAL_CHECK_VERSION("EOPFZARR"))
+            return;
 
-    // Make sure the Zarr driver is registered first
-    GDALDriverManager* poDM = GetGDALDriverManager();
-    GDALDriver* poZarrDriver = poDM->GetDriverByName("Zarr");
-    if (poZarrDriver == nullptr)
-    {
-        CPLDebug("EOPFZARR", "Core Zarr driver not registered. Trying to register it.");
-        GDALRegister_Zarr();
-
-        poZarrDriver = poDM->GetDriverByName("Zarr");
+        // Make sure the Zarr driver is registered first
+        GDALDriverManager* poDM = GetGDALDriverManager();
+        GDALDriver* poZarrDriver = poDM->GetDriverByName("Zarr");
         if (poZarrDriver == nullptr)
         {
-            CPLError(CE_Warning, CPLE_AppDefined,
-                "Core Zarr driver could not be registered. EOPFZARR may not work correctly.");
-        }
-    }
-    
-    // ==== INJECT THE OPTION DIRECTLY INTO THE ZARR DRIVER ====
-    if (poZarrDriver) {
-        const char* pszExistingOptions = poZarrDriver->GetMetadataItem(GDAL_DMD_OPENOPTIONLIST);
-        
-        // Only add if EOPF_PROCESS doesn't already exist
-        if (pszExistingOptions == nullptr || strstr(pszExistingOptions, "EOPF_PROCESS") == nullptr) {
-            const char* pszAddOption = 
-                "  <Option name='EOPF_PROCESS' type='boolean' default='NO' description='Enable EOPF features'>"
-                "    <Value>YES</Value>"
-                "    <Value>NO</Value>"
-                "  </Option>";
-                
-            if (pszExistingOptions && strlen(pszExistingOptions) > 20) {
-                // Find where to insert our option
-                const char* pszInsertPoint = strstr(pszExistingOptions, "</OpenOptionList>");
-                if (pszInsertPoint) {
-                    size_t insertPos = pszInsertPoint - pszExistingOptions;
-                    std::string newOptions(pszExistingOptions);
-                    newOptions.insert(insertPos, pszAddOption);
-                    poZarrDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, newOptions.c_str());
-                    CPLDebug("EOPFZARR", "Injected EOPF_PROCESS option into Zarr driver options");
-                }
-            } else {
-                CPLString osOptions;
-                osOptions.Printf("<OpenOptionList>%s</OpenOptionList>", pszAddOption);
-                poZarrDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, osOptions.c_str());
-                CPLDebug("EOPFZARR", "Created new options list with EOPF_PROCESS for Zarr driver");
+            CPLDebug("EOPFZARR", "Core Zarr driver not registered. Trying to register it.");
+            GDALRegister_Zarr();
+
+            poZarrDriver = poDM->GetDriverByName("Zarr");
+            if (poZarrDriver == nullptr)
+            {
+                CPLError(CE_Warning, CPLE_AppDefined,
+                    "Core Zarr driver could not be registered. EOPFZARR may not work correctly.");
             }
         }
         
-        // Force this option to be visible
-        poZarrDriver->SetMetadataItem("EOPF_PROCESS_OPTION_AVAILABLE", "YES");
+        // ==== INJECT THE OPTION DIRECTLY INTO THE ZARR DRIVER ====
+        // Only add if the driver exists (extra safety against crashes)
+        if (poZarrDriver) {
+            const char* pszExistingOptions = poZarrDriver->GetMetadataItem(GDAL_DMD_OPENOPTIONLIST);
+            
+            // Only add if EOPF_PROCESS doesn't already exist
+            if (pszExistingOptions == nullptr || strstr(pszExistingOptions, "EOPF_PROCESS") == nullptr) {
+                const char* pszAddOption = 
+                    "  <Option name='EOPF_PROCESS' type='boolean' default='NO' description='Enable EOPF features'>"
+                    "    <Value>YES</Value>"
+                    "    <Value>NO</Value>"
+                    "  </Option>";
+                    
+                if (pszExistingOptions && strlen(pszExistingOptions) > 20) {
+                    // Find where to insert our option
+                    const char* pszInsertPoint = strstr(pszExistingOptions, "</OpenOptionList>");
+                    if (pszInsertPoint) {
+                        size_t insertPos = pszInsertPoint - pszExistingOptions;
+                        std::string newOptions(pszExistingOptions);
+                        newOptions.insert(insertPos, pszAddOption);
+                        poZarrDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, newOptions.c_str());
+                        CPLDebug("EOPFZARR", "Injected EOPF_PROCESS option into Zarr driver options");
+                    }
+                } else {
+                    CPLString osOptions;
+                    osOptions.Printf("<OpenOptionList>%s</OpenOptionList>", pszAddOption);
+                    poZarrDriver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, osOptions.c_str());
+                    CPLDebug("EOPFZARR", "Created new options list with EOPF_PROCESS for Zarr driver");
+                }
+            }
+            
+            // Force this option to be visible in all UIs
+            poZarrDriver->SetMetadataItem("EOPF_PROCESS_OPTION_AVAILABLE", "YES");
+        }
+
+        // ==== REGISTER OUR OWN DRIVER AS USUAL ====
+        GDALDriver* driver = new GDALDriver();
+        driver->SetDescription("EOPFZARR");
+        driver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver 3");
+        driver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
+        driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
+        driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
+        driver->SetMetadataItem(GDAL_DMD_SUBDATASETS, "YES");
+
+        driver->pfnIdentify = EOPFIdentify;
+        driver->pfnOpen = EOPFOpen;
+
+        // Do the registration and store atomically
+        if (poDM) {
+            poDM->RegisterDriver(driver);
+            gEOPFDriver.store(driver);
+            CPLDebug("EOPFZARR", "EOPFZarr driver registered successfully");
+        } else {
+            // Emergency deletion if no driver manager available
+            delete driver;
+            CPLDebug("EOPFZARR", "Failed to get GDALDriverManager");
+        }
+    });
+}
+
+// Add an unload function for cleaner shutdown
+// This is crucial to prevent crashes during shutdown
+extern "C" EOPFZARR_DLL void GDALDeregisterDriverEOPF()
+{
+    static std::mutex deregistrationMutex;
+    std::lock_guard<std::mutex> lock(deregistrationMutex);
+
+    // Get our driver pointer safely
+    GDALDriver* driver = gEOPFDriver.exchange(nullptr);
+    if (driver) {
+        // Already nulled out our global pointer, now remove from registry
+        GDALDriverManager* poDM = GetGDALDriverManager();
+        if (poDM) {
+            CPLDebug("EOPFZARR", "Deregistering EOPFZarr driver");
+            poDM->DeregisterDriver(driver);
+        }
+        // Note: GDAL will delete the driver, don't delete it here
     }
 
-    // ==== REGISTER OUR OWN DRIVER AS USUAL ====
-    gEOPFDriver = new GDALDriver();
-    gEOPFDriver->SetDescription("EOPFZARR");
-    gEOPFDriver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver");
-    gEOPFDriver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
-    gEOPFDriver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
-    gEOPFDriver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
-    gEOPFDriver->SetMetadataItem(GDAL_DMD_SUBDATASETS, "YES");
-
-    gEOPFDriver->pfnIdentify = EOPFIdentify;
-    gEOPFDriver->pfnOpen = EOPFOpen;
-
-    poDM->RegisterDriver(gEOPFDriver);
+    // Clean up caches
+    std::lock_guard<std::mutex> cacheLock(gCacheMutex);
+    gIsEOPFZarrCache.clear();
     
-    CPLDebug("EOPFZARR", "EOPFZarr driver registered and injected EOPF_PROCESS into Zarr driver options");
+    // Clean up GDAL finder resources that might be used by our driver
+    CPLFinderClean();
 }
+
+#ifdef _WIN32
+#ifdef _WIN32  
+#include <windows.h> // Include this to define BOOL and other Windows types  
+#endif  
+
+static BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {  
+    switch (fdwReason) {  
+        case DLL_PROCESS_ATTACH:  
+            // Perform actions needed when the DLL is loaded  
+            break;  
+        case DLL_THREAD_ATTACH:  
+        case DLL_THREAD_DETACH:  
+            // Perform actions needed when threads are created or destroyed  
+            break;  
+        case DLL_PROCESS_DETACH:  
+            // Perform cleanup when the DLL is unloaded  
+            break;  
+    }  
+    return TRUE;  
+}
+#endif
+
+// Register the cleanup function for Unix/Linux platforms
+class EOPFZarrCleanupManager {
+public:
+    EOPFZarrCleanupManager() {
+        CPLDebug("EOPFZARR", "Registering EOPF driver cleanup");
+    }
+    
+    ~EOPFZarrCleanupManager() {
+        CPLDebug("EOPFZARR", "Running EOPF driver cleanup");
+        GDALDeregisterDriverEOPF();
+    }
+};
+
+// Create a singleton instance to handle cleanup
+static EOPFZarrCleanupManager gEOPFZarrCleanupManager;
 
 extern "C" EOPFZARR_DLL void GDALRegisterMe()
 {

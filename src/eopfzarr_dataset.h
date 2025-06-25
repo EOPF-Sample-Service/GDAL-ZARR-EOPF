@@ -1,6 +1,7 @@
 #pragma once
 #include "gdal_priv.h"
 #include <memory>
+#include <mutex> // Include mutex header
 
 namespace EOPF {
     void AttachMetadata(GDALDataset& ds, const std::string& rootPath);
@@ -14,6 +15,8 @@ private:
     char* mProjectionRef;
     char** mSubdatasets;
     mutable OGRSpatialReference* mCachedSpatialRef = nullptr;
+    mutable std::mutex mCachedSpatialRefMutex;  // Add this mutex
+    mutable std::mutex mSpatialRefMutex;  
     char** m_papszDefaultDomainFilteredMetadata = nullptr;
 
 public:

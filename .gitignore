@@ -8,3 +8,6 @@ cdse-venv/
 /src/zarrdriver_original.cpp
 /venv
 venv/bin/adig
+/watch.ps1
+/build-and-install.ps1
+/qgis_eopfzarr_plugin.py

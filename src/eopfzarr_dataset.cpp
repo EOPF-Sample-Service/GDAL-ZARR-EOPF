@@ -6,6 +6,7 @@
 #include "cpl_string.h"
 #include <cstring>
 #include <utility>
+#include <mutex> // Add this include for std::mutex
 
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner,
                                  GDALDriver *selfDrv)
@@ -56,23 +57,44 @@ EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner,
 
 EOPFZarrDataset::~EOPFZarrDataset()
 {
+    // Free bands memory
+    for (int i = 0; i < nBands; i++)
+    {
+        delete papoBands[i];
+    }
+    nBands = 0;
+    papoBands = nullptr;
+
+    // Free projection reference
     if (mProjectionRef)
+    {
         CPLFree(mProjectionRef);
+        mProjectionRef = nullptr;
+    }
 
+    // Free subdatasets
     if (mSubdatasets)
+    {
         CSLDestroy(mSubdatasets);
+        mSubdatasets = nullptr;
+    }
 
-    if (mSubdatasets)
+    // Free spatial reference (fix the logic error here)
+    if (mCachedSpatialRef)  // NOT mSubdatasets again!
     {
         delete mCachedSpatialRef;
         mCachedSpatialRef = nullptr;
     }
 
+    // Free metadata
     if (m_papszDefaultDomainFilteredMetadata)
     {
         CSLDestroy(m_papszDefaultDomainFilteredMetadata);
         m_papszDefaultDomainFilteredMetadata = nullptr;
     }
+
+    // Reset inner dataset (will trigger deletion)
+    mInner.reset();
 }
 
 EOPFZarrDataset *EOPFZarrDataset::Create(GDALDataset *inner, GDALDriver *drv)
@@ -203,7 +225,9 @@ CPLErr EOPFZarrDataset::SetGeoTransform(double *padfTransform)
 
 const OGRSpatialReference *EOPFZarrDataset::GetSpatialRef() const
 {
-    // Return nullptr to prevent coordinate system information from being displayed
+    std::lock_guard<std::mutex> lock(mSpatialRefMutex);
+    
+    // Return cached value if available
     if (mCachedSpatialRef)
     {
         return mCachedSpatialRef;
@@ -225,14 +249,15 @@ const OGRSpatialReference *EOPFZarrDataset::GetSpatialRef() const
         return nullptr;
     }
 
-    // Optional: Auto-identify EPSG. Some applications might find this useful.
-    // mCachedSpatialRef->AutoIdentifyEPSG();
-
     return mCachedSpatialRef;
 }
 
 char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
 {
+    // Add mutex protection for this method
+    static std::mutex metadataMutex;
+    std::lock_guard<std::mutex> lock(metadataMutex);
+    
     // For subdatasets, return the subdataset metadata
     if (pszDomain != nullptr && EQUAL(pszDomain, "SUBDATASETS"))
     {
@@ -240,8 +265,6 @@ char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
         char** papszSubdatasets = GDALDataset::GetMetadata(pszDomain);
         if (papszSubdatasets && CSLCount(papszSubdatasets) > 0)
         {
-            CPLDebug("EOPFZARR", "GetMetadata(SUBDATASETS): Returning %d subdataset items from base dataset",
-                CSLCount(papszSubdatasets));
             return papszSubdatasets;
         }
 
@@ -258,30 +281,56 @@ char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
                     mSubdatasets = nullptr;
                 }
 
+                int nSubDSCount = 0;
+
                 // Create new list with updated format
-                for (int i = 0; papszSubdatasets[i] != nullptr; i++)
+                for (int i = 0; papszSubdatasets[i]; i++)
                 {
+                    if (strstr(papszSubdatasets[i], "_NAME=") == nullptr) {
+                        continue;  // Skip DESC entries
+                    }
+
                     char* pszKey = nullptr;
                     const char* pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
 
                     if (pszKey && pszValue)
                     {
-                        // If this is a NAME field, convert ZARR: to EOPFZARR:
-                        if (pszValue && strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
+                        std::string nameKey = CPLString().Printf("SUBDATASET_%d_NAME", nSubDSCount + 1);
+                        std::string descKey = CPLString().Printf("SUBDATASET_%d_DESC", nSubDSCount + 1);
+
+                        // Convert ZARR: paths to EOPFZARR:
+                        std::string dsValue = pszValue;
+                        if (STARTS_WITH_CI(dsValue.c_str(), "ZARR:"))
                         {
-                            CPLString eopfValue("EOPFZARR:");
-                            eopfValue += (pszValue + 5);      // Skip "ZARR:"
-                            mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue);
-                        }
-                        else
-                        {
-                            // For DESC fields, keep as is
-                            mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, pszValue);
+                            // Take the path part that follows ZARR: prefix
+                            std::string pathWithoutPrefix = dsValue.substr(5);
+
+                            // Create an EOPFZARR path that QGIS can understand
+                            std::string eopfValue = "EOPFZARR:" + pathWithoutPrefix;
+
+                            // Set the subdataset name with our prefix
+                            mSubdatasets = CSLSetNameValue(mSubdatasets, nameKey.c_str(), eopfValue.c_str());
+
+                            // Get the matching description if available
+                            for (int j = 0; papszSubdatasets[j]; j++)
+                            {
+                                char* pszDescKey = nullptr;
+                                const char* pszDescValue = CPLParseNameValue(papszSubdatasets[j], &pszDescKey);
+                                if (pszDescKey && pszDescValue &&
+                                    EQUAL(pszDescKey, CPLString().Printf("SUBDATASET_%d_DESC", (i / 2) + 1).c_str()))
+                                {
+                                    mSubdatasets = CSLSetNameValue(mSubdatasets, descKey.c_str(), pszDescValue);
+                                    CPLFree(pszDescKey);
+                                    break;
+                                }
+                                CPLFree(pszDescKey);
+                            }
+
+                            nSubDSCount++;
                         }
                     }
                     CPLFree(pszKey);
                 }
-
                 return mSubdatasets;
             }
         }
