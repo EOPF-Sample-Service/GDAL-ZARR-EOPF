@@ -7,6 +7,8 @@
 #include <cstring>
 #include <utility>
 
+
+
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver *selfDrv)
     : mInner(std::move(inner)),
       mSubdatasets(nullptr),
@@ -20,6 +22,23 @@ EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver 
     nRasterXSize = mInner->GetRasterXSize();
     nRasterYSize = mInner->GetRasterYSize();
 
+    // Transfer bands from inner dataset
+    for (int i = 1; i <= mInner->GetRasterCount(); i++)
+    {
+        GDALRasterBand *poBand = mInner->GetRasterBand(i);
+        if (poBand)
+        {
+            // Create a proxy band that references the inner band
+            SetBand(i, new EOPFZarrRasterBand(this, poBand, i));
+
+            // Copy band metadata and other properties if needed
+            GetRasterBand(i)->SetDescription(poBand->GetDescription());
+
+            // You might need to copy other band properties like color interpretation,
+            // no data value, color table, etc., depending on your requirements
+        }
+    }
+
     // Initialize the PAM info
     TryLoadXML();
     m_bPamInitialized = true;
@@ -27,8 +46,6 @@ EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver 
 
 EOPFZarrDataset::~EOPFZarrDataset()
 {
-    if (mProjectionRef)
-        CPLFree(mProjectionRef);
 
     if (mSubdatasets)
         CSLDestroy(mSubdatasets);
@@ -81,12 +98,12 @@ void EOPFZarrDataset::LoadEOPFMetadata()
 {
     // Get the directory path where the dataset is stored
     std::string rootPath = mInner->GetDescription();
-    
+
     // Use the EOPF AttachMetadata function to load all metadata
     EOPF::AttachMetadata(*this, rootPath);
-    
+
     // After metadata is attached, make sure geospatial info is processed
-    
+
     // Check for geotransform in metadata
     const char *pszGeoTransform = GetMetadataItem("geo_transform");
     if (pszGeoTransform)
@@ -101,7 +118,7 @@ void EOPFZarrDataset::LoadEOPFMetadata()
 
             // Set the geotransform
             GDALPamDataset::SetGeoTransform(adfGeoTransform);
-            CPLDebug("EOPFZARR", "Set geotransform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", 
+            CPLDebug("EOPFZARR", "Set geotransform: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]",
                      adfGeoTransform[0], adfGeoTransform[1], adfGeoTransform[2],
                      adfGeoTransform[3], adfGeoTransform[4], adfGeoTransform[5]);
         }
@@ -117,7 +134,7 @@ void EOPFZarrDataset::LoadEOPFMetadata()
     if (pszSpatialRef && strlen(pszSpatialRef) > 0)
     {
         CPLDebug("EOPFZARR", "Found spatial_ref metadata: %s", pszSpatialRef);
-        
+
         // Create OGR spatial reference from WKT
         OGRSpatialReference oSRS;
         if (oSRS.importFromWkt(pszSpatialRef) == OGRERR_NONE)
@@ -151,16 +168,16 @@ void EOPFZarrDataset::LoadEOPFMetadata()
     }
 
     // Check for corner coordinates that might be available in various metadata items
-    
+
     // UTM coordinates
     bool hasUtmCorners = false;
     double utmMinX = 0, utmMaxX = 0, utmMinY = 0, utmMaxY = 0;
-    
+
     const char *pszUtmMinX = GetMetadataItem("utm_easting_min");
     const char *pszUtmMaxX = GetMetadataItem("utm_easting_max");
     const char *pszUtmMinY = GetMetadataItem("utm_northing_min");
     const char *pszUtmMaxY = GetMetadataItem("utm_northing_max");
-    
+
     if (pszUtmMinX && pszUtmMaxX && pszUtmMinY && pszUtmMaxY)
     {
         utmMinX = CPLAtof(pszUtmMinX);
@@ -168,20 +185,20 @@ void EOPFZarrDataset::LoadEOPFMetadata()
         utmMinY = CPLAtof(pszUtmMinY);
         utmMaxY = CPLAtof(pszUtmMaxY);
         hasUtmCorners = true;
-        
+
         CPLDebug("EOPFZARR", "Found UTM corners: MinX=%.2f, MaxX=%.2f, MinY=%.2f, MaxY=%.2f",
-                utmMinX, utmMaxX, utmMinY, utmMaxY);
+                 utmMinX, utmMaxX, utmMinY, utmMaxY);
     }
-    
+
     // Geographic coordinates
     bool hasGeographicCorners = false;
     double lonMin = 0, lonMax = 0, latMin = 0, latMax = 0;
-    
+
     const char *pszLonMin = GetMetadataItem("geospatial_lon_min");
     const char *pszLonMax = GetMetadataItem("geospatial_lon_max");
     const char *pszLatMin = GetMetadataItem("geospatial_lat_min");
     const char *pszLatMax = GetMetadataItem("geospatial_lat_max");
-    
+
     if (pszLonMin && pszLonMax && pszLatMin && pszLatMax)
     {
         lonMin = CPLAtof(pszLonMin);
@@ -189,41 +206,41 @@ void EOPFZarrDataset::LoadEOPFMetadata()
         latMin = CPLAtof(pszLatMin);
         latMax = CPLAtof(pszLatMax);
         hasGeographicCorners = true;
-        
+
         CPLDebug("EOPFZARR", "Found geographic corners: LonMin=%.6f, LonMax=%.6f, LatMin=%.6f, LatMax=%.6f",
-                lonMin, lonMax, latMin, latMax);
+                 lonMin, lonMax, latMin, latMax);
     }
-    
+
     // If we have corner coordinates but no geotransform, calculate one
     if (!pszGeoTransform && (hasUtmCorners || hasGeographicCorners))
     {
         double adfGeoTransform[6] = {0};
-        
+
         // Use UTM corners if available, otherwise use geographic corners
         double minX = hasUtmCorners ? utmMinX : lonMin;
         double maxX = hasUtmCorners ? utmMaxX : lonMax;
         double minY = hasUtmCorners ? utmMinY : latMin;
         double maxY = hasUtmCorners ? utmMaxY : latMax;
-        
+
         int width = GetRasterXSize();
         int height = GetRasterYSize();
-        
+
         if (width > 0 && height > 0)
         {
-            adfGeoTransform[0] = minX;                     // top left x
-            adfGeoTransform[1] = (maxX - minX) / width;    // w-e pixel resolution
-            adfGeoTransform[2] = 0.0;                      // rotation, 0 if image is "north up"
-            adfGeoTransform[3] = maxY;                     // top left y
-            adfGeoTransform[4] = 0.0;                      // rotation, 0 if image is "north up"
-            adfGeoTransform[5] = -std::fabs((maxY - minY) / height);  // n-s pixel resolution (negative value)
-            
+            adfGeoTransform[0] = minX;                               // top left x
+            adfGeoTransform[1] = (maxX - minX) / width;              // w-e pixel resolution
+            adfGeoTransform[2] = 0.0;                                // rotation, 0 if image is "north up"
+            adfGeoTransform[3] = maxY;                               // top left y
+            adfGeoTransform[4] = 0.0;                                // rotation, 0 if image is "north up"
+            adfGeoTransform[5] = -std::fabs((maxY - minY) / height); // n-s pixel resolution (negative value)
+
             GDALPamDataset::SetGeoTransform(adfGeoTransform);
             CPLDebug("EOPFZARR", "Created geotransform from corner coordinates: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]",
-                    adfGeoTransform[0], adfGeoTransform[1], adfGeoTransform[2],
-                    adfGeoTransform[3], adfGeoTransform[4], adfGeoTransform[5]);
+                     adfGeoTransform[0], adfGeoTransform[1], adfGeoTransform[2],
+                     adfGeoTransform[3], adfGeoTransform[4], adfGeoTransform[5]);
         }
     }
-    
+
     // Ensure there's valid georeference info for OSGeo4W shell
     double adfGeoTransform[6];
     if (GDALPamDataset::GetGeoTransform(adfGeoTransform) != CE_None && !GetSpatialRef())
@@ -233,7 +250,7 @@ void EOPFZarrDataset::LoadEOPFMetadata()
     }
 }
 
-CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
+CPLErr EOPFZarrDataset::GetGeoTransform(double *padfTransform)
 {
     CPLErr eErr = GDALPamDataset::GetGeoTransform(padfTransform);
     if (eErr == CE_None)
@@ -255,10 +272,10 @@ CPLErr EOPFZarrDataset::SetGeoTransform(double *padfTransform)
     return CE_None; // Or CE_Failure.
 }
 
-const OGRSpatialReference* EOPFZarrDataset::GetSpatialRef() const
+const OGRSpatialReference *EOPFZarrDataset::GetSpatialRef() const
 {
     // First check PAM
-    const OGRSpatialReference* poSRS = GDALPamDataset::GetSpatialRef();
+    const OGRSpatialReference *poSRS = GDALPamDataset::GetSpatialRef();
     if (poSRS)
         return poSRS;
 
@@ -333,11 +350,11 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
             m_papszDefaultDomainFilteredMetadata = CSLDuplicate(GDALPamDataset::GetMetadata());
 
             // Get metadata from inner dataset
-            char** papszInnerMeta = mInner->GetMetadata();
-            for (char** papszIter = papszInnerMeta; papszIter && *papszIter; ++papszIter)
+            char **papszInnerMeta = mInner->GetMetadata();
+            for (char **papszIter = papszInnerMeta; papszIter && *papszIter; ++papszIter)
             {
-                char* pszKey = nullptr;
-                const char* pszValue = CPLParseNameValue(*papszIter, &pszKey);
+                char *pszKey = nullptr;
+                const char *pszValue = CPLParseNameValue(*papszIter, &pszKey);
                 if (pszKey && pszValue)
                 {
                     m_papszDefaultDomainFilteredMetadata =
@@ -352,7 +369,7 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
     else
     {
         // First try PAM
-        char** papszMD = GDALPamDataset::GetMetadata(pszDomain);
+        char **papszMD = GDALPamDataset::GetMetadata(pszDomain);
         if (papszMD && CSLCount(papszMD) > 0)
             return papszMD;
 
@@ -426,4 +443,30 @@ CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode *psTree, const char *pszUnused)
 CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
 {
     return GDALPamDataset::SerializeToXML(pszUnused);
+}
+
+// Implementation of EOPFZarrRasterBand
+
+EOPFZarrRasterBand::EOPFZarrRasterBand(EOPFZarrDataset* poDS, GDALRasterBand* poUnderlyingBand, int nBand)
+    : m_poUnderlyingBand(poUnderlyingBand),
+      m_poDS(poDS)
+{
+    // Initialize GDALRasterBand base class properties directly
+    this->poDS = poDS;
+    this->nBand = nBand;
+    this->eDataType = poUnderlyingBand->GetRasterDataType();
+    poUnderlyingBand->GetBlockSize(&this->nBlockXSize, &this->nBlockYSize);
+    
+    // Copy other properties from underlying band
+    this->eAccess = poUnderlyingBand->GetAccess();
+}
+
+EOPFZarrRasterBand::~EOPFZarrRasterBand()
+{
+    // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
+}
+
+GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
+{
+    return m_poUnderlyingBand;
 }

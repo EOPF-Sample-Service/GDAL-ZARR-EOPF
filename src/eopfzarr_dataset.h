@@ -54,3 +54,18 @@ protected:
     CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override;
     CPLXMLNode* SerializeToXML(const char* pszUnused) override;
 };
+
+
+class EOPFZarrRasterBand : public GDALProxyRasterBand
+{
+private:
+    GDALRasterBand* m_poUnderlyingBand;
+    EOPFZarrDataset* m_poDS;
+
+public:
+    EOPFZarrRasterBand(EOPFZarrDataset* poDS, GDALRasterBand* poUnderlyingBand, int nBand);
+    ~EOPFZarrRasterBand();
+
+    // Implement the pure virtual method
+    GDALRasterBand* RefUnderlyingRasterBand(bool bForceOpen = true) const override;
+};
