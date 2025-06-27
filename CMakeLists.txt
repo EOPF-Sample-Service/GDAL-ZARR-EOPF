@@ -82,3 +82,18 @@ else()
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 endif()
+
+# Check for GDALPamDataset XML initialization compatibility
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("
+#include <gdal_pam.h>
+class Test : public GDALPamDataset {
+protected:
+    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override;
+};
+int main() { return 0; }
+" GDAL_HAS_CONST_XML_NODE)
+
+if(GDAL_HAS_CONST_XML_NODE)
+    add_definitions(-DGDAL_HAS_CONST_XML_NODE)
+endif()

@@ -435,9 +435,23 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
     return GDALPamDataset::TryLoadXML(papszSiblingFiles);
 }
 
-CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode *psTree, const char *pszUnused)
+// Update the implementation:
+
+#if defined(_WIN32) || defined(_WIN64)
+CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused)
 {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
+}
+#else
+CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode* psTree, const char* pszUnused)
+{
+    return GDALPamDataset::XMLInit(psTree, pszUnused);
+}
+#endif
+
+GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
+{
+    return m_poUnderlyingBand;
 }
 
 CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
@@ -466,7 +480,3 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
     // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
 }
 
-GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
-{
-    return m_poUnderlyingBand;
-}
