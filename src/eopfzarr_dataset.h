@@ -74,13 +74,14 @@ public:
     EOPFZarrRasterBand(EOPFZarrDataset *poDS, GDALRasterBand *poUnderlyingBand, int nBand);
     ~EOPFZarrRasterBand();
 
-    // Update the RefUnderlyingRasterBand method
 
-// For Windows, keep your current signature
+    // Implement the pure virtual method with platform-specific overloads
 #if defined(_WIN32) || defined(_WIN64)
     GDALRasterBand* RefUnderlyingRasterBand(bool bForceOpen = true) const override;
 #else
-    // For Linux, match the pure virtual signature
     GDALRasterBand* RefUnderlyingRasterBand() override;
 #endif
+
+    // Add the IReadBlock method
+    CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
 };

@@ -449,10 +449,17 @@ CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode* psTree, const char* pszUnused)
 }
 #endif
 
+#if defined(_WIN32) || defined(_WIN64)
 GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
 {
     return m_poUnderlyingBand;
 }
+#else
+GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand()
+{
+    return m_poUnderlyingBand;
+}
+#endif
 
 CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
 {
@@ -480,3 +487,14 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
     // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
 }
 
+CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
+{
+    // Simply delegate to the underlying band
+    if (m_poUnderlyingBand)
+        return m_poUnderlyingBand->ReadBlock(nBlockXOff, nBlockYOff, pImage);
+
+    // Return failure if there's no underlying band
+    CPLError(CE_Failure, CPLE_AppDefined,
+        "EOPFZarrRasterBand::IReadBlock: No underlying raster band");
+    return CE_Failure;
+}
