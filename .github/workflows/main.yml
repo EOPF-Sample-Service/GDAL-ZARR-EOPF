@@ -25,6 +25,15 @@ jobs:
         sudo apt-get install -y --no-install-recommends \
              gdal-bin libgdal-dev cmake ninja-build build-essential
 
+    - name: Debug GDAL version
+      run: |
+        echo "GDAL version information:"
+        gdal-config --version
+        echo "GDAL include path:"
+        gdal-config --cflags
+        echo "GDAL_VERSION_NUM from header:"
+        echo '#include "gdal_version.h"' | cpp -I$(gdal-config --cflags | sed 's/-I//g') - | grep 'define GDAL_VERSION_NUM' || echo "Could not find GDAL_VERSION_NUM"
+
     - name: Configure
       run: |
         cmake -S . -B build/${{ matrix.cfg }} \
