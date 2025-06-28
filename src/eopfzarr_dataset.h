@@ -1,6 +1,7 @@
 #pragma once
 #include "gdal_priv.h"
 #include "gdal_pam.h"
+#include "gdal_version.h"
 #include "gdal_proxy.h"
 #include <memory>
 
@@ -52,9 +53,16 @@ class EOPFZarrDataset : public GDALPamDataset
   protected:
     // In your header file:
     CPLErr TryLoadXML(char **papszSiblingFiles = nullptr);
-
-    // Remove the #if defined(_WIN32) ... #else ... #endif block for these signatures
+#if GDAL_VERSION_NUM >= 3000000
+    // Newer GDAL (3.x and above)
     CPLErr XMLInit(const CPLXMLNode *psTree, const char *pszUnused) override;
+
+#else
+    // Older GDAL (pre-3.0)
+    CPLErr XMLInit(CPLXMLNode *psTree, const char *pszUnused) override;
+
+#endif
+
     CPLXMLNode *SerializeToXML(const char *pszUnused) override;
 };
 
@@ -69,8 +77,13 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
                        int nBand);
     ~EOPFZarrRasterBand();
 
+#if GDAL_VERSION_NUM >= 3000000
+
     GDALRasterBand *
     RefUnderlyingRasterBand(bool bForceOpen = true) const override;
+#else
+    GDALRasterBand *RefUnderlyingRasterBand() override;
+#endif
     // Add the IReadBlock method
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void *pImage) override;
 };
