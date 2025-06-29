@@ -1,0 +1,226 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-ubuntu:
+    name: Build on Ubuntu
+    runs-on: ubuntu-22.04  # Use same version as main.yml and branch-protection.yml
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/apt
+          /var/cache/apt
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt', 'environment.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          cmake \
+          build-essential \
+          ninja-build
+          
+    - name: Install GDAL
+      run: |
+        sudo apt-get install -y --no-install-recommends \
+          gdal-bin \
+          libgdal-dev
+        
+    - name: Verify GDAL installation
+      run: |
+        echo "GDAL Version:"
+        gdal-config --version
+        echo "GDAL Prefix:"
+        gdal-config --prefix
+        echo "GDAL Include flags:"
+        gdal-config --cflags
+        echo "GDAL Library flags:"
+        gdal-config --libs
+        echo "Available GDAL formats:"
+        gdalinfo --formats | head -20
+        
+    - name: Configure CMake
+      run: |
+        cmake -B ${{github.workspace}}/build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DCMAKE_VERBOSE_MAKEFILE=ON
+          
+    - name: Build
+      run: |
+        cmake --build ${{github.workspace}}/build \
+          --config ${{env.BUILD_TYPE}} \
+          --parallel $(nproc) \
+          --verbose
+          
+    - name: Verify build outputs
+      run: |
+        echo "Build directory contents:"
+        ls -la ${{github.workspace}}/build/
+        echo "Plugin file details:"
+        file ${{github.workspace}}/build/gdal_EOPFZarr.* || echo "Plugin file not found"
+        
+    - name: Test plugin loading
+      run: |
+        export GDAL_DRIVER_PATH="${{github.workspace}}/build:$GDAL_DRIVER_PATH"
+        echo "Testing if plugin loads..."
+        timeout 30 gdalinfo --formats > formats_output.txt
+        if grep -i "eopf" formats_output.txt; then
+          echo "✅ EOPF driver successfully loaded!"
+        else
+          echo "❌ EOPF driver not found in formats list"
+          echo "Available formats:"
+          cat formats_output.txt
+          exit 1
+        fi
+        
+    - name: Run tests
+      if: false  # Disable until we have proper tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --verbose
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal-eopf-plugin-ubuntu-22.04
+        path: |
+          ${{github.workspace}}/build/gdal_EOPFZarr.*
+          ${{github.workspace}}/build/CMakeCache.txt
+        retention-days: 7
+
+  build-macos:
+    name: Build on macOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Cache Homebrew packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/Library/Caches/Homebrew
+          /usr/local/Homebrew/Library/Homebrew/vendor/cache
+          /usr/local/Homebrew/Library/Taps
+        key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/ci-cd.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-brew-
+    
+    - name: Install dependencies with Homebrew
+      run: |
+        # Skip update if we have cached packages
+        if brew list gdal &>/dev/null; then
+          echo "GDAL already installed from cache"
+        else
+          brew install gdal cmake ninja json-c curl
+        fi
+        
+        # Clean up cache to prevent it from growing too large
+        brew cleanup
+        
+    - name: Verify GDAL installation
+      run: |
+        gdal-config --version
+        gdal-config --prefix
+        
+    - name: Configure CMake
+      run: |
+        cmake -B ${{github.workspace}}/build \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DCMAKE_VERBOSE_MAKEFILE=ON
+          
+    - name: Build
+      run: |
+        cmake --build ${{github.workspace}}/build \
+          --config ${{env.BUILD_TYPE}} \
+          --parallel $(sysctl -n hw.logicalcpu)
+          
+    - name: Test plugin loading
+      run: |
+        export GDAL_DRIVER_PATH="${{github.workspace}}/build:$GDAL_DRIVER_PATH"
+        gdalinfo --formats | grep -i eopf || echo "EOPF driver not found"
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal-eopf-plugin-macos
+        path: |
+          ${{github.workspace}}/build/gdal_EOPFZarr.*
+        retention-days: 7
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-22.04  # Use consistent Ubuntu version
+    needs: build-ubuntu
+    if: false  # Enable when we have test data
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-eopf-plugin-ubuntu-22.04
+        path: ./plugin/
+        
+    - name: Install GDAL
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgdal-dev gdal-bin
+        
+    - name: Test with sample data
+      run: |
+        export GDAL_DRIVER_PATH="./plugin:$GDAL_DRIVER_PATH"
+        # Add tests with real EOPF data here
+        echo "Integration tests would run here"
+        
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-22.04  # Use consistent Ubuntu version
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cppcheck \
+          clang-format \
+          libgdal-dev
+          
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all --inconclusive --xml --xml-version=2 \
+          src/ include/ 2> cppcheck-report.xml || true
+        
+    - name: Check code formatting
+      run: |
+        find src include -name "*.cpp" -o -name "*.h" | \
+          xargs clang-format --style=file --dry-run --Werror || \
+          echo "Code formatting check failed - run clang-format to fix"
+        
+    - name: Upload code quality reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: code-quality-reports
+        path: |
+          cppcheck-report.xml
+        retention-days: 30

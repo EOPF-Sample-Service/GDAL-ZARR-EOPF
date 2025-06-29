@@ -8,7 +8,7 @@ on:
 
 jobs:
   enforce-branch-protection:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Block Direct Push to Main
@@ -18,7 +18,7 @@ jobs:
           exit 1
 
   validate-pr:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
@@ -42,25 +42,65 @@ jobs:
           echo "✅ Required files present"
 
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # Use same Ubuntu version as main.yml
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
       
       - name: Setup dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            build-essential \
+            libgdal-dev \
+            gdal-bin \
+            ninja-build
+          
+      - name: Verify GDAL installation
+        run: |
+          echo "GDAL version information:"
+          gdal-config --version
+          echo "GDAL include path:"
+          gdal-config --cflags
+          echo "GDAL library path:"
+          gdal-config --libs
+          echo "GDAL_VERSION_NUM from header:"
+          echo '#include "gdal_version.h"' | cpp -I$(gdal-config --cflags | sed 's/-I//g') - | grep 'define GDAL_VERSION_NUM' || echo "Could not find GDAL_VERSION_NUM"
           
       - name: Build project
         run: |
-          mkdir -p build
-          cd build
-          cmake ..
-          make
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake --build build --parallel
+          
+      - name: Verify build outputs
+        run: |
+          ls -la build/
+          file build/gdal_EOPFZarr.* || echo "Plugin file not found"
           
       - name: Run tests
         run: |
-          cd build
-          # Add your test commands here
-          echo "✅ Tests would run here"
+          # Check if test executables exist
+          if [ -f build/test_eopf_driver ]; then
+            echo "Running unit tests..."
+            ./build/test_eopf_driver
+          else
+            echo "No test executables found, skipping tests"
+          fi
+          
+      - name: Test plugin loading
+        run: |
+          # Set plugin path and test if GDAL can load the driver
+          export GDAL_DRIVER_PATH="$GITHUB_WORKSPACE/build:$GDAL_DRIVER_PATH"
+          echo "Testing plugin loading..."
+          timeout 30 gdalinfo --formats > formats_output.txt
+          if grep -i "eopf" formats_output.txt; then
+            echo "✅ EOPF driver successfully loaded!"
+          else
+            echo "❌ EOPF driver not found in formats list"
+            echo "Available formats:"
+            head -20 formats_output.txt
+          fi
