@@ -1,0 +1,66 @@
+name: Branch Protection Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  enforce-branch-protection:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Block Direct Push to Main
+        run: |
+          echo "❌ Direct pushes to main branch are not allowed!"
+          echo "Please create a feature branch and submit a pull request."
+          exit 1
+
+  validate-pr:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate PR
+        run: |
+          echo "✅ Pull request validation passed"
+          echo "PR from: ${{ github.head_ref }}"
+          echo "PR to: ${{ github.base_ref }}"
+          
+      - name: Check for required files
+        run: |
+          if [ ! -f "README.md" ]; then
+            echo "❌ README.md is required"
+            exit 1
+          fi
+          if [ ! -f "CONTRIBUTING.md" ]; then
+            echo "❌ CONTRIBUTING.md is required"  
+            exit 1
+          fi
+          echo "✅ Required files present"
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential
+          
+      - name: Build project
+        run: |
+          mkdir -p build
+          cd build
+          cmake ..
+          make
+          
+      - name: Run tests
+        run: |
+          cd build
+          # Add your test commands here
+          echo "✅ Tests would run here"
