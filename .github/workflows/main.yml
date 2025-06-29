@@ -112,6 +112,44 @@ jobs:
         name: gdal_EOPFZarr-${{ matrix.cfg }}
         path: build/${{ matrix.cfg }}/gdal_EOPFZarr.so
 
+  # Optional: Linux conda build (faster and more consistent)
+  # linux-build-conda:
+  #   name: Linux Build (Conda)
+  #   runs-on: ubuntu-22.04
+  #   timeout-minutes: 10
+  #   strategy:
+  #     matrix:
+  #       cfg: [Debug, Release]
+  #   steps:
+  #   - name: Checkout
+  #     uses: actions/checkout@v4
+  #   - name: Setup Miniconda
+  #     uses: conda-incubator/setup-miniconda@v3
+  #     with:
+  #       auto-update-conda: true
+  #       python-version: '3.10'
+  #       miniforge-version: latest
+  #   - name: Install GDAL via conda-forge
+  #     shell: bash -el {0}
+  #     run: |
+  #       conda install -c conda-forge gdal cmake ninja pytest -y
+  #   - name: Configure
+  #     shell: bash -el {0}
+  #     run: |
+  #       cmake -S . -B build/${{ matrix.cfg }} \
+  #         -G Ninja \
+  #         -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
+  #         -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+  #   - name: Build
+  #     shell: bash -el {0}
+  #     run: cmake --build build/${{ matrix.cfg }} --parallel
+  #   - name: Test
+  #     shell: bash -el {0}
+  #     run: |
+  #       export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
+  #       gdalinfo --formats | grep "EOPFZARR"
+  #       cd tests && pytest -xvs python/
+
   windows-build:
     runs-on: windows-latest
     steps:
@@ -209,6 +247,99 @@ jobs:
         name: gdal-plugin-universal
         path: dist/*
 
+  # Homebrew approach (commented out in favor of faster conda approach)
+  # macos-build:
+  #   name: macOS Build
+  #   runs-on: macos-13
+  #   timeout-minutes: 15  # Reduced timeout since we're optimizing
+  #   steps:
+  #   - name: Checkout
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: Cache Homebrew packages
+  #     uses: actions/cache@v4
+  #     with:
+  #       path: |
+  #         ~/Library/Caches/Homebrew/downloads
+  #       key: ${{ runner.os }}-brew-gdal-${{ hashFiles('.github/workflows/main.yml') }}
+  #       restore-keys: |
+  #         ${{ runner.os }}-brew-gdal-
+  #         
+  #   - name: Install GDAL
+  #     run: |
+  #       # Update only if packages are not cached
+  #       if ! brew list gdal &>/dev/null || ! brew list cmake &>/dev/null || ! brew list ninja &>/dev/null; then
+  #         echo "Installing GDAL and build tools..."
+  #         brew update
+  #         brew install gdal cmake ninja
+  #       else
+  #         echo "GDAL and build tools already installed"
+  #       fi
+  #       
+  #       # Aggressive cleanup to keep cache size down
+  #       brew cleanup --prune=all
+  #       # Remove unnecessary cached files
+  #       rm -rf ~/Library/Caches/Homebrew/api
+  #       rm -rf ~/Library/Caches/Homebrew/cask_info
+  #       rm -rf ~/Library/Logs/Homebrew
+  #   - name: Configure
+  #     run: |
+  #       cmake -S . -B build \
+  #         -G Ninja \
+  #         -DCMAKE_BUILD_TYPE=Release \
+  #         -DCMAKE_PREFIX_PATH=$(brew --prefix gdal)
+  #   - name: Build
+  #     run: cmake --build build --parallel
+  #   - name: Smoke test
+  #     run: |
+  #         export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+  #         echo "Test 1- Checking for EOPFZARR driver in available formats:"
+  #         gdalinfo --formats | grep "EOPFZARR"
+  #         echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
+  #         gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
+  #         echo "Test 3- Verifying dataset properties:"
+  #         gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
+  #         echo "Test 4- Sample of dataset info:"
+  #         CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
+  #   - name: Set up Python
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: '3.10'
+  #   - name: Install Python dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       # Get the system GDAL version first
+  #       GDAL_VERSION=$(gdal-config --version)
+  #       echo "System GDAL version: ${GDAL_VERSION}"
+  #       # Install the matching GDAL Python bindings
+  #       pip install gdal==${GDAL_VERSION}
+  #       # Install other requirements but exclude GDAL
+  #       grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin
+  #   - name: Run Python tests
+  #     run: |
+  #       # Set the driver path so Python tests can find the plugin
+  #       export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
+  #       # Run pytest
+  #       cd tests
+  #       pytest -xvs python/
+  #   - name: Debug info
+  #     if: failure()
+  #     run: |
+  #       echo "Listing available GDAL drivers:"
+  #       gdalinfo --formats
+  #       echo "Listing contents of the driver path:"
+  #       ls -la $GITHUB_WORKSPACE/build
+  #       echo "Listing contents of test Zarr dataset:"
+  #       ls -la /tmp/test.zarr/
+  #       echo "GDAL version information:"
+  #       gdalinfo --version
+  #   - name: Upload artifact
+  #     uses: actions/upload-artifact@v4
+  #     with:
+  #       name: gdal_EOPFZarr-homebrew
+  #       path: build/*.dylib
+
+  # Faster conda approach (recommended):
   macos-build:
     name: macOS Build
     runs-on: macos-13
@@ -297,12 +428,16 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal_EOPFZarr
+        name: gdal_EOPFZarr-homebrew
         path: build/*.dylib
 
-  # Alternative faster approach using conda (much lighter cache):
-  macos-build-conda:
-    name: macOS Build (Conda - Faster)
+  # Homebrew build (slower, higher cache usage - consider disabling)
+  # macos-build-homebrew-disabled:
+  #   if: false  # Disabled in favor of conda approach
+
+  # Faster conda approach (recommended):
+  macos-build:
+    name: macOS Build (Conda)
     runs-on: macos-13
     timeout-minutes: 10  # Much faster with conda
     steps:
@@ -320,6 +455,8 @@ jobs:
       shell: bash -el {0}
       run: |
         conda install -c conda-forge gdal cmake ninja -y
+        echo "Conda cache size:"
+        du -sh $CONDA_PKGS_DIRS || echo "Cache size check failed"
         
     - name: Configure
       shell: bash -el {0}
@@ -367,5 +504,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal_EOPFZarr-conda
+        name: gdal_EOPFZarr-macos
         path: build/*.dylib
