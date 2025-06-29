@@ -22,7 +22,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/apt
@@ -148,7 +148,7 @@ jobs:
         gdalinfo --formats | grep -i eopf || echo "EOPF driver not found"
         
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: gdal-eopf-plugin-macos
         path: |
@@ -165,7 +165,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Download build artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: gdal-eopf-plugin-ubuntu-latest
         path: ./plugin/
@@ -208,7 +208,7 @@ jobs:
           echo "Code formatting check failed - run clang-format to fix"
         
     - name: Upload code quality reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: code-quality-reports
