@@ -22,7 +22,10 @@ jobs:
       with:
         path: |
           ~/.cache/apt
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt') }}
+          /var/cache/apt
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt', 'environment.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
         
     - name: Install system dependencies
       run: |
@@ -103,13 +106,33 @@ jobs:
   build-macos:
     name: Build on macOS
     runs-on: macos-latest
+    timeout-minutes: 30
     
     steps:
     - uses: actions/checkout@v4
     
+    - name: Cache Homebrew packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/Library/Caches/Homebrew
+          /usr/local/Homebrew/Library/Homebrew/vendor/cache
+          /usr/local/Homebrew/Library/Taps
+        key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/ci-cd.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-brew-
+    
     - name: Install dependencies with Homebrew
       run: |
-        brew install gdal cmake json-c curl
+        # Skip update if we have cached packages
+        if brew list gdal &>/dev/null; then
+          echo "GDAL already installed from cache"
+        else
+          brew install gdal cmake ninja json-c curl
+        fi
+        
+        # Clean up cache to prevent it from growing too large
+        brew cleanup
         
     - name: Verify GDAL installation
       run: |
