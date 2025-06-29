@@ -1,12 +1,56 @@
-﻿name: Build & test EOPFZarr plugin
+﻿name: Build, Test & Release EOPFZarr Plugin
+
+# Unified CI/CD workflow that handles:
+# - Code quality checks (cppcheck, clang-format)
+# - Multi-platform builds (Linux, macOS)
+# - Artifact consolidation and release
+# - Future: Integration tests when test data is available
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
+    branches: [ main, develop ]
   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          cppcheck \
+          clang-format \
+          libgdal-dev
+          
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all --inconclusive --xml --xml-version=2 \
+          src/ include/ 2> cppcheck-report.xml || true
+        
+    - name: Check code formatting
+      run: |
+        find src include -name "*.cpp" -o -name "*.h" | \
+          xargs clang-format --style=file --dry-run --Werror || \
+          echo "Code formatting check failed - run clang-format to fix"
+        
+    - name: Upload code quality reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: code-quality-reports
+        path: |
+          cppcheck-report.xml
+        retention-days: 30
+
   linux-build:
     name: Linux Build
     runs-on: ubuntu-22.04
@@ -162,14 +206,12 @@ jobs:
         packages: gdal-devel cmake ninja
         site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
-        arch: x86_64
         upgrade-also: false
 
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
-        vcvars_ver: 14.3
 
     - name: Build Plugin
       run: |
@@ -636,3 +678,25 @@ jobs:
           ### Changes
           
           See the full changelog at: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}
+
+  # Future: Integration tests job
+  # Enable when test data becomes available
+  # integration-tests:
+  #   name: Integration Tests
+  #   runs-on: ubuntu-22.04
+  #   needs: [linux-build]
+  #   if: false  # Enable when test data is available
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Download build artifacts
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       name: gdal_EOPFZarr-ubuntu-22.04
+  #       path: ./plugin/
+  #   - name: Install GDAL
+  #     run: sudo apt-get update && sudo apt-get install -y libgdal-dev gdal-bin
+  #   - name: Test with sample data
+  #     run: |
+  #       export GDAL_DRIVER_PATH="./plugin:$GDAL_DRIVER_PATH"
+  #       # Add tests with real EOPF data here
+  #       echo "Integration tests would run here"
