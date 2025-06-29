@@ -103,55 +103,122 @@ jobs:
           ${{github.workspace}}/build/CMakeCache.txt
         retention-days: 7
 
+  # Artifact consolidation job
+  consolidate-artifacts:
+    name: Consolidate Release Artifacts
+    runs-on: ubuntu-22.04
+    needs: [build-ubuntu, build-macos]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    
+    steps:
+    - name: Download Ubuntu artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-eopf-plugin-ubuntu-22.04
+        path: ./artifacts/linux/
+        
+    - name: Download macOS artifacts  
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-eopf-plugin-macos-conda
+        path: ./artifacts/macos/
+        
+    - name: Create consolidated package
+      run: |
+        mkdir -p consolidated-release
+        
+        # Create platform-specific subdirectories
+        mkdir -p consolidated-release/{linux,macos,windows}
+        
+        # Copy and organize artifacts
+        cp artifacts/linux/gdal_EOPFZarr.so consolidated-release/linux/
+        cp artifacts/macos/gdal_EOPFZarr.dylib consolidated-release/macos/
+        
+        # Create README with installation instructions
+        cat > consolidated-release/README.md << 'EOF'
+        # GDAL EOPF Plugin
+        
+        ## Installation Instructions
+        
+        ### Linux
+        1. Copy `linux/gdal_EOPFZarr.so` to your GDAL plugins directory
+        2. Set `GDAL_DRIVER_PATH` environment variable
+        
+        ### macOS  
+        1. Copy `macos/gdal_EOPFZarr.dylib` to your GDAL plugins directory
+        2. Set `GDAL_DRIVER_PATH` environment variable
+        
+        ### Windows
+        1. Copy `windows/gdal_EOPFZarr.dll` to your GDAL plugins directory
+        2. Set `GDAL_DRIVER_PATH` environment variable
+        
+        ## Usage
+        ```bash
+        export GDAL_DRIVER_PATH=/path/to/plugins:$GDAL_DRIVER_PATH
+        gdalinfo --formats | grep EOPF
+        ```
+        EOF
+        
+        # Create version info
+        echo "Built on: $(date)" > consolidated-release/BUILD_INFO.txt
+        echo "Commit: ${{ github.sha }}" >> consolidated-release/BUILD_INFO.txt
+        echo "Workflow: ${{ github.workflow }}" >> consolidated-release/BUILD_INFO.txt
+        
+        # Show contents
+        find consolidated-release -type f -exec ls -la {} \;
+        
+    - name: Upload consolidated artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal-eopf-plugin-all-platforms-${{ github.run_number }}
+        path: consolidated-release/
+        retention-days: 30
+
   build-macos:
-    name: Build on macOS
+    name: Build on macOS (Conda)
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 15  # Much faster with conda
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Cache Homebrew packages
-      uses: actions/cache@v4
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v3
       with:
-        path: |
-          ~/Library/Caches/Homebrew
-          /usr/local/Homebrew/Library/Homebrew/vendor/cache
-          /usr/local/Homebrew/Library/Taps
-        key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/ci-cd.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-brew-
-    
-    - name: Install dependencies with Homebrew
-      run: |
-        # Skip update if we have cached packages
-        if brew list gdal &>/dev/null; then
-          echo "GDAL already installed from cache"
-        else
-          brew install gdal cmake ninja json-c curl
-        fi
+        auto-update-conda: true
+        python-version: '3.10'
+        miniforge-version: latest
         
-        # Clean up cache to prevent it from growing too large
-        brew cleanup
+    - name: Install GDAL via conda-forge
+      shell: bash -el {0}
+      run: |
+        conda install -c conda-forge gdal cmake ninja -y
+        echo "Conda cache size:"
+        du -sh $CONDA_PKGS_DIRS || echo "Cache size check failed"
         
     - name: Verify GDAL installation
+      shell: bash -el {0}
       run: |
         gdal-config --version
         gdal-config --prefix
         
     - name: Configure CMake
+      shell: bash -el {0}
       run: |
         cmake -B ${{github.workspace}}/build \
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           -DCMAKE_VERBOSE_MAKEFILE=ON
           
     - name: Build
+      shell: bash -el {0}
       run: |
         cmake --build ${{github.workspace}}/build \
           --config ${{env.BUILD_TYPE}} \
           --parallel $(sysctl -n hw.logicalcpu)
           
     - name: Test plugin loading
+      shell: bash -el {0}
       run: |
         export GDAL_DRIVER_PATH="${{github.workspace}}/build:$GDAL_DRIVER_PATH"
         gdalinfo --formats | grep -i eopf || echo "EOPF driver not found"
@@ -159,7 +226,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: gdal-eopf-plugin-macos
+        name: gdal-eopf-plugin-macos-conda
         path: |
           ${{github.workspace}}/build/gdal_EOPFZarr.*
         retention-days: 7
