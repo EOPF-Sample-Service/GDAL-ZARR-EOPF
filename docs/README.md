@@ -5,7 +5,7 @@ Welcome to the EOPF-Zarr GDAL plugin documentation. This directory contains comp
 ## For Users
 
 ### Getting Started
-- **[Installation Guide](installation.md)** - How to install and set up the plugin
+- **[Installation Guide](installation.md)** - How to install and set up the plugin on different operating systems
 - **[User Guide](user-guide.md)** - Comprehensive usage examples and tutorials
 - **[FAQ](faq.md)** - Frequently asked questions and troubleshooting
 
