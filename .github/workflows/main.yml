@@ -106,12 +106,16 @@ jobs:
           echo "Test 3- Explicitly using EOPF_PROCESS=YES:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
 
+          # Test with EOPFZARR: prefix
+          echo "Test 4- Using EOPFZARR: prefix:"
+          gdalinfo EOPFZARR:$GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver" || echo "EOPFZARR prefix test failed"
+
           # Verify dimensions or other expected properties of your sample data
-          echo "Test 4- Verifying dataset properties:"
+          echo "Test 5- Verifying dataset properties:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
 
           # Optional: Show a sample of the full output
-          echo "Test 5- Sample of dataset info:"
+          echo "Test 6- Sample of dataset info:"
           CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 70 || echo "Failed to retrieve dataset info"
 
     - name: Set up Python
@@ -423,9 +427,11 @@ jobs:
           gdalinfo --formats | grep "EOPFZARR"
           echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
-          echo "Test 3- Verifying dataset properties:"
+          echo "Test 3- Using EOPFZARR: prefix:"
+          gdalinfo EOPFZARR:$GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver" || echo "EOPFZARR prefix test failed"
+          echo "Test 4- Verifying dataset properties:"
           gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
-          echo "Test 4- Sample of dataset info:"
+          echo "Test 5- Sample of dataset info:"
           CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
     
     - name: Set up Python dependencies
