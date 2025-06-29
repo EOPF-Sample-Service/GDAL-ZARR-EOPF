@@ -409,3 +409,230 @@ jobs:
       with:
         name: gdal_EOPFZarr-macos
         path: build/*.dylib
+
+  # Consolidate all artifacts for easy distribution
+  package-release:
+    name: Package Release Artifacts
+    runs-on: ubuntu-22.04
+    needs: [linux-build, windows-build, macos-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Download Linux Debug artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-Debug
+        path: ./release-package/linux/debug/
+        
+    - name: Download Linux Release artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-Release  
+        path: ./release-package/linux/release/
+        
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-plugin-universal
+        path: ./release-package/windows/
+        
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-macos
+        path: ./release-package/macos/
+        
+    - name: Create installation scripts
+      run: |
+        # Create Linux install script
+        cat > release-package/install-linux.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        PLUGIN_DIR=${GDAL_DRIVER_PATH:-/usr/lib/gdal/plugins}
+        PLUGIN_FILE="gdal_EOPFZarr.so"
+        
+        echo "Installing GDAL EOPF Plugin for Linux..."
+        
+        if [ "$1" = "debug" ]; then
+          SOURCE_DIR="linux/debug"
+          echo "Installing DEBUG version"
+        else
+          SOURCE_DIR="linux/release"  
+          echo "Installing RELEASE version"
+        fi
+        
+        sudo mkdir -p "$PLUGIN_DIR"
+        sudo cp "$SOURCE_DIR/$PLUGIN_FILE" "$PLUGIN_DIR/"
+        sudo chmod 755 "$PLUGIN_DIR/$PLUGIN_FILE"
+        
+        echo "Plugin installed to: $PLUGIN_DIR/$PLUGIN_FILE"
+        echo "Add this to your environment:"
+        echo "export GDAL_DRIVER_PATH=$PLUGIN_DIR:\$GDAL_DRIVER_PATH"
+        EOF
+        
+        # Create macOS install script  
+        cat > release-package/install-macos.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        PLUGIN_DIR=${GDAL_DRIVER_PATH:-$(brew --prefix gdal)/lib/gdal/plugins}
+        PLUGIN_FILE="gdal_EOPFZarr.dylib"
+        
+        echo "Installing GDAL EOPF Plugin for macOS..."
+        
+        mkdir -p "$PLUGIN_DIR"
+        cp "macos/$PLUGIN_FILE" "$PLUGIN_DIR/"
+        chmod 755 "$PLUGIN_DIR/$PLUGIN_FILE"
+        
+        echo "Plugin installed to: $PLUGIN_DIR/$PLUGIN_FILE"
+        echo "Add this to your environment:"
+        echo "export GDAL_DRIVER_PATH=$PLUGIN_DIR:\$GDAL_DRIVER_PATH"
+        EOF
+        
+        # Create Windows install script
+        cat > release-package/install-windows.bat << 'EOF'
+        @echo off
+        setlocal
+        
+        set "PLUGIN_DIR=%GDAL_DRIVER_PATH%"
+        if "%PLUGIN_DIR%"=="" set "PLUGIN_DIR=C:\OSGeo4W\bin\gdal\plugins"
+        set "PLUGIN_FILE=gdal_EOPFZarr.dll"
+        
+        echo Installing GDAL EOPF Plugin for Windows...
+        
+        if not exist "%PLUGIN_DIR%" mkdir "%PLUGIN_DIR%"
+        copy "windows\%PLUGIN_FILE%" "%PLUGIN_DIR%\"
+        
+        echo Plugin installed to: %PLUGIN_DIR%\%PLUGIN_FILE%
+        echo Add this to your environment:
+        echo set GDAL_DRIVER_PATH=%PLUGIN_DIR%;%%GDAL_DRIVER_PATH%%
+        EOF
+        
+        # Make scripts executable
+        chmod +x release-package/install-*.sh
+        
+        # Create comprehensive README
+        cat > release-package/README.md << 'EOF'
+        # GDAL EOPF Zarr Plugin - Release Package
+        
+        This package contains the GDAL EOPF plugin for multiple platforms.
+        
+        ## Quick Installation
+        
+        ### Linux
+        ```bash
+        ./install-linux.sh          # Install release version
+        ./install-linux.sh debug    # Install debug version
+        ```
+        
+        ### macOS
+        ```bash
+        ./install-macos.sh
+        ```
+        
+        ### Windows
+        ```cmd
+        install-windows.bat
+        ```
+        
+        ## Manual Installation
+        
+        1. Copy the appropriate plugin file to your GDAL plugins directory:
+           - Linux: `gdal_EOPFZarr.so` 
+           - macOS: `gdal_EOPFZarr.dylib`
+           - Windows: `gdal_EOPFZarr.dll`
+        
+        2. Set the GDAL_DRIVER_PATH environment variable to include the plugins directory
+        
+        ## Verification
+        
+        ```bash
+        gdalinfo --formats | grep EOPF
+        ```
+        
+        You should see the EOPFZARR driver listed.
+        
+        ## Support
+        
+        - GitHub: https://github.com/your-repo/GDAL-ZARR-EOPF
+        - Issues: https://github.com/your-repo/GDAL-ZARR-EOPF/issues
+        EOF
+        
+        # Create build info
+        cat > release-package/BUILD_INFO.json << EOF
+        {
+          "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "commit": "${{ github.sha }}",
+          "ref": "${{ github.ref }}",
+          "workflow": "${{ github.workflow }}",
+          "run_number": "${{ github.run_number }}",
+          "platforms": ["linux", "macos", "windows"],
+          "linux_variants": ["debug", "release"]
+        }
+        EOF
+        
+    - name: Upload consolidated release package
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal-eopf-plugin-release-v${{ github.run_number }}
+        path: release-package/
+        retention-days: 90
+
+  # Optional: Create GitHub Release for tags
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-22.04
+    needs: [package-release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Download release package
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-eopf-plugin-release-v${{ github.run_number }}
+        path: ./release-assets/
+        
+    - name: Create release archive
+      run: |
+        cd release-assets
+        zip -r ../gdal-eopf-plugin-${{ github.ref_name }}.zip .
+        tar -czf ../gdal-eopf-plugin-${{ github.ref_name }}.tar.gz .
+        cd ..
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          gdal-eopf-plugin-${{ github.ref_name }}.zip
+          gdal-eopf-plugin-${{ github.ref_name }}.tar.gz
+        generate_release_notes: true
+        draft: false
+        prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        body: |
+          ## GDAL EOPF Plugin ${{ github.ref_name }}
+          
+          ### Installation
+          
+          1. Download the appropriate archive for your platform
+          2. Extract the archive
+          3. Run the installation script for your platform:
+             - Linux: `./install-linux.sh`
+             - macOS: `./install-macos.sh` 
+             - Windows: `install-windows.bat`
+          
+          ### Supported Platforms
+          
+          - ✅ Linux (Ubuntu 22.04+ compatible)
+          - ✅ macOS (Intel & Apple Silicon)
+          - ✅ Windows (64-bit)
+          
+          ### Changes
+          
+          See the full changelog at: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}

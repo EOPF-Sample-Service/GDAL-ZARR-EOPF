@@ -103,6 +103,77 @@ jobs:
           ${{github.workspace}}/build/CMakeCache.txt
         retention-days: 7
 
+  # Artifact consolidation job
+  consolidate-artifacts:
+    name: Consolidate Release Artifacts
+    runs-on: ubuntu-22.04
+    needs: [build-ubuntu, build-macos]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    
+    steps:
+    - name: Download Ubuntu artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-eopf-plugin-ubuntu-22.04
+        path: ./artifacts/linux/
+        
+    - name: Download macOS artifacts  
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-eopf-plugin-macos-conda
+        path: ./artifacts/macos/
+        
+    - name: Create consolidated package
+      run: |
+        mkdir -p consolidated-release
+        
+        # Create platform-specific subdirectories
+        mkdir -p consolidated-release/{linux,macos,windows}
+        
+        # Copy and organize artifacts
+        cp artifacts/linux/gdal_EOPFZarr.so consolidated-release/linux/
+        cp artifacts/macos/gdal_EOPFZarr.dylib consolidated-release/macos/
+        
+        # Create README with installation instructions
+        cat > consolidated-release/README.md << 'EOF'
+        # GDAL EOPF Plugin
+        
+        ## Installation Instructions
+        
+        ### Linux
+        1. Copy `linux/gdal_EOPFZarr.so` to your GDAL plugins directory
+        2. Set `GDAL_DRIVER_PATH` environment variable
+        
+        ### macOS  
+        1. Copy `macos/gdal_EOPFZarr.dylib` to your GDAL plugins directory
+        2. Set `GDAL_DRIVER_PATH` environment variable
+        
+        ### Windows
+        1. Copy `windows/gdal_EOPFZarr.dll` to your GDAL plugins directory
+        2. Set `GDAL_DRIVER_PATH` environment variable
+        
+        ## Usage
+        ```bash
+        export GDAL_DRIVER_PATH=/path/to/plugins:$GDAL_DRIVER_PATH
+        gdalinfo --formats | grep EOPF
+        ```
+        EOF
+        
+        # Create version info
+        echo "Built on: $(date)" > consolidated-release/BUILD_INFO.txt
+        echo "Commit: ${{ github.sha }}" >> consolidated-release/BUILD_INFO.txt
+        echo "Workflow: ${{ github.workflow }}" >> consolidated-release/BUILD_INFO.txt
+        
+        # Show contents
+        find consolidated-release -type f -exec ls -la {} \;
+        
+    - name: Upload consolidated artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal-eopf-plugin-all-platforms-${{ github.run_number }}
+        path: consolidated-release/
+        retention-days: 30
+
   build-macos:
     name: Build on macOS (Conda)
     runs-on: macos-latest
