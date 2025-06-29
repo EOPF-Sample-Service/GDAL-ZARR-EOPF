@@ -13,6 +13,34 @@ configure_file(
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
+# If GDAL imported target is not available, try with pkg-config as fallback
+if(NOT TARGET GDAL::GDAL)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GDAL REQUIRED gdal)
+        if(GDAL_FOUND)
+            add_library(GDAL::GDAL INTERFACE IMPORTED)
+            target_include_directories(GDAL::GDAL INTERFACE ${GDAL_INCLUDE_DIRS})
+            target_link_libraries(GDAL::GDAL INTERFACE ${GDAL_LIBRARIES})
+            target_compile_options(GDAL::GDAL INTERFACE ${GDAL_CFLAGS_OTHER})
+        endif()
+    endif()
+endif()
+
+# Verify GDAL target is available
+if(NOT TARGET GDAL::GDAL)
+    message(FATAL_ERROR "GDAL not found. Please install GDAL development packages.")
+endif()
+
+# Print GDAL information for debugging
+message(STATUS "Found GDAL version: ${GDAL_VERSION}")
+if(GDAL_INCLUDE_DIRS)
+    message(STATUS "GDAL include directories: ${GDAL_INCLUDE_DIRS}")
+endif()
+if(GDAL_LIBRARIES)  
+    message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
+endif()
+
 # Main driver library (MODULE)
 add_library(gdal_EOPFZarr MODULE
     src/eopfzarr_driver.cpp

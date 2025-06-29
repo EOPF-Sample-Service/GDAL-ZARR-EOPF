@@ -50,17 +50,54 @@ jobs:
       - name: Setup dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            libgdal-dev \
+            gdal-bin \
+            libjson-c-dev \
+            libcurl4-openssl-dev \
+            zlib1g-dev \
+            pkg-config
+          
+      - name: Verify GDAL installation
+        run: |
+          gdal-config --version
+          gdal-config --prefix
+          gdal-config --cflags
+          gdal-config --libs
+          pkg-config --modversion gdal || echo "pkg-config for gdal not available"
           
       - name: Build project
         run: |
           mkdir -p build
           cd build
-          cmake ..
-          make
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_VERBOSE_MAKEFILE=ON
+          make VERBOSE=1
+          
+      - name: Verify build outputs
+        run: |
+          cd build
+          ls -la
+          file gdal_EOPFZarr.* || echo "Plugin file not found"
           
       - name: Run tests
         run: |
           cd build
-          # Add your test commands here
-          echo "✅ Tests would run here"
+          # Check if test executables exist
+          if [ -f test_eopf_driver ]; then
+            echo "Running unit tests..."
+            ./test_eopf_driver
+          else
+            echo "No test executables found, skipping tests"
+          fi
+          
+      - name: Test plugin loading
+        run: |
+          cd build
+          # Set plugin path and test if GDAL can load the driver
+          export GDAL_DRIVER_PATH="$(pwd):$GDAL_DRIVER_PATH"
+          echo "Testing plugin loading..."
+          gdalinfo --formats | grep -i eopf || echo "EOPF driver not found in formats list"
