@@ -104,54 +104,50 @@ jobs:
         retention-days: 7
 
   build-macos:
-    name: Build on macOS
+    name: Build on macOS (Conda)
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 15  # Much faster with conda
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Cache Homebrew packages
-      uses: actions/cache@v4
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v3
       with:
-        path: |
-          ~/Library/Caches/Homebrew
-          /usr/local/Homebrew/Library/Homebrew/vendor/cache
-          /usr/local/Homebrew/Library/Taps
-        key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/ci-cd.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-brew-
-    
-    - name: Install dependencies with Homebrew
-      run: |
-        # Skip update if we have cached packages
-        if brew list gdal &>/dev/null; then
-          echo "GDAL already installed from cache"
-        else
-          brew install gdal cmake ninja json-c curl
-        fi
+        auto-update-conda: true
+        python-version: '3.10'
+        miniforge-version: latest
         
-        # Clean up cache to prevent it from growing too large
-        brew cleanup
+    - name: Install GDAL via conda-forge
+      shell: bash -el {0}
+      run: |
+        conda install -c conda-forge gdal cmake ninja -y
+        echo "Conda cache size:"
+        du -sh $CONDA_PKGS_DIRS || echo "Cache size check failed"
         
     - name: Verify GDAL installation
+      shell: bash -el {0}
       run: |
         gdal-config --version
         gdal-config --prefix
         
     - name: Configure CMake
+      shell: bash -el {0}
       run: |
         cmake -B ${{github.workspace}}/build \
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           -DCMAKE_VERBOSE_MAKEFILE=ON
           
     - name: Build
+      shell: bash -el {0}
       run: |
         cmake --build ${{github.workspace}}/build \
           --config ${{env.BUILD_TYPE}} \
           --parallel $(sysctl -n hw.logicalcpu)
           
     - name: Test plugin loading
+      shell: bash -el {0}
       run: |
         export GDAL_DRIVER_PATH="${{github.workspace}}/build:$GDAL_DRIVER_PATH"
         gdalinfo --formats | grep -i eopf || echo "EOPF driver not found"
@@ -159,7 +155,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: gdal-eopf-plugin-macos
+        name: gdal-eopf-plugin-macos-conda
         path: |
           ${{github.workspace}}/build/gdal_EOPFZarr.*
         retention-days: 7
