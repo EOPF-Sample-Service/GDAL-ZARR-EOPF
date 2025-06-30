@@ -47,6 +47,15 @@ target_include_directories(gdal_EOPFZarr PRIVATE
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
+
+if(WIN32 AND MSVC)
+    # Static link runtime to avoid dependency issues
+    target_compile_options(gdal_EOPFZarr PRIVATE
+        $<$<CONFIG:Release>:/MT>
+        $<$<CONFIG:Debug>:/MTd>
+    )
+endif()
+
 # Output properties for plugin
 if (WIN32)
     set_target_properties(gdal_EOPFZarr PROPERTIES
