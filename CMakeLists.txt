@@ -152,11 +152,4 @@ if(WIN32)
     # Get the actual GDAL DLL name and make our plugin compatible
     get_filename_component(GDAL_DLL_NAME "${GDAL_LIBRARIES}" NAME_WE)
     message(STATUS "GDAL library name: ${GDAL_DLL_NAME}")
-    
-    # Add delayed loading for GDAL DLL to handle version differences
-    target_link_options(gdal_EOPFZarr PRIVATE 
-        "/DELAYLOAD:${GDAL_DLL_NAME}.dll"
-        "/DELAYLOAD:gdal.dll"
-    )
-    target_link_libraries(gdal_EOPFZarr PRIVATE delayimp)
 endif()
