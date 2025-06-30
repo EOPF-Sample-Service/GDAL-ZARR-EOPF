@@ -13,32 +13,25 @@ configure_file(
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
-# If GDAL imported target is not available, try with pkg-config as fallback
-if(NOT TARGET GDAL::GDAL)
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(GDAL REQUIRED gdal)
-        if(GDAL_FOUND)
-            add_library(GDAL::GDAL INTERFACE IMPORTED)
-            target_include_directories(GDAL::GDAL INTERFACE ${GDAL_INCLUDE_DIRS})
-            target_link_libraries(GDAL::GDAL INTERFACE ${GDAL_LIBRARIES})
-            target_compile_options(GDAL::GDAL INTERFACE ${GDAL_CFLAGS_OTHER})
-        endif()
-    endif()
-endif()
+# Add this compatibility check
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
 
-# Verify GDAL target is available
-if(NOT TARGET GDAL::GDAL)
-    message(FATAL_ERROR "GDAL not found. Please install GDAL development packages.")
-endif()
+check_cxx_source_compiles("
+#include <gdal_pam.h>
+class Test : public GDALPamDataset {
+protected:
+    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
+};
+int main() { return 0; }
+" GDAL_HAS_CONST_XML_NODE)
 
-# Print GDAL information for debugging
-message(STATUS "Found GDAL version: ${GDAL_VERSION}")
-if(GDAL_INCLUDE_DIRS)
-    message(STATUS "GDAL include directories: ${GDAL_INCLUDE_DIRS}")
-endif()
-if(GDAL_LIBRARIES)  
-    message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
+if(GDAL_HAS_CONST_XML_NODE)
+    add_definitions(-DGDAL_HAS_CONST_XML_NODE)
+    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
+else()
+    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
 endif()
 
 # Main driver library (MODULE)
@@ -101,53 +94,20 @@ if(NOT GDALINFO_EXECUTABLE)
 endif()
 
 if(WIN32)
-    # Use the correct configuration-specific directory for the DLL
-    add_test(NAME driver_registration
-             COMMAND gdalinfo --formats)
-    set_tests_properties(driver_registration PROPERTIES
-        ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}/Debug"
-        PASS_REGULAR_EXPRESSION "EOPFZARR")
-             
-elseif(APPLE)
-
-    add_test(NAME driver_registration 
-             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
-else()
-    add_test(NAME driver_registration 
-             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
-endif()
-
-# Check for GDALPamDataset XML initialization compatibility
-include(CheckCXXSourceCompiles)
-
-# Set up the required variables for the test
-set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
-
-check_cxx_source_compiles("
-#include <gdal_pam.h>
-class Test : public GDALPamDataset {
-protected:
-    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
-};
-int main() { return 0; }
-" GDAL_HAS_CONST_XML_NODE)
-
-if(GDAL_HAS_CONST_XML_NODE)
-    target_compile_definitions(gdal_EOPFZarr PRIVATE GDAL_HAS_CONST_XML_NODE)
-    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
-else()
-    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
-endif()
-
-# Windows-specific dependency handling
-if(WIN32)
+       # Get GDAL binary directory for runtime
     get_filename_component(GDAL_BIN_DIR "${GDAL_LIBRARIES}" DIRECTORY)
     get_filename_component(GDAL_BIN_DIR "${GDAL_BIN_DIR}/../bin" ABSOLUTE)
     message(STATUS "GDAL binary directory: ${GDAL_BIN_DIR}")
     
-    # Update test environment
+    add_test(NAME driver_registration
+             COMMAND gdalinfo --formats)
     set_tests_properties(driver_registration PROPERTIES
         ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}/Release;PATH=${GDAL_BIN_DIR};$ENV{PATH}"
         PASS_REGULAR_EXPRESSION "EOPFZARR")
+elseif(APPLE)
+    add_test(NAME driver_registration 
+             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
+else()
+    add_test(NAME driver_registration 
+             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 endif()
