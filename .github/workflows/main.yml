@@ -210,12 +210,14 @@ jobs:
         packages: gdal-devel cmake ninja
         site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
+        arch: x86_64
         upgrade-also: false
 
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
+        vcvars_ver: 14.3
 
     - name: Build Plugin
       run: |
