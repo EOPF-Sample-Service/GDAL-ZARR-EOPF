@@ -101,9 +101,15 @@ if(NOT GDALINFO_EXECUTABLE)
 endif()
 
 if(WIN32)
+    # Use the correct configuration-specific directory for the DLL
     add_test(NAME driver_registration
-             COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
+             COMMAND gdalinfo --formats)
+    set_tests_properties(driver_registration PROPERTIES
+        ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}/Debug"
+        PASS_REGULAR_EXPRESSION "EOPFZARR")
+             
 elseif(APPLE)
+
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 else()
