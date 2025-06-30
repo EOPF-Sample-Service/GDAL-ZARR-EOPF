@@ -119,15 +119,35 @@ endif()
 
 # Check for GDALPamDataset XML initialization compatibility
 include(CheckCXXSourceCompiles)
+
+# Set up the required variables for the test
+set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
+
 check_cxx_source_compiles("
 #include <gdal_pam.h>
 class Test : public GDALPamDataset {
 protected:
-    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override;
+    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
 };
 int main() { return 0; }
 " GDAL_HAS_CONST_XML_NODE)
 
 if(GDAL_HAS_CONST_XML_NODE)
-    add_definitions(-DGDAL_HAS_CONST_XML_NODE)
+    target_compile_definitions(gdal_EOPFZarr PRIVATE GDAL_HAS_CONST_XML_NODE)
+    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
+else()
+    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
+endif()
+
+# Windows-specific dependency handling
+if(WIN32)
+    get_filename_component(GDAL_BIN_DIR "${GDAL_LIBRARIES}" DIRECTORY)
+    get_filename_component(GDAL_BIN_DIR "${GDAL_BIN_DIR}/../bin" ABSOLUTE)
+    message(STATUS "GDAL binary directory: ${GDAL_BIN_DIR}")
+    
+    # Update test environment
+    set_tests_properties(driver_registration PROPERTIES
+        ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}/Release;PATH=${GDAL_BIN_DIR};$ENV{PATH}"
+        PASS_REGULAR_EXPRESSION "EOPFZARR")
 endif()
