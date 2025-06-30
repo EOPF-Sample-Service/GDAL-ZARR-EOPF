@@ -54,6 +54,22 @@ if(WIN32 AND MSVC)
         $<$<CONFIG:Release>:/MT>
         $<$<CONFIG:Debug>:/MTd>
     )
+
+    # Use static runtime to reduce dependencies
+    set_property(TARGET gdal_EOPFZarr PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    
+    # Add debug information for dependency checking
+    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Built DLL: $<TARGET_FILE:gdal_EOPFZarr>"
+        COMMAND dumpbin /dependents $<TARGET_FILE:gdal_EOPFZarr> || echo "dumpbin not available"
+        VERBATIM
+    )
+    
+    # Ensure proper exports
+    set_target_properties(gdal_EOPFZarr PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+    )
 endif()
 
 # Output properties for plugin
@@ -119,4 +135,17 @@ elseif(APPLE)
 else()
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
+endif()
+
+# Add this to your CMakeLists.txt for Windows
+if(WIN32)
+    # Find and copy required runtime DLLs
+    include(InstallRequiredSystemLibraries)
+    
+    # Custom post-build step to copy dependencies
+    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Checking DLL dependencies..."
+        COMMAND dumpbin /dependents $<TARGET_FILE:gdal_EOPFZarr>
+        VERBATIM
+    )
 endif()
