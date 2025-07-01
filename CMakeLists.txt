@@ -55,7 +55,19 @@ target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 # Windows-specific configuration for maximum compatibility
 if(WIN32)
     # Check if we're building in GitHub Actions or other CI environment
-    if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
+    # Also check for common CI environment variables
+    if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI} OR DEFINED ENV{JENKINS_URL} OR DEFINED ENV{BUILDKITE})
+        set(IS_CI_BUILD TRUE)
+        message(STATUS "CI Build detected")
+    else()
+        set(IS_CI_BUILD FALSE)
+        message(STATUS "Local Build detected")
+    endif()
+    
+    # Add option to force local build behavior
+    option(FORCE_LOCAL_BUILD "Force local build configuration (static runtime)" OFF)
+    
+    if(IS_CI_BUILD AND NOT FORCE_LOCAL_BUILD)
         # For CI builds, use dynamic runtime to match OSGeo4W and most distributions
         set_property(TARGET gdal_EOPFZarr PROPERTY
             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -91,7 +103,7 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E echo "Build Type: ${CMAKE_BUILD_TYPE}"
         COMMAND ${CMAKE_COMMAND} -E echo "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
         COMMAND ${CMAKE_COMMAND} -E echo "GDAL Version: ${GDAL_VERSION}"
-        COMMAND ${CMAKE_COMMAND} -E echo "Runtime Library: Dynamic (/MD)"
+        COMMAND ${CMAKE_COMMAND} -E echo "Runtime Library: $<IF:$<BOOL:${IS_CI_BUILD}>,Dynamic (/MD),Static (/MT)>"
         COMMAND ${CMAKE_COMMAND} -E echo "Target File: $<TARGET_FILE:gdal_EOPFZarr>"
         COMMAND ${CMAKE_COMMAND} -E echo "=== Dependency Check ==="
         COMMAND dumpbin /dependents $<TARGET_FILE:gdal_EOPFZarr> || echo "dumpbin not available"

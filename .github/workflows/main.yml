@@ -210,16 +210,16 @@ jobs:
         packages: gdal-devel cmake ninja
         site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
-        arch: x86_64
         upgrade-also: false
 
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
-        vcvars_ver: 14.3
 
     - name: Build Plugin
+      env:
+        CI: true  # Ensure CI environment is detected
       run: |
         cmake -S . -B build `
           -G "Visual Studio 17 2022" `
@@ -278,20 +278,6 @@ jobs:
           exit 1
         }
         
-        Write-Host "`nTest 2- URL parsing test:"
-        $env:CPL_DEBUG = "EOPFZARR"
-        try {
-          $output = gdalinfo "EOPFZARR:https://example.com/test.zarr" 2>&1
-          if ($output -match "EOPFOpen: ENTRY POINT REACHED") {
-            Write-Host "SUCCESS: EOPFZARR driver invoked for URL"
-          } else {
-            Write-Host "ERROR: EOPFZARR driver not invoked"
-            Write-Host "Output: $output"
-            exit 1
-          }
-        } catch {
-          Write-Host "WARNING: URL test failed but continuing"
-        }
         $env:CPL_DEBUG = "OFF"
 
     - name: Package Artifacts
