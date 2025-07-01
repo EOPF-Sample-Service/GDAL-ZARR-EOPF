@@ -54,13 +54,8 @@ class EOPFZarrDataset : public GDALPamDataset
     // In your header file:
     CPLErr TryLoadXML(char **papszSiblingFiles = nullptr);
     
-#if GDAL_VERSION_NUM >= 3060000
-    // Modern GDAL (3.6.0+) - const XMLNode parameter
-    CPLErr XMLInit(const CPLXMLNode *psTree, const char *pszUnused) override;
-#else
-    // Older GDAL - non-const XMLNode parameter  
+    // XMLInit signature matches base class GDALPamDataset
     CPLErr XMLInit(CPLXMLNode *psTree, const char *pszUnused) override;
-#endif
 
     CPLXMLNode *SerializeToXML(const char *pszUnused) override;
 };

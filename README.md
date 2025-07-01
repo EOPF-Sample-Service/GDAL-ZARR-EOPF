@@ -68,6 +68,15 @@ sudo apt-get update && sudo apt-get install -y \
   python3 python3-pip
 ```
 
+On Windows, you'll need:
+- **Visual Studio 2019/2022** (with C++ development tools)
+- **OSGeo4W** or similar GDAL installation 
+- **CMake** 3.14 or later
+
+For OSGeo4W installation:
+1. Download and install from: https://download.osgeo.org/osgeo4w/v2/
+2. Select packages: `gdal`, `gdal-devel`, `cmake`
+
 ---
 
 ## Building
@@ -79,19 +88,39 @@ sudo apt-get update && sudo apt-get install -y \
    ```
 
 2. **Configure with CMake**  
+   
+   **Linux/macOS:**
    ```bash
    mkdir build
    cd build
    cmake .. -DCMAKE_BUILD_TYPE=Release
-  
    ```
+   
+   **Windows (with OSGeo4W):**
+   ```cmd
+   mkdir build
+   cd build
+   cmake .. -G "Visual Studio 17 2022" -A x64 ^
+     -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" ^
+     -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal" ^
+     -DCMAKE_BUILD_TYPE=Release
+   ```
+   
    The CMake script attempts to locate GDAL via `find_package(GDAL REQUIRED)`. If GDAL is not found automatically, set `GDAL_DIR` or `GDAL_INCLUDE_DIR/GDAL_LIBRARY` manually.
 
 3. **Compile**  
+   
+   **Linux/macOS:**
    ```bash
-    cmake --build . -j$(nproc)
+   cmake --build . -j$(nproc)
    ```
-   This produces a shared library named something like `gdal_EOPFZarr.so` (on Linux) or `gdal_EOPFZarr.dll` (Windows).
+   
+   **Windows:**
+   ```cmd
+   cmake --build . --config Release
+   ```
+   
+   This produces a shared library named `gdal_EOPFZarr.so` (Linux), `gdal_EOPFZarr.dylib` (macOS), or `gdal_EOPFZarr.dll` (Windows).
 
 ---
 
@@ -101,15 +130,23 @@ sudo apt-get update && sudo apt-get install -y \
 
 Move or copy the resulting library to GDAL’s plugin path, such as:
 - **Linux**: `/usr/lib/gdalplugins/` or `/usr/local/lib/gdalplugins/`
-- **Windows**: `C:\Program Files\GDAL\gdalplugins\` (varies depending on your setup)
+- **macOS**: `/usr/local/lib/gdalplugins/` or `$(brew --prefix gdal)/lib/gdal/plugins/`
+- **Windows (OSGeo4W)**: `C:\OSGeo4W64\bin\gdal\plugins\` or `C:\OSGeo4W\bin\gdal\plugins\`
 
 ### Option B: Use `GDAL_DRIVER_PATH`
 
 Set an environment variable so GDAL knows where to find your plugin:
+
+**Linux/macOS:**
 ```bash
 export GDAL_DRIVER_PATH="/path/to/build"
 ```
-Replace `/path/to/build` with the actual directory containing `gdal_EOPF.so` (or `.dll` on Windows).
+
+**Windows:**
+```cmd
+set GDAL_DRIVER_PATH=C:\path\to\build
+```
+Replace the path with the actual directory containing your plugin file.
 
 ---
 

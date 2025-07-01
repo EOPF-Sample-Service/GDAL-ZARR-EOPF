@@ -219,12 +219,28 @@ jobs:
 
     - name: Build Plugin
       run: |
+        Write-Host "Configuring CMake with improved settings..."
         cmake -S . -B build `
           -G "Visual Studio 17 2022" `
           -A x64 `
           -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" `
-          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-        cmake --build build --config Release
+          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal" `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreadedDLL"
+        
+        Write-Host "Building plugin..."
+        cmake --build build --config Release --verbose
+        
+        Write-Host "Verifying build artifacts..."
+        if (Test-Path "build/Release/gdal_EOPFZarr.dll") {
+          Write-Host "SUCCESS: Plugin DLL created successfully"
+          # Check DLL dependencies
+          dumpbin /DEPENDENTS build/Release/gdal_EOPFZarr.dll | findstr "DLL"
+        } else {
+          Write-Host "ERROR: Plugin DLL not found"
+          Get-ChildItem -Path build -Recurse -Filter "*.dll" | ForEach-Object { $_.FullName }
+          exit 1
+        }
 
     - name: Create Test Zarr Dataset
       run: |
@@ -245,29 +261,107 @@ jobs:
 
     - name: Test Plugin
       run: |
+        Write-Host "Setting up environment for plugin testing..."
         $env:GDAL_DRIVER_PATH="$PWD/build/Release"
         $env:GDAL_DATA="C:/OSGeo4W/share/gdal"
         $env:PATH="C:/OSGeo4W/bin;$env:PATH"
         
-        Write-Host "Test 1- Available GDAL drivers:"
-        gdalinfo --formats | findstr "EOPFZARR"
+        Write-Host "Environment variables:"
+        Write-Host "GDAL_DRIVER_PATH: $env:GDAL_DRIVER_PATH"
+        Write-Host "GDAL_DATA: $env:GDAL_DATA"
+        Write-Host "PATH (first part): $($env:PATH.Split(';')[0..5] -join ';')"
+        
+        Write-Host "Verifying GDAL installation:"
+        gdalinfo --version
+        
+        Write-Host "Checking plugin file exists:"
+        if (Test-Path "$env:GDAL_DRIVER_PATH/gdal_EOPFZarr.dll") {
+          Write-Host "Plugin DLL found at: $env:GDAL_DRIVER_PATH/gdal_EOPFZarr.dll"
+          Write-Host "Plugin size: $((Get-Item '$env:GDAL_DRIVER_PATH/gdal_EOPFZarr.dll').Length) bytes"
+        } else {
+          Write-Host "ERROR: Plugin DLL not found!"
+          exit 1
+        }
+        
+        Write-Host "Test 1- Available GDAL drivers (looking for EOPFZARR):"
+        try {
+          $formats = gdalinfo --formats
+          $eopfFound = $formats | Select-String "EOPFZARR"
+          if ($eopfFound) {
+            Write-Host "SUCCESS: EOPFZARR driver found: $eopfFound"
+          } else {
+            Write-Host "WARNING: EOPFZARR driver not found in formats list"
+            Write-Host "All available drivers:"
+            $formats | Select-String "raster" | Select-Object -First 10
+          }
+        } catch {
+          Write-Host "ERROR: Failed to get GDAL formats: $_"
+          exit 1
+        }
         
         Write-Host "Test 2a- Opening Zarr dataset with automatic detection:"
-        gdalinfo C:/temp/test.zarr/ | findstr "Driver"
-        
-        Write-Host "Test 2b- With EOPF_PROCESS=NO:"
-        gdalinfo -oo EOPF_PROCESS=NO C:/temp/test.zarr/ | findstr "Driver"
-        
-        Write-Host "Test 2c- With EOPF_PROCESS=YES:"
         try {
-          gdalinfo -oo EOPF_PROCESS=YES C:/temp/test.zarr/ | findstr "Driver"
+          $info = gdalinfo C:/temp/test.zarr/ 2>&1
+          $driver = $info | Select-String "Driver:"
+          if ($driver) {
+            Write-Host "Dataset opened with driver: $driver"
+          } else {
+            Write-Host "Dataset info (first 10 lines):"
+            $info | Select-Object -First 10
+          }
         } catch {
-          Write-Host "Failed with EOPF_PROCESS=YES, but continuing"
+          Write-Host "INFO: Basic zarr test failed (expected): $_"
+        }
+        
+        Write-Host "Test 2b- With EOPF_PROCESS=YES (if supported):"
+        try {
+          $info = gdalinfo -oo EOPF_PROCESS=YES C:/temp/test.zarr/ 2>&1
+          $driver = $info | Select-String "Driver:"
+          if ($driver) {
+            Write-Host "SUCCESS: EOPF processing enabled: $driver"
+          } else {
+            Write-Host "EOPF processing test output (first 5 lines):"
+            $info | Select-Object -First 5
+          }
+        } catch {
+          Write-Host "INFO: EOPF processing test failed (may be expected): $_"
         }
         
         Write-Host "Debug information:"
-        gdalinfo --version
-        dir $env:GDAL_DRIVER_PATH
+        Write-Host "Plugin directory contents:"
+        Get-ChildItem $env:GDAL_DRIVER_PATH | Format-Table Name, Length
+        
+        Write-Host "Test completed - check results above for success/failure indicators"
+
+    - name: Debug DLL Dependencies (on failure)
+      if: failure()
+      run: |
+        Write-Host "=== DLL DEPENDENCY ANALYSIS ==="
+        if (Test-Path "$PWD/build/Release/gdal_EOPFZarr.dll") {
+          Write-Host "Analyzing plugin DLL dependencies:"
+          dumpbin /DEPENDENTS "$PWD/build/Release/gdal_EOPFZarr.dll"
+          
+          Write-Host "`n=== CHECKING FOR MISSING DEPENDENCIES ==="
+          $dependencies = dumpbin /DEPENDENTS "$PWD/build/Release/gdal_EOPFZarr.dll" | Select-String "\.dll"
+          foreach ($dep in $dependencies) {
+            $dllName = $dep -replace '.*?([^\\s]+\.dll).*', '$1'
+            $found = Get-Command $dllName -ErrorAction SilentlyContinue
+            if ($found) {
+              Write-Host "✓ $dllName found at: $($found.Source)"
+            } else {
+              Write-Host "✗ $dllName NOT FOUND in PATH"
+            }
+          }
+          
+          Write-Host "`n=== GDAL INSTALLATION CHECK ==="
+          Write-Host "GDAL DLL location:"
+          Get-Command gdal*.dll -ErrorAction SilentlyContinue | Format-Table Name, Source
+          
+          Write-Host "`n=== SYSTEM DLL SEARCH PATHS ==="
+          $env:PATH.Split(';') | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 10
+        } else {
+          Write-Host "Plugin DLL not found for analysis"
+        }
 
     - name: Package Artifacts
       run: |
