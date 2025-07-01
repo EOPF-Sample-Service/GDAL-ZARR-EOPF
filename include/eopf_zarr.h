@@ -4,15 +4,18 @@
 // Ensure proper DLL export/import on Windows
 #ifdef _WIN32
 #ifdef EOPF_ZARR_BUILDING
-#define EOPF_ZARR_API __declspec(dllexport)
+#define EOPFZARR_DLL __declspec(dllexport)
 #else
-#define EOPF_ZARR_API __declspec(dllimport)
+#define EOPFZARR_DLL __declspec(dllimport)
 #endif
 #else
-#define EOPF_ZARR_API
+#define EOPFZARR_DLL
 #endif
 
+// For backward compatibility
+#define EOPF_ZARR_API EOPFZARR_DLL
+
 // Standard GDAL driver entry point
-extern "C" EOPF_ZARR_API void GDALRegister_EOPFZarr();
+extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr();
 
 #endif /* EOPF_ZARR_H_INCLUDED */

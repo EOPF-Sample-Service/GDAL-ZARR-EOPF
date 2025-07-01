@@ -13,9 +13,13 @@
 #include "eopf_metadata.h"
 #include "eopfzarr_config.h"
 
-// Add Windows-specific export declarations without redefining CPL macros
+// Add Windows-specific export declarations - ensure consistency with header
 #ifdef _WIN32
+#ifdef EOPF_ZARR_BUILDING
 #define EOPFZARR_DLL __declspec(dllexport)
+#else
+#define EOPFZARR_DLL __declspec(dllimport)
+#endif
 #else
 #define EOPFZARR_DLL
 #endif

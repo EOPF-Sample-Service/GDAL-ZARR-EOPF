@@ -437,15 +437,10 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 
 // Update the implementation:
 
-#if GDAL_VERSION_NUM >= 3060000
-CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused) {
-    return GDALPamDataset::XMLInit(psTree, pszUnused);
-}
-#else
+// XMLInit implementation to match base class signature
 CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode* psTree, const char* pszUnused) {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
-#endif
 
 CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
 {
