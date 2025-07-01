@@ -47,31 +47,6 @@ target_include_directories(gdal_EOPFZarr PRIVATE
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
-
-if(WIN32 AND MSVC)
-    # Static link runtime to avoid dependency issues
-    target_compile_options(gdal_EOPFZarr PRIVATE
-        $<$<CONFIG:Release>:/MT>
-        $<$<CONFIG:Debug>:/MTd>
-    )
-
-    # Use static runtime to reduce dependencies
-    set_property(TARGET gdal_EOPFZarr PROPERTY
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    
-    # Add debug information for dependency checking
-    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Built DLL: $<TARGET_FILE:gdal_EOPFZarr>"
-        COMMAND dumpbin /dependents $<TARGET_FILE:gdal_EOPFZarr> || echo "dumpbin not available"
-        VERBATIM
-    )
-    
-    # Ensure proper exports
-    set_target_properties(gdal_EOPFZarr PROPERTIES
-        WINDOWS_EXPORT_ALL_SYMBOLS ON
-    )
-endif()
-
 # Output properties for plugin
 if (WIN32)
     set_target_properties(gdal_EOPFZarr PROPERTIES
@@ -119,37 +94,12 @@ if(NOT GDALINFO_EXECUTABLE)
 endif()
 
 if(WIN32)
-       # Get GDAL binary directory for runtime
-    get_filename_component(GDAL_BIN_DIR "${GDAL_LIBRARIES}" DIRECTORY)
-    get_filename_component(GDAL_BIN_DIR "${GDAL_BIN_DIR}/../bin" ABSOLUTE)
-    message(STATUS "GDAL binary directory: ${GDAL_BIN_DIR}")
-    
     add_test(NAME driver_registration
-             COMMAND gdalinfo --formats)
-    set_tests_properties(driver_registration PROPERTIES
-        ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}/Release;PATH=${GDAL_BIN_DIR};$ENV{PATH}"
-        PASS_REGULAR_EXPRESSION "EOPFZARR")
+             COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
 elseif(APPLE)
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 else()
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
-endif()
-
-# Add this to your CMakeLists.txt for Windows
-if(WIN32)
-    # Find and copy required runtime DLLs
-    include(InstallRequiredSystemLibraries)
-    
-    # Custom post-build step to copy dependencies
-    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Checking DLL dependencies..."
-        COMMAND dumpbin /dependents $<TARGET_FILE:gdal_EOPFZarr>
-        VERBATIM
-    )
-    
-    # Get the actual GDAL DLL name and make our plugin compatible
-    get_filename_component(GDAL_DLL_NAME "${GDAL_LIBRARIES}" NAME_WE)
-    message(STATUS "GDAL library name: ${GDAL_DLL_NAME}")
 endif()
