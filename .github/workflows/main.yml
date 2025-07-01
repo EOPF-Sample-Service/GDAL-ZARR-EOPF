@@ -251,43 +251,81 @@ jobs:
         $env:GDAL_DATA="C:/OSGeo4W/share/gdal"
         $env:PATH="C:/OSGeo4W/bin;$env:PATH"
         
-        Write-Host "Test 1- Available GDAL drivers:"
-        gdalinfo --formats | findstr "EOPFZARR"
-        
-        Write-Host "Test 2a- Opening Zarr dataset with automatic detection:"
-        gdalinfo C:/temp/test.zarr/ | findstr "Driver"
-        
-        Write-Host "Test 2b- With EOPF_PROCESS=NO:"
-        gdalinfo -oo EOPF_PROCESS=NO C:/temp/test.zarr/ | findstr "Driver"
-        
-        Write-Host "Test 2c- With EOPF_PROCESS=YES:"
-        try {
-          gdalinfo -oo EOPF_PROCESS=YES C:/temp/test.zarr/ | findstr "Driver"
-        } catch {
-          Write-Host "Failed with EOPF_PROCESS=YES, but continuing"
+        Write-Host "=== DLL Dependency Check ==="
+        if (Test-Path "build/Release/gdal_EOPFZarr_v3_10_3.dll") {
+          $dllPath = "build/Release/gdal_EOPFZarr_v3_10_3.dll"
+        } elseif (Test-Path "build/Release/gdal_EOPFZarr.dll") {
+          $dllPath = "build/Release/gdal_EOPFZarr.dll"
+        } else {
+          Write-Host "ERROR: No DLL found"
+          Get-ChildItem -Path build -Recurse -Filter "*.dll"
+          exit 1
         }
         
-        Write-Host "Debug information:"
-        gdalinfo --version
-        dir $env:GDAL_DRIVER_PATH
+        Write-Host "DLL Path: $dllPath"
+        Write-Host "Dependencies:"
+        dumpbin /DEPENDENTS $dllPath
+        
+        Write-Host "`n=== GDAL Driver Test ==="
+        Write-Host "Test 1- Available GDAL drivers:"
+        $result = gdalinfo --formats | findstr "EOPFZARR"
+        if ($result) {
+          Write-Host "SUCCESS: EOPFZARR driver found: $result"
+        } else {
+          Write-Host "ERROR: EOPFZARR driver not found"
+          Write-Host "All drivers:"
+          gdalinfo --formats
+          exit 1
+        }
+        
+        Write-Host "`nTest 2- URL parsing test:"
+        $env:CPL_DEBUG = "EOPFZARR"
+        try {
+          $output = gdalinfo "EOPFZARR:https://example.com/test.zarr" 2>&1
+          if ($output -match "EOPFOpen: ENTRY POINT REACHED") {
+            Write-Host "SUCCESS: EOPFZARR driver invoked for URL"
+          } else {
+            Write-Host "ERROR: EOPFZARR driver not invoked"
+            Write-Host "Output: $output"
+            exit 1
+          }
+        } catch {
+          Write-Host "WARNING: URL test failed but continuing"
+        }
+        $env:CPL_DEBUG = "OFF"
 
     - name: Package Artifacts
       run: |
         mkdir dist
         # Add diagnostic output to verify file location (using PowerShell syntax)
         Write-Host "Finding DLL location:"
-        Get-ChildItem -Path build -Recurse -Filter "gdal_EOPFZarr.dll" | ForEach-Object { $_.FullName }
+        Get-ChildItem -Path build -Recurse -Filter "*.dll" | ForEach-Object { $_.FullName }
         
         # Copy from the correct location for Visual Studio generator
-        if (Test-Path "build/Release/gdal_EOPFZarr.dll") {
+        # Check for versioned DLL first, then generic name
+        if (Test-Path "build/Release/gdal_EOPFZarr_v3_10_3.dll") {
+          Copy-Item "build/Release/gdal_EOPFZarr_v3_10_3.dll" -Destination "dist/gdal_EOPFZarr.dll"
+          Write-Host "Copied versioned DLL"
+        } elseif (Test-Path "build/Release/gdal_EOPFZarr.dll") {
           Copy-Item "build/Release/gdal_EOPFZarr.dll" -Destination dist/
+          Write-Host "Copied generic DLL"
         } else {
           Write-Host "ERROR: DLL not found at expected path"
-          dir build -Recurse | Where-Object { $_.Name -like "*.dll" } | ForEach-Object { $_.FullName }
+          Get-ChildItem -Path build -Recurse | Where-Object { $_.Name -like "*.dll" } | ForEach-Object { $_.FullName }
           exit 1
         }
         
-        dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll | findstr "DLL"
+        Write-Host "Final DLL dependencies:"
+        dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll
+        
+        # Create a compatibility report
+        Write-Host "Build Environment:" > dist/build-info.txt
+        Write-Host "Windows Version: $((Get-WmiObject Win32_OperatingSystem).Caption)" >> dist/build-info.txt
+        Write-Host "MSVC Version: $($env:VCToolsVersion)" >> dist/build-info.txt
+        Write-Host "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" >> dist/build-info.txt
+        Write-Host "GDAL Version: $(gdalinfo --version)" >> dist/build-info.txt
+        Write-Host "DLL Dependencies:" >> dist/build-info.txt
+        dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll >> dist/build-info.txt
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4

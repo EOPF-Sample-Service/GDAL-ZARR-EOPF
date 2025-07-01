@@ -54,15 +54,28 @@ target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
 # Windows-specific configuration for maximum compatibility
 if(WIN32)
-    # Use static runtime to avoid dependency issues with GitHub Actions builds
-    set_property(TARGET gdal_EOPFZarr PROPERTY
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    
-    # Explicitly set runtime flags for static linking
-    target_compile_options(gdal_EOPFZarr PRIVATE
-        $<$<CONFIG:Release>:/MT>
-        $<$<CONFIG:Debug>:/MTd>
-    )
+    # Check if we're building in GitHub Actions or other CI environment
+    if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
+        # For CI builds, use dynamic runtime to match OSGeo4W and most distributions
+        set_property(TARGET gdal_EOPFZarr PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+        
+        target_compile_options(gdal_EOPFZarr PRIVATE
+            $<$<CONFIG:Release>:/MD>
+            $<$<CONFIG:Debug>:/MDd>
+        )
+        message(STATUS "CI Build: Using dynamic runtime (/MD) for GDAL ${GDAL_VERSION}")
+    else()
+        # For local builds, use static runtime to avoid dependency issues
+        set_property(TARGET gdal_EOPFZarr PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        
+        target_compile_options(gdal_EOPFZarr PRIVATE
+            $<$<CONFIG:Release>:/MT>
+            $<$<CONFIG:Debug>:/MTd>
+        )
+        message(STATUS "Local Build: Using static runtime (/MT) for GDAL ${GDAL_VERSION}")
+    endif()
     
     # Add version info for compatibility checking
     string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" GDAL_VERSION_MAJOR_MINOR ${GDAL_VERSION})
@@ -71,8 +84,6 @@ if(WIN32)
         NOMINMAX
         GDAL_VERSION_MAJOR_MINOR="${GDAL_VERSION_MAJOR_MINOR}"
     )
-    
-    message(STATUS "Using static runtime (/MT) for GDAL ${GDAL_VERSION}")
     
     # Add comprehensive build information
     add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
