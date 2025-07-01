@@ -13,6 +13,11 @@ configure_file(
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
+# Print GDAL information for debugging
+message(STATUS "GDAL Version: ${GDAL_VERSION}")
+message(STATUS "GDAL Include Dirs: ${GDAL_INCLUDE_DIRS}")
+message(STATUS "GDAL Libraries: ${GDAL_LIBRARIES}")
+
 # Add this compatibility check
 include(CheckCXXSourceCompiles)
 set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
@@ -46,6 +51,42 @@ target_include_directories(gdal_EOPFZarr PRIVATE
 )
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
+
+# Windows-specific configuration for GitHub Actions compatibility
+if(WIN32)
+    # Detect if we're in GitHub Actions or similar CI environment
+    if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
+        message(STATUS "Detected CI environment - using compatibility settings")
+        
+        # Force dynamic runtime to match most GDAL distributions
+        set_property(TARGET gdal_EOPFZarr PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+        
+        # Ensure we don't have conflicting runtime settings
+        target_compile_options(gdal_EOPFZarr PRIVATE
+            $<$<CONFIG:Release>:/MD>
+            $<$<CONFIG:Debug>:/MDd>
+        )
+    else()
+        message(STATUS "Local build detected - using default settings")
+        # Let CMake decide the runtime library for local builds
+    endif()
+    
+    # Common Windows settings
+    target_compile_definitions(gdal_EOPFZarr PRIVATE
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+    )
+    
+    # Add build information for debugging
+    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "=== Build Environment ==="
+        COMMAND ${CMAKE_COMMAND} -E echo "Build Type: ${CMAKE_BUILD_TYPE}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Target File: $<TARGET_FILE:gdal_EOPFZarr>"
+        VERBATIM
+    )
+endif()
 
 # Output properties for plugin
 if (WIN32)
