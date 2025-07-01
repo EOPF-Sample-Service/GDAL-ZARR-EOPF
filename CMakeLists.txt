@@ -52,47 +52,51 @@ target_include_directories(gdal_EOPFZarr PRIVATE
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
-# Windows-specific configuration for GitHub Actions compatibility
+# Windows-specific configuration for maximum compatibility
 if(WIN32)
-    # Detect if we're in GitHub Actions or similar CI environment
-    if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
-        message(STATUS "Detected CI environment - using compatibility settings")
-        
-        # Force dynamic runtime to match most GDAL distributions
-        set_property(TARGET gdal_EOPFZarr PROPERTY
-            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-        
-        # Ensure we don't have conflicting runtime settings
-        target_compile_options(gdal_EOPFZarr PRIVATE
-            $<$<CONFIG:Release>:/MD>
-            $<$<CONFIG:Debug>:/MDd>
-        )
-    else()
-        message(STATUS "Local build detected - using default settings")
-        # Let CMake decide the runtime library for local builds
-    endif()
+    # Always use dynamic runtime for compatibility with most GDAL distributions
+    # This matches OSGeo4W and most standard GDAL installations
+    set_property(TARGET gdal_EOPFZarr PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     
-    # Common Windows settings
+    # Explicitly set runtime flags to ensure consistency
+    target_compile_options(gdal_EOPFZarr PRIVATE
+        $<$<CONFIG:Release>:/MD>
+        $<$<CONFIG:Debug>:/MDd>
+    )
+    
+    # Add version info for compatibility checking
+    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" GDAL_VERSION_MAJOR_MINOR ${GDAL_VERSION})
     target_compile_definitions(gdal_EOPFZarr PRIVATE
         WIN32_LEAN_AND_MEAN
         NOMINMAX
+        GDAL_VERSION_MAJOR_MINOR="${GDAL_VERSION_MAJOR_MINOR}"
     )
     
-    # Add build information for debugging
+    message(STATUS "Using dynamic runtime (/MD) for GDAL ${GDAL_VERSION}")
+    
+    # Add comprehensive build information
     add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "=== Build Environment ==="
         COMMAND ${CMAKE_COMMAND} -E echo "Build Type: ${CMAKE_BUILD_TYPE}"
         COMMAND ${CMAKE_COMMAND} -E echo "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+        COMMAND ${CMAKE_COMMAND} -E echo "GDAL Version: ${GDAL_VERSION}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Runtime Library: Dynamic (/MD)"
         COMMAND ${CMAKE_COMMAND} -E echo "Target File: $<TARGET_FILE:gdal_EOPFZarr>"
+        COMMAND ${CMAKE_COMMAND} -E echo "=== Dependency Check ==="
+        COMMAND dumpbin /dependents $<TARGET_FILE:gdal_EOPFZarr> || echo "dumpbin not available"
         VERBATIM
     )
 endif()
 
 # Output properties for plugin
 if (WIN32)
+    # Include GDAL version in output name for clarity
+    string(REGEX REPLACE "\\." "_" GDAL_VERSION_UNDERSCORE ${GDAL_VERSION})
+    
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
-        OUTPUT_NAME "gdal_EOPFZarr"
+        OUTPUT_NAME "gdal_EOPFZarr_v${GDAL_VERSION_UNDERSCORE}"
         SUFFIX ".dll")
 
     # Simplified .def file - just export the standard entry points
@@ -103,6 +107,13 @@ if (WIN32)
 
     # Add the .def file to the library
     target_link_options(gdal_EOPFZarr PRIVATE "/DEF:${DEF_FILE}")
+    
+    # Add delay load for non-essential dependencies
+    target_link_options(gdal_EOPFZarr PRIVATE
+        "/DELAYLOAD:shell32.dll"
+        "/DELAYLOAD:user32.dll"
+    )
+    
 elseif (APPLE)
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
@@ -111,6 +122,16 @@ else()
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
         SUFFIX ".so")
+endif()
+
+# Create a generic version without version suffix for local use
+if(WIN32)
+    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy 
+            $<TARGET_FILE:gdal_EOPFZarr>
+            $<TARGET_FILE_DIR:gdal_EOPFZarr>/gdal_EOPFZarr.dll
+        COMMENT "Creating generic DLL copy"
+    )
 endif()
 
 # Install to GDAL plugins directory
@@ -126,6 +147,13 @@ endif()
 install(TARGETS gdal_EOPFZarr 
     LIBRARY DESTINATION ${GDAL_PLUGINS_DIR}
 )
+
+# Also install the generic version
+if(WIN32)
+    install(FILES $<TARGET_FILE_DIR:gdal_EOPFZarr>/gdal_EOPFZarr.dll
+        DESTINATION ${GDAL_PLUGINS_DIR}
+    )
+endif()
 
 enable_testing()
 # Set the test environment to find gdalinfo command
