@@ -66,6 +66,48 @@ static std::string CreateQGISCompatiblePath(const std::string& path) {
     return qgisPath;
 }
 
+static bool IsUrlOrVirtualPath(const std::string& path) {
+    if (path.empty()) return false;
+    
+    CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Checking path: %s", path.c_str());
+    
+    // Check for GDAL virtual file systems
+    if (STARTS_WITH_CI(path.c_str(), "/vsicurl/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsis3/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsigs/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsiaz/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsioss/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsiswift/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsihdfs/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsimem/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsizip/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsigzip/") ||
+        STARTS_WITH_CI(path.c_str(), "/vsitar/")) {
+        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected virtual file system");
+        return true;
+    }
+    
+    // Check for URL schemes - more comprehensive check
+    size_t colonPos = path.find(':');
+    if (colonPos != std::string::npos && colonPos > 0 && colonPos <= 10) {
+        std::string scheme = path.substr(0, colonPos);
+        if (scheme == "http" || scheme == "https" || 
+            scheme == "ftp" || scheme == "ftps" ||
+            scheme == "s3" || scheme == "gs" || scheme == "azure" ||
+            scheme == "file") {
+            // Additional check: verify it looks like a real URL with ://
+            if (colonPos + 2 < path.length() && 
+                path[colonPos + 1] == '/' && path[colonPos + 2] == '/') {
+                CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected URL scheme: %s", scheme.c_str());
+                return true;
+            }
+        }
+    }
+    
+    CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Not detected as URL/Virtual path");
+    return false;
+}
+
 static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPath, std::string& subdatasetPath)
 {
     // Debug the original path
@@ -79,6 +121,16 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
         CPLDebug("EOPFZARR", "ParseSubdatasetPath: Removed prefix, now: %s", pathWithoutPrefix.c_str());
     }
 
+    // EARLY CHECK: For URLs and virtual file systems, don't try to parse subdatasets from colons
+    // This must happen before any other parsing logic
+    if (IsUrlOrVirtualPath(pathWithoutPrefix)) {
+        // For URLs and virtual paths, no subdataset parsing - treat the whole thing as the main path
+        mainPath = pathWithoutPrefix;
+        subdatasetPath = "";
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: URL/Virtual path detected early, no subdataset parsing - Main: %s", mainPath.c_str());
+        return false;
+    }
+
     // Check for quoted path format: "path":subds
     size_t startQuote = pathWithoutPrefix.find('\"');
     if (startQuote != std::string::npos) {
@@ -87,6 +139,14 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
             // We have a quoted path - extract it
             mainPath = pathWithoutPrefix.substr(startQuote + 1, endQuote - startQuote - 1);
 
+            // Check if the quoted content is a URL/virtual path
+            if (IsUrlOrVirtualPath(mainPath)) {
+                // Even if there's a subdataset part after the quote, ignore it for URLs
+                subdatasetPath = "";
+                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted URL/Virtual path, no subdataset parsing - Main: %s", mainPath.c_str());
+                return false;
+            }
+
             // Now check if there's a subdataset part after the quoted path
             if (endQuote + 1 < pathWithoutPrefix.length() && pathWithoutPrefix[endQuote + 1] == ':') {
                 // We have a subdataset part - everything after the colon
@@ -94,24 +154,26 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
                 CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path with subdataset - Main: %s, Subds: %s",
                     mainPath.c_str(), subdatasetPath.c_str());
 
-                // Fix Windows paths - replace forward slashes with backward slashes
+                // Don't modify URLs or virtual file system paths on Windows
 #ifdef _WIN32
-                // Replace forward slashes with backslashes
-                for (size_t i = 0; i < mainPath.length(); ++i) {
-                    if (mainPath[i] == '/') {
-                        mainPath[i] = '\\';
+                if (!IsUrlOrVirtualPath(mainPath)) {
+                    // Replace forward slashes with backslashes for local Windows paths only
+                    for (size_t i = 0; i < mainPath.length(); ++i) {
+                        if (mainPath[i] == '/') {
+                            mainPath[i] = '\\';
+                        }
                     }
-                }
 
-                // Remove leading slash if present in Windows paths (e.g., /C:/...)
-                if (!mainPath.empty() && mainPath[0] == '\\' &&
-                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
-                    mainPath = mainPath.substr(1);
-                }
+                    // Remove leading slash if present in Windows paths (e.g., /C:/...)
+                    if (!mainPath.empty() && mainPath[0] == '\\' &&
+                        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+                        mainPath = mainPath.substr(1);
+                    }
 
-                // Remove trailing slash if present
-                if (!mainPath.empty() && mainPath.back() == '\\') {
-                    mainPath.pop_back();
+                    // Remove trailing slash if present
+                    if (!mainPath.empty() && mainPath.back() == '\\') {
+                        mainPath.pop_back();
+                    }
                 }
 #endif
                 return true;
@@ -121,20 +183,22 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
                 CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path without subdataset - Main: %s", mainPath.c_str());
                 subdatasetPath = "";
 #ifdef _WIN32
-                // Fix Windows paths - same as above
-                for (size_t i = 0; i < mainPath.length(); ++i) {
-                    if (mainPath[i] == '/') {
-                        mainPath[i] = '\\';
+                if (!IsUrlOrVirtualPath(mainPath)) {
+                    // Fix Windows paths - same as above
+                    for (size_t i = 0; i < mainPath.length(); ++i) {
+                        if (mainPath[i] == '/') {
+                            mainPath[i] = '\\';
+                        }
                     }
-                }
 
-                if (!mainPath.empty() && mainPath[0] == '\\' &&
-                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
-                    mainPath = mainPath.substr(1);
-                }
+                    if (!mainPath.empty() && mainPath[0] == '\\' &&
+                        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+                        mainPath = mainPath.substr(1);
+                    }
 
-                if (!mainPath.empty() && mainPath.back() == '\\') {
-                    mainPath.pop_back();
+                    if (!mainPath.empty() && mainPath.back() == '\\') {
+                        mainPath.pop_back();
+                    }
                 }
 #endif
                 return false;
@@ -143,17 +207,31 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
     }
 
     // Check for simple path with subdataset separator (e.g., EOPFZARR:path:subds)
-    // This is complicated on Windows due to drive letters (C:)
+    // This is complicated on Windows due to drive letters (C:) and URLs (https:)
     std::string tmpPath = pathWithoutPrefix;
+    
+    // Double-check: URLs should have been caught earlier, but just in case
+    if (IsUrlOrVirtualPath(tmpPath)) {
+        mainPath = tmpPath;
+        subdatasetPath = "";
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: URL/Virtual path detected in fallback check - Main: %s", mainPath.c_str());
+        return false;
+    } else {
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Not detected as URL/Virtual path, checking for subdatasets: %s", tmpPath.c_str());
+    }
+    
     size_t colonPos = tmpPath.find(':');
 
+    // Skip Windows drive letters
+    if (colonPos != std::string::npos) {
 #ifdef _WIN32
-    // On Windows, the first colon might be the drive letter
-    if (colonPos != std::string::npos && colonPos == 1) {
-        // This is likely a drive letter - look for another colon
-        colonPos = tmpPath.find(':', colonPos + 1);
-    }
+        // On Windows, the first colon might be the drive letter
+        if (colonPos == 1) {
+            // This is likely a drive letter - look for another colon
+            colonPos = tmpPath.find(':', colonPos + 1);
+        }
 #endif
+    }
 
     if (colonPos != std::string::npos) {
         mainPath = tmpPath.substr(0, colonPos);
@@ -162,6 +240,33 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
             mainPath.c_str(), subdatasetPath.c_str());
 
 #ifdef _WIN32
+        if (!IsUrlOrVirtualPath(mainPath)) {
+            // Fix Windows paths - same as above
+            for (size_t i = 0; i < mainPath.length(); ++i) {
+                if (mainPath[i] == '/') {
+                    mainPath[i] = '\\';
+                }
+            }
+
+            if (!mainPath.empty() && mainPath[0] == '\\' &&
+                mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
+                mainPath = mainPath.substr(1);
+            }
+
+            if (!mainPath.empty() && mainPath.back() == '\\') {
+                mainPath.pop_back();
+            }
+        }
+#endif
+        return true;
+    }
+
+    // Not a subdataset path
+    mainPath = pathWithoutPrefix;
+    subdatasetPath = "";
+
+#ifdef _WIN32
+    if (!IsUrlOrVirtualPath(mainPath)) {
         // Fix Windows paths - same as above
         for (size_t i = 0; i < mainPath.length(); ++i) {
             if (mainPath[i] == '/') {
@@ -177,29 +282,6 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
         if (!mainPath.empty() && mainPath.back() == '\\') {
             mainPath.pop_back();
         }
-#endif
-        return true;
-    }
-
-    // Not a subdataset path
-    mainPath = pathWithoutPrefix;
-    subdatasetPath = "";
-
-#ifdef _WIN32
-    // Fix Windows paths - same as above
-    for (size_t i = 0; i < mainPath.length(); ++i) {
-        if (mainPath[i] == '/') {
-            mainPath[i] = '\\';
-        }
-    }
-
-    if (!mainPath.empty() && mainPath[0] == '\\' &&
-        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':') {
-        mainPath = mainPath.substr(1);
-    }
-
-    if (!mainPath.empty() && mainPath.back() == '\\') {
-        mainPath.pop_back();
     }
 #endif
 
@@ -253,18 +335,24 @@ static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
         return FALSE;
 
     const char* pszFilename = poOpenInfo->pszFilename;
+    CPLDebug("EOPFZARR", "EOPFIdentify called with filename: %s", pszFilename);
 
     // Only identify with explicit prefixes or options
-    if (STARTS_WITH_CI(pszFilename, "EOPFZARR:"))
+    if (STARTS_WITH_CI(pszFilename, "EOPFZARR:")) {
+        CPLDebug("EOPFZARR", "EOPFIdentify: EOPFZARR prefix detected, returning TRUE");
         return TRUE;
+    }
 
     // Check EOPF_PROCESS option
     const char* pszEOPFProcess = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
     if (pszEOPFProcess && 
-        (EQUAL(pszEOPFProcess, "YES") || EQUAL(pszEOPFProcess, "TRUE") || EQUAL(pszEOPFProcess, "1")))
+        (EQUAL(pszEOPFProcess, "YES") || EQUAL(pszEOPFProcess, "TRUE") || EQUAL(pszEOPFProcess, "1"))) {
+        CPLDebug("EOPFZARR", "EOPFIdentify: EOPF_PROCESS option detected, returning TRUE");
         return TRUE;
+    }
 
     // Decline all other files
+    CPLDebug("EOPFZARR", "EOPFIdentify: No match, returning FALSE");
     return FALSE;
 }
 
@@ -371,6 +459,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
 {
     const char* pszFilename = poOpenInfo->pszFilename;
     CPLDebug("EOPFZARR", "EOPFOpen: Opening file: %s", pszFilename);
+    CPLDebug("EOPFZARR", "EOPFOpen: ENTRY POINT REACHED - Driver is working!");
 
     // Parse the filename
     std::string mainPath, subdatasetPath;
@@ -380,12 +469,18 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     if (STARTS_WITH_CI(mainPath.c_str(), "EOPFZARR:"))
         mainPath = mainPath.substr(9);
 
-    // Check file existence
-    VSIStatBufL sStat;
-    if (VSIStatL(mainPath.c_str(), &sStat) != 0)
-    {
-        CPLError(CE_Failure, CPLE_OpenFailed, "EOPFZARR driver: Main path '%s' does not exist", mainPath.c_str());
-        return nullptr;
+    // For URLs and virtual file systems, skip existence check as it may not work reliably
+    // The underlying Zarr driver will handle the actual validation
+    if (!IsUrlOrVirtualPath(mainPath)) {
+        // Check file existence only for local paths
+        VSIStatBufL sStat;
+        if (VSIStatL(mainPath.c_str(), &sStat) != 0)
+        {
+            CPLError(CE_Failure, CPLE_OpenFailed, "EOPFZARR driver: Main path '%s' does not exist", mainPath.c_str());
+            return nullptr;
+        }
+    } else {
+        CPLDebug("EOPFZARR", "Skipping existence check for URL/Virtual path: %s", mainPath.c_str());
     }
 
     // Create option list without EOPF_PROCESS
@@ -481,10 +576,11 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     driver->pfnIdentify = EOPFIdentify;
     driver->pfnOpen = EOPFOpen;
 
+    // Insert at the beginning to get higher priority than other drivers
     GetGDALDriverManager()->RegisterDriver(driver);
     gEOPFDriver = driver;
     
-    CPLDebug("EOPFZARR", "EOPF Zarr driver registered");
+    CPLDebug("EOPFZARR", "EOPF Zarr driver registered with high priority");
 }
 
 // Add a cleanup function

@@ -54,15 +54,14 @@ target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
 # Windows-specific configuration for maximum compatibility
 if(WIN32)
-    # Always use dynamic runtime for compatibility with most GDAL distributions
-    # This matches OSGeo4W and most standard GDAL installations
+    # Use static runtime to avoid dependency issues with GitHub Actions builds
     set_property(TARGET gdal_EOPFZarr PROPERTY
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     
-    # Explicitly set runtime flags to ensure consistency
+    # Explicitly set runtime flags for static linking
     target_compile_options(gdal_EOPFZarr PRIVATE
-        $<$<CONFIG:Release>:/MD>
-        $<$<CONFIG:Debug>:/MDd>
+        $<$<CONFIG:Release>:/MT>
+        $<$<CONFIG:Debug>:/MTd>
     )
     
     # Add version info for compatibility checking
@@ -73,7 +72,7 @@ if(WIN32)
         GDAL_VERSION_MAJOR_MINOR="${GDAL_VERSION_MAJOR_MINOR}"
     )
     
-    message(STATUS "Using dynamic runtime (/MD) for GDAL ${GDAL_VERSION}")
+    message(STATUS "Using static runtime (/MT) for GDAL ${GDAL_VERSION}")
     
     # Add comprehensive build information
     add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
@@ -99,20 +98,21 @@ if (WIN32)
         OUTPUT_NAME "gdal_EOPFZarr_v${GDAL_VERSION_UNDERSCORE}"
         SUFFIX ".dll")
 
-    # Simplified .def file - just export the standard entry points
+    # Simplified .def file - export the correct function names
     set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/eopfzarr_exports.def")
     file(WRITE ${DEF_FILE} "EXPORTS\n")
-    file(APPEND ${DEF_FILE} "    GDALRegisterMe\n")
-    file(APPEND ${DEF_FILE} "    GDALRegister_EOPFZarr\n")
+    file(APPEND ${DEF_FILE} "GDALRegisterMe\n")
+    file(APPEND ${DEF_FILE} "GDALRegister_EOPFZarr\n")
+    file(APPEND ${DEF_FILE} "GDALDeregisterEOPFZarr\n")
 
     # Add the .def file to the library
     target_link_options(gdal_EOPFZarr PRIVATE "/DEF:${DEF_FILE}")
     
-    # Add delay load for non-essential dependencies
-    target_link_options(gdal_EOPFZarr PRIVATE
-        "/DELAYLOAD:shell32.dll"
-        "/DELAYLOAD:user32.dll"
-    )
+    # Remove delay load to avoid issues
+    # target_link_options(gdal_EOPFZarr PRIVATE
+    #     "/DELAYLOAD:shell32.dll"
+    #     "/DELAYLOAD:user32.dll"
+    # )
     
 elseif (APPLE)
     set_target_properties(gdal_EOPFZarr PROPERTIES
