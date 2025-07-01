@@ -309,7 +309,6 @@ jobs:
         Write-Host "Windows Version: $((Get-WmiObject Win32_OperatingSystem).Caption)" >> dist/build-info.txt
         Write-Host "MSVC Version: $($env:VCToolsVersion)" >> dist/build-info.txt
         Write-Host "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" >> dist/build-info.txt
-        Write-Host "GDAL Version: $(gdalinfo --version)" >> dist/build-info.txt
         Write-Host "DLL Dependencies:" >> dist/build-info.txt
         dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll >> dist/build-info.txt
         
