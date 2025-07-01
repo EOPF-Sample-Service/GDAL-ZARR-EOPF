@@ -204,10 +204,10 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Install OSGeo4W (GDAL + Dev Tools)
+    - name: Install OSGeo4W (GDAL 3.10.x + Dev Tools)
       uses: echoix/setup-OSGeo4W@v0.2.0
       with:
-        packages: gdal-devel cmake ninja
+        packages: gdal310-runtime gdal-devel cmake ninja msvcrt2019
         site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
         upgrade-also: false
@@ -216,6 +216,18 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
+        
+    - name: Verify GDAL Installation
+      run: |
+        $env:PATH="C:/OSGeo4W/bin;$env:PATH"
+        Write-Host "=== GDAL Version Check ==="
+        gdalinfo --version
+        
+        Write-Host "`n=== Available GDAL Libraries ==="
+        Get-ChildItem "C:/OSGeo4W/bin" -Filter "gdal*.dll" | ForEach-Object { $_.Name }
+        
+        Write-Host "`n=== GDAL Development Files ==="
+        Get-ChildItem "C:/OSGeo4W/lib" -Filter "*gdal*" | ForEach-Object { $_.Name }
 
     - name: Build Plugin
       env:
@@ -225,7 +237,8 @@ jobs:
           -G "Visual Studio 17 2022" `
           -A x64 `
           -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" `
-          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal" `
+          -DFORCE_LOCAL_BUILD=ON
         cmake --build build --config Release
 
     - name: Create Test Zarr Dataset
@@ -265,6 +278,16 @@ jobs:
         Write-Host "DLL Path: $dllPath"
         Write-Host "Dependencies:"
         dumpbin /DEPENDENTS $dllPath
+        
+        # Verify we're linked against GDAL 3.10.x (gdal310.dll)
+        $deps = dumpbin /DEPENDENTS $dllPath | Out-String
+        if ($deps -like "*gdal310.dll*") {
+          Write-Host "SUCCESS: Linked against GDAL 3.10.x (gdal310.dll)"
+        } elseif ($deps -like "*gdal311.dll*") {
+          Write-Host "WARNING: Linked against GDAL 3.11.x (gdal311.dll) - compatibility may vary"
+        } else {
+          Write-Host "WARNING: Unknown GDAL version linkage"
+        }
         
         Write-Host "`n=== GDAL Driver Test ==="
         Write-Host "Test 1- Available GDAL drivers:"
@@ -309,6 +332,12 @@ jobs:
         Write-Host "Windows Version: $((Get-WmiObject Win32_OperatingSystem).Caption)" >> dist/build-info.txt
         Write-Host "MSVC Version: $($env:VCToolsVersion)" >> dist/build-info.txt
         Write-Host "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" >> dist/build-info.txt
+        
+        # Add GDAL version info
+        $env:PATH="C:/OSGeo4W/bin;$env:PATH"
+        $gdalVersion = gdalinfo --version
+        Write-Host "GDAL Version: $gdalVersion" >> dist/build-info.txt
+        
         Write-Host "DLL Dependencies:" >> dist/build-info.txt
         dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll >> dist/build-info.txt
         
