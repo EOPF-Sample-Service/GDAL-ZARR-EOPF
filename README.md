@@ -72,26 +72,64 @@ sudo apt-get update && sudo apt-get install -y \
 
 ## Building
 
-1. **Clone the Repository**  
+### Linux/Unix
+
+1. **Clone the Repository**
+
    ```bash
-    https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
-    cd GDAL-ZARR-EOPF
+   git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+   cd GDAL-ZARR-EOPF
    ```
 
-2. **Configure with CMake**  
+2. **Configure with CMake**
+
    ```bash
    mkdir build
    cd build
    cmake .. -DCMAKE_BUILD_TYPE=Release
-  
    ```
+
    The CMake script attempts to locate GDAL via `find_package(GDAL REQUIRED)`. If GDAL is not found automatically, set `GDAL_DIR` or `GDAL_INCLUDE_DIR/GDAL_LIBRARY` manually.
 
-3. **Compile**  
+3. **Compile**
+
    ```bash
-    cmake --build . -j$(nproc)
+   cmake --build . -j$(nproc)
    ```
+
    This produces a shared library named something like `gdal_EOPFZarr.so` (on Linux) or `gdal_EOPFZarr.dll` (Windows).
+
+### Windows (OSGeo4W)
+
+For Windows users with OSGeo4W, we provide convenient build scripts:
+
+1. **Quick Build** (Recommended)
+
+   ```powershell
+   .\build-local.ps1
+   ```
+
+   This script automatically:
+   - Configures CMake with the correct GDAL 3.10.x paths
+   - Uses static runtime linking (`/MT`) for compatibility
+   - Builds and verifies the plugin
+
+2. **Manual Build**
+
+   ```powershell
+   mkdir build
+   cd build
+   cmake .. -DCMAKE_BUILD_TYPE=Release -DGDAL_LIBRARY="C:/OSGeo4W/lib/gdal310.lib" -DGDAL_INCLUDE_DIR="C:/OSGeo4W/include" -DFORCE_LOCAL_BUILD=ON
+   cmake --build . --config Release
+   ```
+
+3. **Test the Plugin**
+
+   ```powershell
+   .\test-plugin.ps1
+   ```
+
+> **Windows Note**: The build process ensures compatibility with GDAL 3.10.x and uses static runtime linking. For detailed Windows installation and troubleshooting, see [Windows Installation Guide](docs/windows-installation.md).
 
 ---
 

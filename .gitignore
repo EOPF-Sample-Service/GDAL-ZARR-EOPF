@@ -11,3 +11,17 @@ venv/bin/adig
 /qgis_eopfzarr_plugin.py
 /build-and-install.ps1
 /watch.ps1
+/.idea
+/comprehensive_url_test.py
+/FINAL_STATUS_REPORT.py
+/gdal_test_output.txt
+/GITHUB_ISSUE.md
+/status_report.py
+/test_http.txt
+/test_output.txt
+/test_real_url.txt
+/test_url_fix.py
+/test_virtual_fs_fix.py
+/test_vsicurl.txt
+build_static
+build_test
