@@ -1,11 +1,5 @@
 ﻿name: Build, Test & Release EOPFZarr Plugin
 
-# Unified CI/CD workflow that handles:
-# - Code quality checks (cppcheck, clang-format)
-# - Multi-platform builds (Linux, macOS)
-# - Artifact consolidation and release
-# - Future: Integration tests when test data is available
-
 on:
   push:
     branches: [ main, develop ]
@@ -68,7 +62,6 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends \
              gdal-bin libgdal-dev cmake ninja-build build-essential
-
     - name: Debug GDAL version
       run: |
         echo "GDAL version information:"
@@ -77,13 +70,11 @@ jobs:
         gdal-config --cflags
         echo "GDAL_VERSION_NUM from header:"
         echo '#include "gdal_version.h"' | cpp -I$(gdal-config --cflags | sed 's/-I//g') - | grep 'define GDAL_VERSION_NUM' || echo "Could not find GDAL_VERSION_NUM"
-
     - name: Configure
       run: |
         cmake -S . -B build/${{ matrix.cfg }} \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
-
     - name: Build
       run: cmake --build build/${{ matrix.cfg }} --parallel
 
@@ -133,7 +124,6 @@ jobs:
         pip install gdal==${GDAL_VERSION}
         # Install other requirements but exclude GDAL
         grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin
-
     - name: Run Python tests
       run: |
         # Set the driver path so Python tests can find the plugin
@@ -141,7 +131,6 @@ jobs:
         # Run pytest
         cd tests
         pytest -xvs python/
-
     - name: Debug info
       if: failure()
       run: |
@@ -153,50 +142,12 @@ jobs:
         ls -la /tmp/test.zarr/
         echo "GDAL version information:"
         gdalinfo --version
-
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: gdal_EOPFZarr-${{ matrix.cfg }}
         path: build/${{ matrix.cfg }}/gdal_EOPFZarr.so
 
-  # Optional: Linux conda build (faster and more consistent)
-  # linux-build-conda:
-  #   name: Linux Build (Conda)
-  #   runs-on: ubuntu-22.04
-  #   timeout-minutes: 10
-  #   strategy:
-  #     matrix:
-  #       cfg: [Debug, Release]
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v4
-  #   - name: Setup Miniconda
-  #     uses: conda-incubator/setup-miniconda@v3
-  #     with:
-  #       auto-update-conda: true
-  #       python-version: '3.10'
-  #       miniforge-version: latest
-  #   - name: Install GDAL via conda-forge
-  #     shell: bash -el {0}
-  #     run: |
-  #       conda install -c conda-forge gdal cmake ninja pytest -y
-  #   - name: Configure
-  #     shell: bash -el {0}
-  #     run: |
-  #       cmake -S . -B build/${{ matrix.cfg }} \
-  #         -G Ninja \
-  #         -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
-  #         -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
-  #   - name: Build
-  #     shell: bash -el {0}
-  #     run: cmake --build build/${{ matrix.cfg }} --parallel
-  #   - name: Test
-  #     shell: bash -el {0}
-  #     run: |
-  #       export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-  #       gdalinfo --formats | grep "EOPFZARR"
-  #       cd tests && pytest -xvs python/
 
   windows-build:
     runs-on: windows-latest
@@ -228,7 +179,6 @@ jobs:
         
         Write-Host "`n=== GDAL Development Files ==="
         Get-ChildItem "C:/OSGeo4W/lib" -Filter "*gdal*" | ForEach-Object { $_.Name }
-
     - name: Build Plugin
       env:
         CI: true  # Ensure CI environment is detected
@@ -240,11 +190,9 @@ jobs:
           -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal" `
           -DFORCE_LOCAL_BUILD=ON
         cmake --build build --config Release
-
     - name: Create Test Zarr Dataset
       run: |
         mkdir -p C:/temp/test.zarr
-
         echo '{"zarr_format": 2}' > C:/temp/test.zarr/.zgroup
         echo '{"metadata": {".zattrs": {}, ".zgroup": {"zarr_format": 2}}}' > C:/temp/test.zarr/.zmetadata
         
@@ -257,7 +205,6 @@ jobs:
         type C:/temp/test.zarr/.zgroup
         type C:/temp/test.zarr/.zmetadata
         type C:/temp/test.zarr/data/.zarray
-
     - name: Test Plugin
       run: |
         $env:GDAL_DRIVER_PATH="$PWD/build/Release"
@@ -302,7 +249,6 @@ jobs:
         }
         
         $env:CPL_DEBUG = "OFF"
-
     - name: Package Artifacts
       run: |
         mkdir dist
@@ -647,25 +593,3 @@ jobs:
           ### Changes
           
           See the full changelog at: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}
-
-  # Future: Integration tests job
-  # Enable when test data becomes available
-  # integration-tests:
-  #   name: Integration Tests
-  #   runs-on: ubuntu-22.04
-  #   needs: [linux-build]
-  #   if: false  # Enable when test data is available
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #   - name: Download build artifacts
-  #     uses: actions/download-artifact@v4
-  #     with:
-  #       name: gdal_EOPFZarr-ubuntu-22.04
-  #       path: ./plugin/
-  #   - name: Install GDAL
-  #     run: sudo apt-get update && sudo apt-get install -y libgdal-dev gdal-bin
-  #   - name: Test with sample data
-  #     run: |
-  #       export GDAL_DRIVER_PATH="./plugin:$GDAL_DRIVER_PATH"
-  #       # Add tests with real EOPF data here
-  #       echo "Integration tests would run here"
