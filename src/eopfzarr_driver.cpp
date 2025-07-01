@@ -488,7 +488,13 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     GetGDALDriverManager()->RegisterDriver(driver);
     gEOPFDriver = driver;
     
-    CPLDebug("EOPFZARR", "EOPF Zarr driver registered");
+    CPLDebug("EOPFZARR", "EOPF Zarr driver registered successfully");
+    
+#ifdef _WIN32
+    #ifdef _DEBUG
+    OutputDebugStringA("EOPF-Zarr GDAL driver registered successfully\n");
+    #endif
+#endif
 }
 
 // Add a cleanup function
@@ -511,13 +517,27 @@ extern "C" EOPFZARR_DLL void GDALDeregisterEOPFZarr()
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
-    if (fdwReason == DLL_PROCESS_DETACH)
+    switch(fdwReason)
     {
-        // Only if not during process termination
-        if (lpvReserved == NULL)
-        {
-            GDALDeregisterEOPFZarr();
-        }
+        case DLL_PROCESS_ATTACH:
+            // Optional: Add debug output for troubleshooting
+            #ifdef _DEBUG
+            OutputDebugStringA("EOPF-Zarr plugin DLL loaded\n");
+            #endif
+            // Disable thread notifications for better performance
+            DisableThreadLibraryCalls(hinstDLL);
+            break;
+            
+        case DLL_PROCESS_DETACH:
+            // Only cleanup if not during process termination
+            if (lpvReserved == NULL)
+            {
+                #ifdef _DEBUG
+                OutputDebugStringA("EOPF-Zarr plugin DLL unloading - cleaning up\n");
+                #endif
+                GDALDeregisterEOPFZarr();
+            }
+            break;
     }
     return TRUE;
 }
