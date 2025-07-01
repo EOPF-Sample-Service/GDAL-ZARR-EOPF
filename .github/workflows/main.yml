@@ -219,13 +219,14 @@ jobs:
         arch: x64
         vcvars_ver: 14.3
 
-    - name: Build Plugin
+    - name: Setup GDAL 3.10.3 for compatibility
       run: |
-        cmake -S . -B build `
-          -G "Visual Studio 17 2022" `
-          -A x64 `
-          -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" `
-          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+        # Install specific GDAL version to match local environment
+        choco install gdal --version=3.10.3 --force
+
+    - name: Build with local GDAL version compatibility
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
 
     - name: Create Test Zarr Dataset
