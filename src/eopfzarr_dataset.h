@@ -54,11 +54,10 @@ class EOPFZarrDataset : public GDALPamDataset
     // In your header file:
     CPLErr TryLoadXML(char **papszSiblingFiles = nullptr);
     
-#if GDAL_VERSION_NUM >= 3060000
-    // Modern GDAL (3.6.0+) - const XMLNode parameter
+    // XMLInit signature varies by GDAL version
+#ifdef GDAL_HAS_CONST_XML_NODE
     CPLErr XMLInit(const CPLXMLNode *psTree, const char *pszUnused) override;
 #else
-    // Older GDAL - non-const XMLNode parameter  
     CPLErr XMLInit(CPLXMLNode *psTree, const char *pszUnused) override;
 #endif
 
@@ -76,11 +75,10 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
                        int nBand);
     ~EOPFZarrRasterBand();
 
-#if GDAL_VERSION_NUM >= 3060000
-    // Modern GDAL (3.6.0+) - const method with bool parameter
+    // RefUnderlyingRasterBand signature varies by GDAL version
+#ifdef GDAL_HAS_CONST_REF_UNDERLYING
     GDALRasterBand *RefUnderlyingRasterBand(bool bForceOpen = true) const override;
 #else
-    // Older GDAL - simple signature
     GDALRasterBand *RefUnderlyingRasterBand() override;
 #endif
     // Add the IReadBlock method

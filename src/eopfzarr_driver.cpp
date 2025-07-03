@@ -66,6 +66,28 @@ static std::string CreateQGISCompatiblePath(const std::string& path) {
     return qgisPath;
 }
 
+// Helper function to detect if a path is a URL or virtual file system path
+static bool IsUrlOrVirtualPath(const std::string& path) {
+    CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Checking path: %s", path.c_str());
+    
+    // Check for URL schemes
+    if (path.find("://") != std::string::npos) {
+        // Extract scheme
+        size_t schemeEnd = path.find("://");
+        std::string scheme = path.substr(0, schemeEnd);
+        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected URL scheme: %s", scheme.c_str());
+        return true;
+    }
+    
+    // Check for GDAL virtual file systems
+    if (STARTS_WITH_CI(path.c_str(), "/vsi")) {
+        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected virtual file system");
+        return true;
+    }
+    
+    return false;
+}
+
 static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPath, std::string& subdatasetPath)
 {
     // Debug the original path
@@ -77,6 +99,14 @@ static bool ParseSubdatasetPath(const std::string& fullPath, std::string& mainPa
     if (STARTS_WITH_CI(fullPath.c_str(), pszPrefix)) {
         pathWithoutPrefix = fullPath.substr(strlen(pszPrefix));
         CPLDebug("EOPFZARR", "ParseSubdatasetPath: Removed prefix, now: %s", pathWithoutPrefix.c_str());
+    }
+
+    // Check if this is a URL or virtual path - if so, don't parse for subdatasets
+    if (IsUrlOrVirtualPath(pathWithoutPrefix)) {
+        mainPath = pathWithoutPrefix;
+        subdatasetPath = "";
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: URL/Virtual path detected early, no subdataset parsing - Main: %s", mainPath.c_str());
+        return false;
     }
 
     // Check for quoted path format: "path":subds
@@ -380,12 +410,17 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     if (STARTS_WITH_CI(mainPath.c_str(), "EOPFZARR:"))
         mainPath = mainPath.substr(9);
 
-    // Check file existence
-    VSIStatBufL sStat;
-    if (VSIStatL(mainPath.c_str(), &sStat) != 0)
-    {
-        CPLError(CE_Failure, CPLE_OpenFailed, "EOPFZARR driver: Main path '%s' does not exist", mainPath.c_str());
-        return nullptr;
+    // Skip file existence check for URLs and virtual paths
+    if (IsUrlOrVirtualPath(mainPath)) {
+        CPLDebug("EOPFZARR", "Skipping existence check for URL/Virtual path: %s", mainPath.c_str());
+    } else {
+        // Check file existence for local files only
+        VSIStatBufL sStat;
+        if (VSIStatL(mainPath.c_str(), &sStat) != 0)
+        {
+            CPLError(CE_Failure, CPLE_OpenFailed, "EOPFZARR driver: Main path '%s' does not exist", mainPath.c_str());
+            return nullptr;
+        }
     }
 
     // Create option list without EOPF_PROCESS
@@ -412,14 +447,59 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     }
     else
     {
+        // Prepare the path for the underlying Zarr driver
+        std::string zarrPath = mainPath;
+        
+        // If this is a virtual file system path, format it properly for the Zarr driver
+        if (STARTS_WITH_CI(mainPath.c_str(), "/vsi")) {
+            // For URLs, we need to be careful about path formatting
+            // The Zarr driver expects virtual file system paths to be quoted and prefixed with ZARR:
+            CPLDebug("EOPFZARR", "Detected virtual file system path, formatting for Zarr driver");
+            
+            // Ensure the path uses forward slashes (important for URLs even on Windows)
+            std::string normalizedPath = mainPath;
+            // No need to change slashes in URLs - they should already be correct
+            
+            zarrPath = "ZARR:\"" + normalizedPath + "\"";
+            CPLDebug("EOPFZARR", "Formatted Zarr path: %s", zarrPath.c_str());
+        }
+        
         // Use safer GDALOpenEx API with explicit driver list
         char* const azDrvList[] = { (char*)"Zarr", nullptr };
+        
+        CPLDebug("EOPFZARR", "Attempting to open with Zarr driver: %s", zarrPath.c_str());
+        
         poUnderlyingDS = static_cast<GDALDataset*>(
-            GDALOpenEx(mainPath.c_str(),
+            GDALOpenEx(zarrPath.c_str(),
                 poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
                 azDrvList,  // Explicitly use Zarr driver
                 papszOpenOptions,
                 nullptr));
+                
+        // If the formatted version failed, try the original path
+        if (!poUnderlyingDS) {
+            CPLDebug("EOPFZARR", "Formatted path failed, trying original path: %s", mainPath.c_str());
+            poUnderlyingDS = static_cast<GDALDataset*>(
+                GDALOpenEx(mainPath.c_str(),
+                    poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                    azDrvList,
+                    papszOpenOptions,
+                    nullptr));
+        }
+        
+        // If both approaches failed and this is a URL, try without /vsicurl/ prefix
+        if (!poUnderlyingDS && STARTS_WITH_CI(mainPath.c_str(), "/vsicurl/")) {
+            std::string directUrl = mainPath.substr(9); // Remove "/vsicurl/" prefix
+            CPLDebug("EOPFZARR", "VSI path failed, trying direct URL: %s", directUrl.c_str());
+            
+            std::string directZarrPath = "ZARR:\"" + directUrl + "\"";
+            poUnderlyingDS = static_cast<GDALDataset*>(
+                GDALOpenEx(directZarrPath.c_str(),
+                    poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                    azDrvList,
+                    papszOpenOptions,
+                    nullptr));
+        }
     }
 
     CSLDestroy(papszOpenOptions);

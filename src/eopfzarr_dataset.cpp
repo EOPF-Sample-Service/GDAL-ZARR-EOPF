@@ -437,7 +437,8 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 
 // Update the implementation:
 
-#if GDAL_VERSION_NUM >= 3060000
+// XMLInit implementation varies by GDAL version
+#ifdef GDAL_HAS_CONST_XML_NODE
 CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused) {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
@@ -473,7 +474,8 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
     // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
 }
 
-#if GDAL_VERSION_NUM >= 3060000
+// RefUnderlyingRasterBand implementation varies by GDAL version
+#ifdef GDAL_HAS_CONST_REF_UNDERLYING
 GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const {
     return m_poUnderlyingBand;
 }
