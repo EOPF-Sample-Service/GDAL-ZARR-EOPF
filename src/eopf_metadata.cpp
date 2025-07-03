@@ -389,7 +389,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
     }
 
 
-    // If no bounds found after all attempts, create default geographic bounds
+    // If no bounds found after all attempts, create default bounds
     if (!hasBounds)
     {
         minX = 10.0;     // longitude
@@ -397,21 +397,36 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
         maxX = 15.0;     // longitude
         maxY = 45.0;     // latitude
         hasBounds = true;
-        isUTM = false; // Defaulting to geographic
-        nEPSG = 4326; // Assuming WGS84 for these defaults
-        // Ensure WGS84 projection is set if we fall here
-        OGRSpatialReference srs_default_geo;
-        srs_default_geo.SetWellKnownGeogCS("WGS84");
-        srs_default_geo.SetAuthority("GEOGCS", "EPSG", 4326);
-        char* pszDefaultWKT = nullptr;
-        srs_default_geo.exportToWkt(&pszDefaultWKT);
-        ds.SetProjection(pszDefaultWKT);
-        ds.SetMetadataItem("spatial_ref", pszDefaultWKT);
-        ds.SetMetadataItem("EPSG", "4326");
-        ds.SetMetadataItem("proj:epsg", "4326");
-        CPLFree(pszDefaultWKT);
-        CPLDebug("EOPFZARR", "No specific bounds found, created default geographic bounds (EPSG:4326): [%.8f,%.8f,%.8f,%.8f]",
-            minX, minY, maxX, maxY);
+        
+        // Debug: Show the values before condition check
+        CPLDebug("EOPFZARR", "Creating default bounds: nEPSG=%d, isUTM=%s", nEPSG, isUTM ? "true" : "false");
+        
+        // Check if we already have a valid UTM projection from CRS inference
+        if (nEPSG != 0 && isUTM)
+        {
+            // Preserve the already-inferred UTM projection
+            CPLDebug("EOPFZARR", "No specific bounds found, using default geographic bounds but preserving UTM projection (EPSG:%d): [%.8f,%.8f,%.8f,%.8f]",
+                nEPSG, minX, minY, maxX, maxY);
+        }
+        else
+        {
+            // Fallback to WGS84 if no UTM projection was inferred
+            isUTM = false; // Defaulting to geographic
+            nEPSG = 4326; // Assuming WGS84 for these defaults
+            // Ensure WGS84 projection is set if we fall here
+            OGRSpatialReference srs_default_geo;
+            srs_default_geo.SetWellKnownGeogCS("WGS84");
+            srs_default_geo.SetAuthority("GEOGCS", "EPSG", 4326);
+            char* pszDefaultWKT = nullptr;
+            srs_default_geo.exportToWkt(&pszDefaultWKT);
+            ds.SetProjection(pszDefaultWKT);
+            ds.SetMetadataItem("spatial_ref", pszDefaultWKT);
+            ds.SetMetadataItem("EPSG", "4326");
+            ds.SetMetadataItem("proj:epsg", "4326");
+            CPLFree(pszDefaultWKT);
+            CPLDebug("EOPFZARR", "No specific bounds found, created default geographic bounds (EPSG:4326): [%.8f,%.8f,%.8f,%.8f]",
+                minX, minY, maxX, maxY);
+        }
     }
 
     // -----------------------------------
