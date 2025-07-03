@@ -452,9 +452,16 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         
         // If this is a virtual file system path, format it properly for the Zarr driver
         if (STARTS_WITH_CI(mainPath.c_str(), "/vsi")) {
+            // For URLs, we need to be careful about path formatting
             // The Zarr driver expects virtual file system paths to be quoted and prefixed with ZARR:
             CPLDebug("EOPFZARR", "Detected virtual file system path, formatting for Zarr driver");
-            zarrPath = "ZARR:\"" + mainPath + "\"";
+            
+            // Ensure the path uses forward slashes (important for URLs even on Windows)
+            std::string normalizedPath = mainPath;
+            // No need to change slashes in URLs - they should already be correct
+            
+            zarrPath = "ZARR:\"" + normalizedPath + "\"";
+            CPLDebug("EOPFZARR", "Formatted Zarr path: %s", zarrPath.c_str());
         }
         
         // Use safer GDALOpenEx API with explicit driver list
@@ -474,6 +481,20 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
             CPLDebug("EOPFZARR", "Formatted path failed, trying original path: %s", mainPath.c_str());
             poUnderlyingDS = static_cast<GDALDataset*>(
                 GDALOpenEx(mainPath.c_str(),
+                    poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                    azDrvList,
+                    papszOpenOptions,
+                    nullptr));
+        }
+        
+        // If both approaches failed and this is a URL, try without /vsicurl/ prefix
+        if (!poUnderlyingDS && STARTS_WITH_CI(mainPath.c_str(), "/vsicurl/")) {
+            std::string directUrl = mainPath.substr(9); // Remove "/vsicurl/" prefix
+            CPLDebug("EOPFZARR", "VSI path failed, trying direct URL: %s", directUrl.c_str());
+            
+            std::string directZarrPath = "ZARR:\"" + directUrl + "\"";
+            poUnderlyingDS = static_cast<GDALDataset*>(
+                GDALOpenEx(directZarrPath.c_str(),
                     poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
                     azDrvList,
                     papszOpenOptions,

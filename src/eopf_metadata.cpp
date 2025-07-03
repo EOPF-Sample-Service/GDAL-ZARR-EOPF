@@ -68,6 +68,79 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
         }
     }
 
+    // Enhanced search for STAC discovery metadata with better structure parsing
+    if (epsg.empty() && stacDiscovery.IsValid()) {
+        // Try to get the full STAC item
+        const CPLJSONObject& bbox = stacDiscovery.GetObj("bbox");
+        const CPLJSONObject& stacExtensions = stacDiscovery.GetObj("stac_extensions");
+        const CPLJSONObject& geometry = stacDiscovery.GetObj("geometry");
+        
+        if (geometry.IsValid()) {
+            const CPLJSONObject& geomCrs = geometry.GetObj("crs");
+            if (geomCrs.IsValid()) {
+                const CPLJSONObject& geomProps = geomCrs.GetObj("properties");
+                if (geomProps.IsValid()) {
+                    int nGeomEpsg = geomProps.GetInteger("code", 0);
+                    if (nGeomEpsg != 0) {
+                        epsg = CPLString().Printf("%d", nGeomEpsg);
+                        CPLDebug("EOPFZARR", "Found CRS code in STAC geometry: %s", epsg.c_str());
+                    }
+                }
+            }
+        }
+    }
+
+    // Try to infer CRS from Sentinel-2 tile naming convention
+    if (epsg.empty()) {
+        // Look for Sentinel-2 tile ID pattern in dataset name or metadata
+        std::string tileName;
+        
+        // First, try to extract from dataset name if it contains T##XXX pattern
+        const char* dsName = ds.GetDescription();
+        if (dsName) {
+            std::string dsNameStr(dsName);
+            size_t tilePos = dsNameStr.find("_T");
+            if (tilePos != std::string::npos && tilePos + 6 < dsNameStr.length()) {
+                tileName = dsNameStr.substr(tilePos + 1, 6); // Extract T##XXX
+                CPLDebug("EOPFZARR", "Extracted tile name from dataset name: %s", tileName.c_str());
+            }
+        }
+        
+        // Also check in STAC discovery metadata
+        if (tileName.empty() && stacDiscovery.IsValid()) {
+            const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+            if (properties.IsValid()) {
+                tileName = properties.GetString("s2:mgrs_tile", 
+                           properties.GetString("mgrs_tile", 
+                           properties.GetString("tile_id", "")));
+                if (!tileName.empty()) {
+                    CPLDebug("EOPFZARR", "Found tile name in STAC properties: %s", tileName.c_str());
+                }
+            }
+        }
+        
+        // Parse tile name to get EPSG code (T##XXX -> UTM Zone ## North/South)
+        if (!tileName.empty() && tileName.length() >= 3 && tileName[0] == 'T') {
+            // Extract zone number (characters 1-2)
+            std::string zoneStr = tileName.substr(1, 2);
+            int zone = std::atoi(zoneStr.c_str());
+            
+            if (zone >= 1 && zone <= 60) {
+                // Determine hemisphere from the third character
+                char hemisphere = tileName.length() > 3 ? tileName[3] : 'N';
+                
+                // For Sentinel-2, assume Northern hemisphere unless explicitly Southern
+                // Most Sentinel-2 data is Northern hemisphere
+                bool isNorth = (hemisphere >= 'N' && hemisphere <= 'Z');
+                
+                int epsgCode = isNorth ? (32600 + zone) : (32700 + zone);
+                epsg = CPLString().Printf("%d", epsgCode);
+                CPLDebug("EOPFZARR", "Inferred EPSG %s from Sentinel-2 tile %s (zone %d, %s hemisphere)", 
+                        epsg.c_str(), tileName.c_str(), zone, isNorth ? "North" : "South");
+            }
+        }
+    }
+
     // Look for WKT
     std::string wkt = obj.GetString("spatial_ref", "");
     if (wkt.empty() && stacDiscovery.IsValid()) {
