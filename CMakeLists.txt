@@ -13,6 +13,34 @@ configure_file(
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
+# Check GDAL version compatibility
+if(GDAL_VERSION)
+    message(STATUS "Found GDAL version: ${GDAL_VERSION}")
+    
+    # Extract major.minor version for compatibility check
+    string(REGEX MATCH "^([0-9]+\\.[0-9]+)" GDAL_MAJOR_MINOR "${GDAL_VERSION}")
+    message(STATUS "GDAL major.minor version: ${GDAL_MAJOR_MINOR}")
+    
+    # Create version number for preprocessor defines
+    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" GDAL_VERSION_MATCH "${GDAL_VERSION}")
+    if(GDAL_VERSION_MATCH)
+        set(GDAL_VERSION_MAJOR ${CMAKE_MATCH_1})
+        set(GDAL_VERSION_MINOR ${CMAKE_MATCH_2})
+        math(EXPR GDAL_VERSION_NUMBER "${GDAL_VERSION_MAJOR} * 100 + ${GDAL_VERSION_MINOR}")
+        message(STATUS "GDAL version define: GDAL_VERSION_NUM=${GDAL_VERSION_NUMBER}")
+        add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUMBER})
+    endif()
+    
+    # Warn about potential version mismatches
+    if(GDAL_VERSION VERSION_LESS "3.8")
+        message(WARNING "GDAL version ${GDAL_VERSION} is older than recommended (3.8+). Some features may not work.")
+    else()
+        message(STATUS "✅ GDAL version ${GDAL_VERSION} check passed - compatible for EOPF Zarr driver")
+    endif()
+else()
+    message(WARNING "Could not determine GDAL version. Build may have compatibility issues.")
+endif()
+
 # If GDAL imported target is not available, try with pkg-config as fallback
 if(NOT TARGET GDAL::GDAL)
     find_package(PkgConfig QUIET)
@@ -23,6 +51,7 @@ if(NOT TARGET GDAL::GDAL)
             target_include_directories(GDAL::GDAL INTERFACE ${GDAL_INCLUDE_DIRS})
             target_link_libraries(GDAL::GDAL INTERFACE ${GDAL_LIBRARIES})
             target_compile_options(GDAL::GDAL INTERFACE ${GDAL_CFLAGS_OTHER})
+            message(STATUS "Using pkg-config GDAL: ${GDAL_VERSION}")
         endif()
     endif()
 endif()
@@ -33,12 +62,16 @@ if(NOT TARGET GDAL::GDAL)
 endif()
 
 # Print GDAL information for debugging
-message(STATUS "Found GDAL version: ${GDAL_VERSION}")
-if(GDAL_INCLUDE_DIRS)
-    message(STATUS "GDAL include directories: ${GDAL_INCLUDE_DIRS}")
-endif()
-if(GDAL_LIBRARIES)  
-    message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
+message(STATUS "GDAL include directories: ${GDAL_INCLUDE_DIRS}")
+message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
+
+# Add version compatibility defines
+if(GDAL_VERSION)
+    # Define GDAL version for compatibility checks in code
+    string(REPLACE "." "" GDAL_VERSION_NUM "${GDAL_VERSION}")
+    string(SUBSTRING "${GDAL_VERSION_NUM}" 0 3 GDAL_VERSION_NUM)
+    add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUM})
+    message(STATUS "GDAL version define: GDAL_VERSION_NUM=${GDAL_VERSION_NUM}")
 endif()
 
 # Main driver library (MODULE)
@@ -113,15 +146,45 @@ endif()
 
 # Check for GDALPamDataset XML initialization compatibility
 include(CheckCXXSourceCompiles)
+
+# Set up include directories for the test
+set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
+
+# Test for const CPLXMLNode in XMLInit
 check_cxx_source_compiles("
 #include <gdal_pam.h>
 class Test : public GDALPamDataset {
 protected:
-    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override;
+    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
 };
 int main() { return 0; }
 " GDAL_HAS_CONST_XML_NODE)
 
 if(GDAL_HAS_CONST_XML_NODE)
+    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
     add_definitions(-DGDAL_HAS_CONST_XML_NODE)
+else()
+    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
 endif()
+
+# Test for RefUnderlyingRasterBand signature
+check_cxx_source_compiles("
+#include <gdal_proxy.h>
+class Test : public GDALProxyRasterBand {
+public:
+    GDALRasterBand* RefUnderlyingRasterBand(bool bForceOpen = true) const override { return nullptr; }
+};
+int main() { return 0; }
+" GDAL_HAS_CONST_REF_UNDERLYING)
+
+if(GDAL_HAS_CONST_REF_UNDERLYING)
+    message(STATUS "GDAL RefUnderlyingRasterBand uses const method with bool parameter")
+    add_definitions(-DGDAL_HAS_CONST_REF_UNDERLYING)
+else()
+    message(STATUS "GDAL RefUnderlyingRasterBand uses non-const method without parameters")
+endif()
+
+# Reset CMAKE_REQUIRED variables
+unset(CMAKE_REQUIRED_INCLUDES)
+unset(CMAKE_REQUIRED_LIBRARIES)

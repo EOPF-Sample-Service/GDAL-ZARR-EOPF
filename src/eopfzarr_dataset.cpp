@@ -437,10 +437,16 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 
 // Update the implementation:
 
-// Now using unified XMLInit for GDAL 3.1+
+// XMLInit implementation varies by GDAL version
+#ifdef GDAL_HAS_CONST_XML_NODE
 CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused) {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
+#else
+CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode* psTree, const char* pszUnused) {
+    return GDALPamDataset::XMLInit(psTree, pszUnused);
+}
+#endif
 
 CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
 {
@@ -468,10 +474,16 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
     // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
 }
 
-// Now using unified RefUnderlyingRasterBand for GDAL 3.1+
+// RefUnderlyingRasterBand implementation varies by GDAL version
+#ifdef GDAL_HAS_CONST_REF_UNDERLYING
 GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const {
     return m_poUnderlyingBand;
 }
+#else
+GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand() {
+    return m_poUnderlyingBand;
+}
+#endif
 CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
 {
     // Simply delegate to the underlying band
