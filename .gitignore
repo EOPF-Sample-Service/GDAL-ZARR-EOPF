@@ -25,6 +25,10 @@ venv/bin/adig
 /test_vsicurl.txt
 /build_static/
 build_test/
+
+# Test workspace - contains validation scripts and temporary documentation
+test_workspace/
+
 # HTTPS URL testing files
 test_https_url.py
 test_url_parsing_fix.py
