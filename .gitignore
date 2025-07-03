@@ -36,3 +36,9 @@ test_working_https.py
 test_working_url.py
 final_validation.py
 https_url_success_demo.py
+notebooks/eopfzarr_stakeholder_requirements.ipynb
+docs/windows-installation.md
+build-windows.ps1
+build-windows.bat
+build-local.ps1
+build-linux.sh
