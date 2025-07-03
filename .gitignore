@@ -36,3 +36,7 @@ test_working_https.py
 test_working_url.py
 final_validation.py
 https_url_success_demo.py
+/test-build
+/test-build2
+/release-build
+/test-build3

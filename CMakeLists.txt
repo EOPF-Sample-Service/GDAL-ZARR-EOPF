@@ -11,6 +11,45 @@ configure_file(
 )
 
 # Find GDAL using the modern imported target
+# Try multiple methods to find GDAL for better compatibility
+if(GDAL_ROOT)
+    # If GDAL_ROOT is provided, use it to set hints
+    file(TO_CMAKE_PATH "${GDAL_ROOT}" GDAL_ROOT_CMAKE)
+    set(GDAL_INCLUDE_DIR "${GDAL_ROOT_CMAKE}/include")
+    
+    # Try different possible library names for GDAL
+    set(GDAL_POSSIBLE_LIBS 
+        "${GDAL_ROOT_CMAKE}/lib/gdal.lib"
+        "${GDAL_ROOT_CMAKE}/lib/gdal_i.lib"
+        "${GDAL_ROOT_CMAKE}/lib/gdal310.lib"
+    )
+    
+    foreach(lib_path ${GDAL_POSSIBLE_LIBS})
+        if(EXISTS "${lib_path}")
+            set(GDAL_LIBRARY "${lib_path}")
+            message(STATUS "Found GDAL library: ${lib_path}")
+            break()
+        endif()
+    endforeach()
+    
+    message(STATUS "Using GDAL_ROOT hint: ${GDAL_ROOT_CMAKE}")
+    message(STATUS "GDAL_INCLUDE_DIR: ${GDAL_INCLUDE_DIR}")
+    message(STATUS "GDAL_LIBRARY: ${GDAL_LIBRARY}")
+    
+    # Verify the paths exist
+    if(EXISTS "${GDAL_INCLUDE_DIR}")
+        message(STATUS "✓ GDAL include directory exists")
+    else()
+        message(WARNING "✗ GDAL include directory not found: ${GDAL_INCLUDE_DIR}")
+    endif()
+    
+    if(GDAL_LIBRARY AND EXISTS "${GDAL_LIBRARY}")
+        message(STATUS "✓ GDAL library exists")
+    else()
+        message(WARNING "✗ GDAL library not found: ${GDAL_LIBRARY}")
+    endif()
+endif()
+
 find_package(GDAL REQUIRED)
 
 # Check GDAL version compatibility
@@ -89,6 +128,10 @@ target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
 
 # Output properties for plugin
 if (WIN32)
+    # Static runtime linking to reduce dependencies
+    set_property(TARGET gdal_EOPFZarr PROPERTY 
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
         OUTPUT_NAME "gdal_EOPFZarr"
@@ -102,6 +145,17 @@ if (WIN32)
 
     # Add the .def file to the library
     target_link_options(gdal_EOPFZarr PRIVATE "/DEF:${DEF_FILE}")
+    
+    # Additional deployment options for GitHub releases
+    option(EOPFZARR_STATIC_DEPLOYMENT "Build for static deployment (GitHub releases)" OFF)
+    if(EOPFZARR_STATIC_DEPLOYMENT)
+        message(STATUS "Building for static deployment (GitHub releases)")
+        # Static linking flags
+        target_link_options(gdal_EOPFZarr PRIVATE "/MT")
+        # Ensure static CRT linking
+        set_property(TARGET gdal_EOPFZarr PROPERTY 
+            MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    endif()
 elseif (APPLE)
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
@@ -148,8 +202,19 @@ endif()
 include(CheckCXXSourceCompiles)
 
 # Set up include directories for the test
-set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
+if(GDAL_INCLUDE_DIR)
+    set(CMAKE_REQUIRED_INCLUDES "${GDAL_INCLUDE_DIR}")
+else()
+    set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
+endif()
+
+if(GDAL_LIBRARY)
+    # Convert path to proper format for CMake
+    file(TO_CMAKE_PATH "${GDAL_LIBRARY}" GDAL_LIBRARY_CMAKE)
+    set(CMAKE_REQUIRED_LIBRARIES "${GDAL_LIBRARY_CMAKE}")
+else()
+    set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
+endif()
 
 # Test for const CPLXMLNode in XMLInit
 check_cxx_source_compiles("
