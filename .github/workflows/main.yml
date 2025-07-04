@@ -387,8 +387,17 @@ jobs:
 
   macos-build:
     name: macOS Build (Conda)
-    runs-on: macos-13
-    timeout-minutes: 10  # Much faster with conda
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x86_64
+            cmake_arch: "x86_64"
+          - runner: macos-14
+            arch: arm64
+            cmake_arch: "arm64"
+    runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -410,10 +419,14 @@ jobs:
     - name: Configure
       shell: bash -el {0}
       run: |
+        echo "Building for architecture: ${{ matrix.arch }}"
+        echo "Runner: ${{ matrix.runner }}"
+        uname -m
         cmake -S . -B build \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }}
           
     - name: Build
       shell: bash -el {0}
@@ -455,14 +468,52 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal_EOPFZarr-macos
+        name: gdal_EOPFZarr-macos-${{ matrix.arch }}
         path: build/*.dylib
+
+  # Create universal macOS binaries (optional, for maximum compatibility)
+  macos-universal:
+    name: Create macOS Universal Binary
+    runs-on: macos-14
+    needs: [macos-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Download macOS x86_64 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-macos-x86_64
+        path: ./x86_64/
+        
+    - name: Download macOS arm64 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-macos-arm64
+        path: ./arm64/
+        
+    - name: Create universal binary
+      run: |
+        echo "Creating universal binary..."
+        lipo -create \
+          ./x86_64/gdal_EOPFZarr.dylib \
+          ./arm64/gdal_EOPFZarr.dylib \
+          -output ./gdal_EOPFZarr.dylib
+        
+        echo "Verifying universal binary..."
+        file ./gdal_EOPFZarr.dylib
+        lipo -info ./gdal_EOPFZarr.dylib
+        
+    - name: Upload universal binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdal_EOPFZarr-macos-universal
+        path: ./gdal_EOPFZarr.dylib
 
   # Consolidate all artifacts for easy distribution
   package-release:
     name: Package Release Artifacts
     runs-on: ubuntu-22.04
-    needs: [linux-build, windows-build, macos-build]
+    needs: [linux-build, windows-build, macos-build, macos-universal]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
@@ -487,11 +538,23 @@ jobs:
         name: gdal-plugin-universal
         path: ./release-package/windows/
         
-    - name: Download macOS artifacts
+    - name: Download macOS x86_64 artifacts
       uses: actions/download-artifact@v4
       with:
-        name: gdal_EOPFZarr-macos
-        path: ./release-package/macos/
+        name: gdal_EOPFZarr-macos-x86_64
+        path: ./release-package/macos/x86_64/
+        
+    - name: Download macOS arm64 artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-macos-arm64
+        path: ./release-package/macos/arm64/
+        
+    - name: Download macOS universal binary
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal_EOPFZarr-macos-universal
+        path: ./release-package/macos/universal/
         
     - name: Create installation scripts
       run: |
@@ -532,11 +595,47 @@ jobs:
         
         echo "Installing GDAL EOPF Plugin for macOS..."
         
+        # Check for command line argument for universal binary
+        if [ "$1" = "universal" ]; then
+            SOURCE_DIR="macos/universal"
+            echo "Using universal binary (works on both Intel and Apple Silicon)"
+        else
+            # Detect architecture and use specific binary
+            ARCH=$(uname -m)
+            echo "Detected architecture: $ARCH"
+            
+            if [ "$ARCH" = "arm64" ]; then
+                SOURCE_DIR="macos/arm64"
+                echo "Using Apple Silicon (arm64) specific binary"
+            elif [ "$ARCH" = "x86_64" ]; then
+                SOURCE_DIR="macos/x86_64"
+                echo "Using Intel (x86_64) specific binary"
+            else
+                echo "Error: Unsupported architecture: $ARCH"
+                echo "Supported architectures: arm64 (Apple Silicon), x86_64 (Intel)"
+                echo "Or use: ./install-macos.sh universal"
+                exit 1
+            fi
+        fi
+        
+        if [ ! -f "$SOURCE_DIR/$PLUGIN_FILE" ]; then
+            echo "Error: Plugin file not found: $SOURCE_DIR/$PLUGIN_FILE"
+            echo "Available files:"
+            find macos -name "*.dylib" 2>/dev/null || echo "No .dylib files found"
+            exit 1
+        fi
+        
         mkdir -p "$PLUGIN_DIR"
-        cp "macos/$PLUGIN_FILE" "$PLUGIN_DIR/"
+        cp "$SOURCE_DIR/$PLUGIN_FILE" "$PLUGIN_DIR/"
         chmod 755 "$PLUGIN_DIR/$PLUGIN_FILE"
         
         echo "Plugin installed to: $PLUGIN_DIR/$PLUGIN_FILE"
+        if [ "$1" = "universal" ]; then
+            echo "Binary type: Universal (Intel + Apple Silicon)"
+        else
+            echo "Architecture: $ARCH"
+            echo "Note: Universal binary also available with: ./install-macos.sh universal"
+        fi
         echo "Add this to your environment:"
         echo "export GDAL_DRIVER_PATH=$PLUGIN_DIR:\$GDAL_DRIVER_PATH"
         EOF
@@ -579,7 +678,8 @@ jobs:
         
         ### macOS
         ```bash
-        ./install-macos.sh
+        ./install-macos.sh           # Auto-detect architecture (Intel/Apple Silicon)
+        ./install-macos.sh universal # Use universal binary (works on both architectures)
         ```
         
         ### Windows
@@ -591,7 +691,7 @@ jobs:
         
         1. Copy the appropriate plugin file to your GDAL plugins directory:
            - Linux: `gdal_EOPFZarr.so` 
-           - macOS: `gdal_EOPFZarr.dylib`
+           - macOS: `gdal_EOPFZarr.dylib` (available for x86_64, arm64, and universal)
            - Windows: `gdal_EOPFZarr.dll`
         
         2. Set the GDAL_DRIVER_PATH environment variable to include the plugins directory
@@ -618,7 +718,7 @@ jobs:
           "ref": "${{ github.ref }}",
           "workflow": "${{ github.workflow }}",
           "run_number": "${{ github.run_number }}",
-          "platforms": ["linux", "macos", "windows"],
+          "platforms": ["linux", "macos-x86_64", "macos-arm64", "macos-universal", "windows"],
           "linux_variants": ["debug", "release"]
         }
         EOF

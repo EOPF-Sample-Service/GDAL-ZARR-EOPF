@@ -157,9 +157,39 @@ if (WIN32)
             MSVC_RUNTIME_LIBRARY "MultiThreaded")
     endif()
 elseif (APPLE)
+    # macOS-specific settings
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
         SUFFIX ".dylib")
+    
+    # Check for Apple Silicon and set appropriate architecture
+    if(CMAKE_OSX_ARCHITECTURES)
+        message(STATUS "Building for macOS architectures: ${CMAKE_OSX_ARCHITECTURES}")
+    else()
+        # Detect the current architecture
+        execute_process(
+            COMMAND uname -m
+            OUTPUT_VARIABLE MACOS_ARCH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        message(STATUS "Detected macOS architecture: ${MACOS_ARCH}")
+        
+        # Set architecture based on detection
+        if(MACOS_ARCH STREQUAL "arm64")
+            set(CMAKE_OSX_ARCHITECTURES "arm64")
+            message(STATUS "Setting architecture to arm64 for Apple Silicon")
+        else()
+            set(CMAKE_OSX_ARCHITECTURES "x86_64")
+            message(STATUS "Setting architecture to x86_64 for Intel Mac")
+        endif()
+    endif()
+    
+    # Option for universal binary
+    option(EOPFZARR_UNIVERSAL_BINARY "Build universal binary for macOS (x86_64 + arm64)" OFF)
+    if(EOPFZARR_UNIVERSAL_BINARY)
+        set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
+        message(STATUS "Building universal binary for macOS (x86_64 + arm64)")
+    endif()
 else()
     set_target_properties(gdal_EOPFZarr PROPERTIES
         PREFIX ""
