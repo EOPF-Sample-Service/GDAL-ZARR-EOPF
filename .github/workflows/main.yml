@@ -200,6 +200,12 @@ jobs:
 
   windows-build:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        gdal_version: 
+          - { name: "3.10", osgeo4w_packages: "gdal-devel=3.10.* cmake ninja" }
+          - { name: "3.11", osgeo4w_packages: "gdal-devel cmake ninja" }
+    name: Windows Build (GDAL ${{ matrix.gdal_version.name }})
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -207,10 +213,17 @@ jobs:
     - name: Install OSGeo4W (GDAL + Dev Tools)
       uses: echoix/setup-OSGeo4W@v0.2.0
       with:
-        packages: gdal-devel cmake ninja
+        packages: ${{ matrix.gdal_version.osgeo4w_packages }}
         site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
         upgrade-also: false
+        
+    - name: Check GDAL version compatibility
+      run: |
+        $env:PATH = "C:\OSGeo4W\bin;$env:PATH"
+        $gdalVersion = & gdalinfo --version
+        Write-Host "Building against GDAL version: $gdalVersion"
+        Write-Host "Note: Plugin will be compatible with this GDAL version"
 
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
@@ -290,7 +303,7 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal-plugin-universal
+        name: gdal-plugin-windows-gdal${{ matrix.gdal_version.name }}
         path: dist/*
 
   # Homebrew approach (commented out in favor of faster conda approach)
@@ -481,11 +494,17 @@ jobs:
         name: gdal_EOPFZarr-Release  
         path: ./release-package/linux/release/
         
-    - name: Download Windows artifacts
+    - name: Download Windows GDAL 3.10 artifacts
       uses: actions/download-artifact@v4
       with:
-        name: gdal-plugin-universal
-        path: ./release-package/windows/
+        name: gdal-plugin-windows-gdal3.10
+        path: ./release-package/windows/gdal-3.10/
+        
+    - name: Download Windows GDAL 3.11 artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gdal-plugin-windows-gdal3.11
+        path: ./release-package/windows/gdal-3.11/
         
     - name: Download macOS artifacts
       uses: actions/download-artifact@v4
@@ -546,18 +565,62 @@ jobs:
         @echo off
         setlocal
         
+        echo Installing GDAL EOPF Plugin for Windows...
+        echo.
+        
+        :: Auto-detect GDAL version
+        for /f "tokens=2" %%i in ('gdalinfo --version 2^>nul ^| findstr /R "GDAL [0-9]"') do set GDAL_VERSION=%%i
+        
+        if "%GDAL_VERSION%"=="" (
+            echo ERROR: Could not detect GDAL version. Please ensure GDAL is installed and in PATH.
+            echo Available versions: GDAL 3.10.x, GDAL 3.11.x
+            pause
+            exit /b 1
+        )
+        
+        echo Detected GDAL version: %GDAL_VERSION%
+        
         set "PLUGIN_DIR=%GDAL_DRIVER_PATH%"
-        if "%PLUGIN_DIR%"=="" set "PLUGIN_DIR=C:\OSGeo4W\bin\gdal\plugins"
+        if "%PLUGIN_DIR%"=="" set "PLUGIN_DIR=C:\OSGeo4W\apps\gdal\lib\gdalplugins"
+        
+        :: Determine which DLL to use based on GDAL version
+        if "%GDAL_VERSION:~0,4%"=="3.10" (
+            set "SOURCE_DIR=windows\gdal-3.10"
+            echo Using plugin for GDAL 3.10.x
+        ) else if "%GDAL_VERSION:~0,4%"=="3.11" (
+            set "SOURCE_DIR=windows\gdal-3.11"
+            echo Using plugin for GDAL 3.11.x
+        ) else (
+            echo WARNING: GDAL version %GDAL_VERSION% not specifically supported.
+            echo Trying GDAL 3.11 version (may work with newer versions)
+            set "SOURCE_DIR=windows\gdal-3.11"
+        )
+        
         set "PLUGIN_FILE=gdal_EOPFZarr.dll"
         
-        echo Installing GDAL EOPF Plugin for Windows...
+        if not exist "%SOURCE_DIR%\%PLUGIN_FILE%" (
+            echo ERROR: Plugin file not found: %SOURCE_DIR%\%PLUGIN_FILE%
+            echo Please check the release package integrity.
+            pause
+            exit /b 1
+        )
         
         if not exist "%PLUGIN_DIR%" mkdir "%PLUGIN_DIR%"
-        copy "windows\%PLUGIN_FILE%" "%PLUGIN_DIR%\"
+        copy "%SOURCE_DIR%\%PLUGIN_FILE%" "%PLUGIN_DIR%\"
         
-        echo Plugin installed to: %PLUGIN_DIR%\%PLUGIN_FILE%
-        echo Add this to your environment:
-        echo set GDAL_DRIVER_PATH=%PLUGIN_DIR%;%%GDAL_DRIVER_PATH%%
+        if errorlevel 1 (
+            echo ERROR: Failed to copy plugin file
+            pause
+            exit /b 1
+        )
+        
+        echo.
+        echo ✅ Plugin installed successfully to: %PLUGIN_DIR%\%PLUGIN_FILE%
+        echo.
+        echo Test the installation with:
+        echo   gdalinfo --formats ^| findstr EOPF
+        echo.
+        pause
         EOF
         
         # Make scripts executable
