@@ -48,8 +48,14 @@ GITHUB_ACTIONS_ARTIFACTS_STATUS.md
 github_actions_dll_test.txt
 test_github_actions_dll.py
 MACOS_ARM64_IMPLEMENTATION.md
+BRANCH_SUMMARY.md
 
 # Keep test user documentation in repo
 # GETTING_STARTED.md
 # TEST_CHECKLIST.md
 # RELEASE_CHECKLIST.md
+
+# Keep local installation scripts for testing
+# install-windows.bat
+# install-macos.sh  
+# install-linux.sh
