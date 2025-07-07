@@ -40,3 +40,16 @@ https_url_success_demo.py
 /test-build2
 /release-build
 /test-build3
+build-linux.sh
+build-local.ps1
+build-windows.bat
+build-windows.ps1
+GITHUB_ACTIONS_ARTIFACTS_STATUS.md
+github_actions_dll_test.txt
+test_github_actions_dll.py
+MACOS_ARM64_IMPLEMENTATION.md
+
+# Keep test user documentation in repo
+# GETTING_STARTED.md
+# TEST_CHECKLIST.md
+# RELEASE_CHECKLIST.md
