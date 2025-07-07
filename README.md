@@ -9,6 +9,37 @@ This repository contains the **EOPF GDAL Plugin**, a community-driven effort to 
 
 ---
 
+## 🚀 Quick Start for Test Users
+
+**Want to test the plugin? Skip the building and jump straight to testing!**
+
+### Download & Install
+1. **Download**: Go to [Releases](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/releases) and download the latest package
+2. **Install**: Extract and run the installation script for your platform
+3. **Test**: Verify with `gdalinfo --formats | grep EOPFZARR`
+
+### Detailed Instructions
+📖 **[Complete Getting Started Guide →](GETTING_STARTED.md)**
+
+The getting started guide includes:
+- Platform-specific installation instructions (Windows, macOS, Linux)
+- Troubleshooting for common issues
+- Test commands and examples
+- How to report issues
+
+### Quick Test
+```bash
+# Verify plugin is installed
+gdalinfo --formats | grep EOPFZARR
+
+# Test with your Zarr dataset
+gdalinfo your-dataset.zarr
+```
+
+**Need help?** Check the [Getting Started Guide](GETTING_STARTED.md) or [open an issue](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues).
+
+---
+
 ## Features
 
 - **Read-Only Support**  
@@ -42,14 +73,15 @@ All functionality is under continuous development. Refer to the [Roadmap](docs/r
 
 ## Table of Contents
 
-1. [Requirements](#requirements)  
-2. [Building](#building)  
-3. [Installing the Plugin](#installing-the-plugin)  
-4. [Usage](#usage)  
-5. [Testing](#testing)  
-6. [Contributing](#contributing)  
-7. [License](#license)  
-8. [Contact & Credits](#contact--credits)
+1. [Quick Start for Test Users](#-quick-start-for-test-users)
+2. [Requirements](#requirements)  
+3. [Building](#building)  
+4. [Installing the Plugin](#installing-the-plugin)  
+5. [Usage](#usage)  
+6. [Testing](#testing)  
+7. [Contributing](#contributing)  
+8. [License](#license)  
+9. [Contact & Credits](#contact--credits)
 
 ---
 
