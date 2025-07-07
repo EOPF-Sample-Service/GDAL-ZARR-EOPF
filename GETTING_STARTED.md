@@ -8,7 +8,7 @@ The EOPF Zarr GDAL plugin enables you to open and process Earth Observation Proc
 
 ## Prerequisites
 
-⚠️ **Important**: This plugin requires **GDAL 3.11.x** or later.
+⚠️ **Important**: This plugin requires **GDAL 3.10.x or 3.11.x**.
 
 ### Check Your GDAL Version
 
@@ -21,6 +21,8 @@ If you have an older version, please update GDAL before installing the plugin:
 - **Windows**: Update [OSGeo4W](https://trac.osgeo.org/osgeo4w/) to the latest version
 - **macOS**: Update via Homebrew (`brew upgrade gdal`) or install latest from OSGeo
 - **Linux**: Update via your package manager or install from OSGeo repositories
+
+The plugin is built against the latest available GDAL version and should work with GDAL 3.10.x and newer versions.
 
 ## Quick Start
 

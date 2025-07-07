@@ -200,12 +200,7 @@ jobs:
 
   windows-build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        gdal_version: 
-          - { name: "3.10", osgeo4w_packages: "gdal-devel=3.10.* cmake ninja" }
-          - { name: "3.11", osgeo4w_packages: "gdal-devel cmake ninja" }
-    name: Windows Build (GDAL ${{ matrix.gdal_version.name }})
+    name: Windows Build
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -213,17 +208,26 @@ jobs:
     - name: Install OSGeo4W (GDAL + Dev Tools)
       uses: echoix/setup-OSGeo4W@v0.2.0
       with:
-        packages: ${{ matrix.gdal_version.osgeo4w_packages }}
+        packages: gdal-devel cmake ninja
         site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
         upgrade-also: false
         
-    - name: Check GDAL version compatibility
+    - name: Check GDAL version and document compatibility
       run: |
         $env:PATH = "C:\OSGeo4W\bin;$env:PATH"
-        $gdalVersion = & gdalinfo --version
+        $gdalVersion = & gdalinfo --version 2>&1
         Write-Host "Building against GDAL version: $gdalVersion"
-        Write-Host "Note: Plugin will be compatible with this GDAL version"
+        
+        # Extract major.minor version for artifact naming
+        if ($gdalVersion -match "GDAL (\d+\.\d+)") {
+            $majorMinor = $matches[1]
+            echo "GDAL_VERSION=$majorMinor" >> $env:GITHUB_ENV
+            Write-Host "Will create artifact for GDAL $majorMinor"
+        } else {
+            echo "GDAL_VERSION=unknown" >> $env:GITHUB_ENV
+            Write-Host "Warning: Could not determine GDAL version"
+        }
 
     - name: Setup MSVC 2022
       uses: ilammy/msvc-dev-cmd@v1
@@ -285,7 +289,7 @@ jobs:
     - name: Package Artifacts
       run: |
         mkdir dist
-        # Add diagnostic output to verify file location (using PowerShell syntax)
+        # Add diagnostic output to verify file location
         Write-Host "Finding DLL location:"
         Get-ChildItem -Path build -Recurse -Filter "gdal_EOPFZarr.dll" | ForEach-Object { $_.FullName }
         
@@ -298,12 +302,17 @@ jobs:
           exit 1
         }
         
-        dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll | findstr "DLL"
+        # Try to show dependencies if dumpbin is available
+        try {
+          dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll | findstr "DLL"
+        } catch {
+          Write-Host "dumpbin not available, skipping dependency check"
+        }
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal-plugin-windows-gdal${{ matrix.gdal_version.name }}
+        name: gdal-plugin-windows
         path: dist/*
 
   # Homebrew approach (commented out in favor of faster conda approach)
@@ -494,17 +503,11 @@ jobs:
         name: gdal_EOPFZarr-Release  
         path: ./release-package/linux/release/
         
-    - name: Download Windows GDAL 3.10 artifacts
+    - name: Download Windows artifacts
       uses: actions/download-artifact@v4
       with:
-        name: gdal-plugin-windows-gdal3.10
-        path: ./release-package/windows/gdal-3.10/
-        
-    - name: Download Windows GDAL 3.11 artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gdal-plugin-windows-gdal3.11
-        path: ./release-package/windows/gdal-3.11/
+        name: gdal-plugin-windows
+        path: ./release-package/windows/
         
     - name: Download macOS artifacts
       uses: actions/download-artifact@v4
@@ -568,45 +571,50 @@ jobs:
         echo Installing GDAL EOPF Plugin for Windows...
         echo.
         
-        :: Auto-detect GDAL version
-        for /f "tokens=2" %%i in ('gdalinfo --version 2^>nul ^| findstr /R "GDAL [0-9]"') do set GDAL_VERSION=%%i
-        
-        if "%GDAL_VERSION%"=="" (
-            echo ERROR: Could not detect GDAL version. Please ensure GDAL is installed and in PATH.
-            echo Available versions: GDAL 3.10.x, GDAL 3.11.x
+        :: Check if GDAL is available
+        gdalinfo --version >nul 2>&1
+        if errorlevel 1 (
+            echo ERROR: GDAL not found in PATH. Please ensure GDAL is installed.
+            echo.
+            echo Install GDAL from: https://trac.osgeo.org/osgeo4w/
+            echo.
             pause
             exit /b 1
         )
         
+        :: Get GDAL version
+        for /f "tokens=2" %%i in ('gdalinfo --version 2^>nul') do set GDAL_VERSION=%%i
         echo Detected GDAL version: %GDAL_VERSION%
+        
+        :: Check version compatibility
+        echo.
+        if "%GDAL_VERSION:~0,4%"=="3.10" (
+            echo ✅ GDAL 3.10.x detected - compatible
+        ) else if "%GDAL_VERSION:~0,4%"=="3.11" (
+            echo ✅ GDAL 3.11.x detected - compatible  
+        ) else (
+            echo ⚠️  GDAL version %GDAL_VERSION% compatibility unknown
+            echo This plugin was built for GDAL 3.11.x
+            echo Continue anyway? (Y/N)
+            set /p continue=
+            if /i not "%continue%"=="Y" exit /b 1
+        )
         
         set "PLUGIN_DIR=%GDAL_DRIVER_PATH%"
         if "%PLUGIN_DIR%"=="" set "PLUGIN_DIR=C:\OSGeo4W\apps\gdal\lib\gdalplugins"
-        
-        :: Determine which DLL to use based on GDAL version
-        if "%GDAL_VERSION:~0,4%"=="3.10" (
-            set "SOURCE_DIR=windows\gdal-3.10"
-            echo Using plugin for GDAL 3.10.x
-        ) else if "%GDAL_VERSION:~0,4%"=="3.11" (
-            set "SOURCE_DIR=windows\gdal-3.11"
-            echo Using plugin for GDAL 3.11.x
-        ) else (
-            echo WARNING: GDAL version %GDAL_VERSION% not specifically supported.
-            echo Trying GDAL 3.11 version (may work with newer versions)
-            set "SOURCE_DIR=windows\gdal-3.11"
-        )
-        
         set "PLUGIN_FILE=gdal_EOPFZarr.dll"
         
-        if not exist "%SOURCE_DIR%\%PLUGIN_FILE%" (
-            echo ERROR: Plugin file not found: %SOURCE_DIR%\%PLUGIN_FILE%
-            echo Please check the release package integrity.
+        echo.
+        echo Installing to: %PLUGIN_DIR%
+        
+        if not exist "windows\%PLUGIN_FILE%" (
+            echo ERROR: Plugin file not found: windows\%PLUGIN_FILE%
             pause
             exit /b 1
         )
         
         if not exist "%PLUGIN_DIR%" mkdir "%PLUGIN_DIR%"
-        copy "%SOURCE_DIR%\%PLUGIN_FILE%" "%PLUGIN_DIR%\"
+        copy "windows\%PLUGIN_FILE%" "%PLUGIN_DIR%\"
         
         if errorlevel 1 (
             echo ERROR: Failed to copy plugin file
@@ -615,9 +623,19 @@ jobs:
         )
         
         echo.
-        echo ✅ Plugin installed successfully to: %PLUGIN_DIR%\%PLUGIN_FILE%
+        echo ✅ Plugin installed successfully!
         echo.
-        echo Test the installation with:
+        echo Testing installation...
+        gdalinfo --formats | findstr EOPF >nul 2>&1
+        if errorlevel 1 (
+            echo ⚠️  Plugin installed but not detected by GDAL
+            echo This may be normal on some systems
+        ) else (
+            echo ✅ Plugin detected by GDAL successfully!
+        )
+        
+        echo.
+        echo Installation complete. Test with:
         echo   gdalinfo --formats ^| findstr EOPF
         echo.
         pause
