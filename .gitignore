@@ -66,3 +66,11 @@ build-windows.ps1
 BRANCH_SUMMARY.md
 GITHUB_ACTIONS_ARTIFACTS_STATUS.md
 MACOS_ARM64_IMPLEMENTATION.md
+
+# Recent test and diagnostic files
+check_gdal_version.bat
+test_latest_dll.ps1
+test_latest_dll.py
+test_latest_simple.bat
+test_latest_simple.ps1
+update_gdal_guide.bat
