@@ -1,14 +1,21 @@
-# EOPF Zarr GDAL Plugin - Getting Started Guide for Test Users
+# EOPF Zarr GDAL Plugin - Getting Started Guide
 
-Welcome! Thank you for helping test the EOPF Zarr GDAL plugin. This guide will help you install and test the plugin on your system.
+Welcome! Thank you for your interest in the EOPF Zarr GDAL plugin. This guide will help you get the plugin installed and running on your system.
 
 ## What is this plugin?
 
-The EOPF Zarr GDAL plugin enables you to open and process Earth Observation Processing Framework (EOPF) Zarr datasets using standard GDAL tools and applications like QGIS, Python scripts, and command-line utilities.
+The EOPF Zarr GDAL plugin enables you to open and process **Earth Observation Processing Framework (EOPF) Zarr datasets** using standard GDAL tools and applications like QGIS, Python scripts, and command-line utilities. It provides seamless integration with existing GIS workflows.
+
+## 🚀 Quick Overview
+
+- **Zero configuration** - Works immediately with QGIS and all GDAL-based tools
+- **Smart geospatial detection** - Automatically finds CRS and geotransform data
+- **Production ready** - Thread-safe, memory-efficient, cross-platform
+- **Python friendly** - Direct NumPy integration and standard GDAL API
 
 ## Prerequisites
 
-⚠️ **Important**: This plugin requires **GDAL 3.10.x or 3.11.x**.
+⚠️ **Important**: This plugin requires **GDAL 3.10.x or newer**.
 
 ### Check Your GDAL Version
 
@@ -22,44 +29,79 @@ If you have an older version, please update GDAL before installing the plugin:
 - **macOS**: Update via Homebrew (`brew upgrade gdal`) or install latest from OSGeo
 - **Linux**: Update via your package manager or install from OSGeo repositories
 
-The plugin is built against the latest available GDAL version and should work with GDAL 3.10.x and newer versions.
+## 📦 Getting the Plugin
 
-## Quick Start
+Since official releases are pending stakeholder approval, here are current options for getting the plugin:
 
-### 1. Download the Plugin
+### Option 1: Build from Source (Recommended)
 
-1. Go to the [Releases page](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/releases)
-2. Download the latest release package
-3. Extract the files to a folder on your computer
+This is currently the most reliable way to get the latest version:
 
-### 2. Install the Plugin
+```bash
+# Clone the repository
+git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+cd GDAL-ZARR-EOPF
 
-Navigate to the extracted folder and run the appropriate installation script:
+# Build the plugin
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . -j$(nproc)
+```
 
-#### Windows
+### Option 2: GitHub Actions Artifacts
+
+If you have access to the repository, you can download pre-built binaries from GitHub Actions:
+
+1. Go to [Actions](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions)
+2. Click on a recent successful build
+3. Download the artifact for your platform
+4. Extract and follow installation instructions below
+
+### Option 3: Request Access
+
+Contact the maintainers via [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues) if you need access to testing builds.
+
+## 💻 Installation
+
+Once you have the plugin files (either built from source or downloaded), use our installation scripts:
+
+### Automatic Installation
+
+**Windows:**
 ```cmd
 install-windows.bat
 ```
 
-#### macOS
+**macOS:**
 ```bash
-# Auto-detect your Mac's architecture (recommended)
-./install-macos.sh
-
-# Or use universal binary (works on both Intel and Apple Silicon)
-./install-macos.sh universal
+./install-macos.sh          # Auto-detect architecture
+./install-macos.sh universal # Universal binary
 ```
 
-#### Linux
+**Linux:**
 ```bash
-# Install release version (recommended)
-./install-linux.sh
-
-# Or install debug version for troubleshooting
-./install-linux.sh debug
+./install-linux.sh         # Release version
+./install-linux.sh debug   # Debug version for troubleshooting
 ```
 
-### 3. Verify Installation
+### Manual Installation
+
+If the scripts don't work, you can install manually:
+
+1. **Find your GDAL plugin directory:**
+   - **Windows**: `C:\OSGeo4W\apps\gdal\lib\gdalplugins\` (OSGeo4W) or `C:\Program Files\GDAL\gdalplugins\`
+   - **macOS**: `/usr/local/lib/gdalplugins/` (Homebrew) or your Conda path
+   - **Linux**: `/usr/lib/gdalplugins/` or `/usr/local/lib/gdalplugins/`
+
+2. **Copy the plugin file:**
+   - Copy `gdal_EOPFZarr.dll` (Windows) or `gdal_EOPFZarr.so` (Linux/macOS) to the plugin directory
+
+3. **Or set environment variable:**
+   ```bash
+   export GDAL_DRIVER_PATH="/path/to/plugin/directory:$GDAL_DRIVER_PATH"
+   ```
+
+## ✅ Verify Installation
 
 Test that the plugin is working:
 
@@ -67,28 +109,30 @@ Test that the plugin is working:
 gdalinfo --formats | grep EOPFZARR
 ```
 
-You should see output like:
-```
+You should see:
+```text
 EOPFZARR -raster- (rovs): EOPF Zarr Wrapper Driver
 ```
 
-## Testing the Plugin
+## 🧪 Testing the Plugin
 
 ### Basic Functionality Test
 
-1. **Test plugin registration**:
+1. **Test plugin registration:**
    ```bash
    gdalinfo --formats | grep EOPFZARR
    ```
 
 2. **Test with sample data** (if you have Zarr datasets):
    ```bash
-   gdalinfo your-dataset.zarr
+   gdalinfo EOPFZARR:/path/to/your-dataset.zarr
    ```
 
-3. **Test with remote data** (if available):
-   ```bash
-   gdalinfo "https://your-zarr-url.zarr"
+3. **Test with Python:**
+   ```python
+   from osgeo import gdal
+   ds = gdal.Open('EOPFZARR:/path/to/data.zarr')
+   print(f"Size: {ds.RasterXSize}x{ds.RasterYSize}")
    ```
 
 ### Testing in QGIS

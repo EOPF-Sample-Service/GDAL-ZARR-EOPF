@@ -77,3 +77,9 @@ update_gdal_guide.bat
 debug-install.bat
 test-install-full.bat
 test-plugin-detection.bat
+simple-test.bat
+
+# Draft publication materials (review before commit)
+CAPABILITIES.md
+PUBLICATION_CHECKLIST.md
+README_NEW.md

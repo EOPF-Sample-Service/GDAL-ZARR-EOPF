@@ -1,6 +1,6 @@
 # Installation Guide
 
-> 🚀 **Quick Start**: For most users, we recommend using our [pre-built releases](#method-1-pre-built-releases-recommended) which provide tested, compatible binaries for all platforms.
+> 🚀 **Quick Start**: Since official releases are pending, we recommend [building from source](#method-1-build-from-source-recommended) or using [GitHub Actions artifacts](#method-2-github-actions-artifacts) for tested, compatible binaries.
 
 ## System Requirements
 
@@ -24,12 +24,13 @@
 gdalinfo --version
 ```
 
-### Build Dependencies (Source Build Only)
+### Build Dependencies
 - CMake 3.16 or higher
-- C++ compiler with C++14 support
-- Python 3.8+ (for testing)
+- C++ compiler with C++17 support
+- GDAL development headers (matching your GDAL version)
+- Python 3.8+ (optional, for testing)
 
-### Required Libraries (Source Build Only)
+### Required Libraries
 - libgdal-dev (matching your GDAL version)
 - libjson-c-dev (for JSON metadata parsing)
 - libcurl4-openssl-dev (for cloud access)
@@ -37,17 +38,81 @@ gdalinfo --version
 
 ## Installation Methods
 
-### Method 1: Pre-built Releases (Recommended)
+### Method 1: Build from Source (Recommended)
 
-**🎯 Best for**: Most users who want a quick, tested installation.
+**🎯 Best for**: Getting the latest features and ensuring compatibility with your exact GDAL version.
 
-#### Step 1: Download the Latest Release
+#### Step 1: Install Dependencies
 
-1. Visit our [GitHub Releases](https://github.com/Yuvraj198920/GDAL-ZARR-EOPF/releases)
-2. Download the archive for your platform:
-   - `gdal-eopf-plugin-windows-3.11.zip` (Windows)
-   - `gdal-eopf-plugin-linux-3.11.tar.gz` (Linux)
-   - `gdal-eopf-plugin-macos-3.11.tar.gz` (macOS)
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake git \
+    libgdal-dev gdal-bin \
+    libjson-c-dev libcurl4-openssl-dev zlib1g-dev
+```
+
+**CentOS/RHEL:**
+```bash
+sudo yum install -y gcc-c++ cmake git \
+    gdal-devel gdal \
+    json-c-devel libcurl-devel zlib-devel
+```
+
+**macOS (Homebrew):**
+```bash
+brew install cmake gdal json-c curl zlib
+```
+
+**Windows (OSGeo4W):**
+- Install [OSGeo4W](https://trac.osgeo.org/osgeo4w/) with GDAL
+- Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+- Install [CMake](https://cmake.org/download/)
+
+#### Step 2: Clone and Build
+
+```bash
+# Clone the repository
+git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+cd GDAL-ZARR-EOPF
+
+# Create build directory
+mkdir build && cd build
+
+# Configure the build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+
+# Build the plugin
+cmake --build . -j$(nproc)  # Linux/macOS
+# cmake --build . --config Release  # Windows
+```
+
+#### Step 3: Install
+
+Use our installation scripts:
+
+**Linux/macOS:**
+```bash
+cd ..  # Back to project root
+./install-linux.sh    # or ./install-macos.sh
+```
+
+**Windows:**
+```cmd
+install-windows.bat
+```
+
+### Method 2: GitHub Actions Artifacts
+
+**🎯 Best for**: Users who need pre-built binaries but don't have access to official releases.
+
+1. Go to [GitHub Actions](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions)
+2. Click on a recent successful build
+3. Download the artifact for your platform:
+   - `windows-release` (Windows)
+   - `linux-release` (Linux)
+   - `macos-release` (macOS Universal)
+4. Extract and run the appropriate installation script
 
 > 💡 **Note**: Choose the version matching your GDAL version (check with `gdalinfo --version`)
 
