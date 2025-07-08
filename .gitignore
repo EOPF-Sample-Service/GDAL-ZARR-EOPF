@@ -36,3 +36,50 @@ test_working_https.py
 test_working_url.py
 final_validation.py
 https_url_success_demo.py
+release-build/
+test-build/
+test-build2/
+test-build2/
+
+test-build3/
+build_github_actions/
+
+# DLL analysis and diagnostic files (temporary)
+analyze_dll_dependencies.py
+*dll_analysis*.py
+*dll_analysis*.json
+advanced_dll_analysis.*
+three_dll_analysis.*
+test_dll_loading.*
+test_all_three_dlls.*
+test_github_actions_dll.*
+replicate_github_actions_build.*
+github_actions_dll_test.txt
+
+# Build helper scripts (local only)
+build-linux.sh
+build-local.ps1
+build-windows.bat
+build-windows.ps1
+
+# Internal documentation (not for repository)
+BRANCH_SUMMARY.md
+GITHUB_ACTIONS_ARTIFACTS_STATUS.md
+MACOS_ARM64_IMPLEMENTATION.md
+
+# Recent test and diagnostic files
+check_gdal_version.bat
+test_latest_dll.ps1
+test_latest_dll.py
+test_latest_simple.bat
+test_latest_simple.ps1
+update_gdal_guide.bat
+debug-install.bat
+test-install-full.bat
+test-plugin-detection.bat
+simple-test.bat
+
+# Draft publication materials (review before commit)
+CAPABILITIES.md
+PUBLICATION_CHECKLIST.md
+README_NEW.md

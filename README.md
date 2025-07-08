@@ -1,196 +1,322 @@
-﻿# EOPF‑Zarr plugin
+# GDAL EOPF-Zarr Plugin 🌍
 
 [![Build Status](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/main.yml/badge.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/main.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GDAL Version](https://img.shields.io/badge/GDAL-3.10%2B-blue.svg)](https://gdal.org)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF)
 
-**Overview**  
-This repository contains the **EOPF GDAL Plugin**, a community-driven effort to extend [GDAL](https://gdal.org) with support for the Earth Observation Processing Framework (EOPF). By loading this plugin, users can open, process, and visualize EOPF datasets in GDAL-based applications and workflows—such as [QGIS](https://qgis.org), command-line utilities (e.g., `gdalinfo`, `gdal_translate`), and custom scripts.
+**Seamless Earth Observation Data Access** 🚀  
+The GDAL EOPF-Zarr plugin brings **Earth Observation Processing Framework (EOPF)** datasets directly into your existing GIS workflows. Open Zarr-based Earth observation data in [QGIS](https://qgis.org), process it with standard GDAL tools, or analyze it with Python—all with **zero configuration** and **full geospatial intelligence**.
 
-> **Note:** EOPF data is commonly stored in cloud-native formats (e.g., Zarr) or NetCDF-like containers. This plugin aims to handle those data structures seamlessly, exposing them as standard GDAL raster datasets.
-
----
-
-## Features
-
-- **Read-Only Support**  
-  Currently supports reading of EOPF datasets, including chunked data (Zarr-based archives), multi-band imagery, and associated metadata.
-
-- **Cloud Compatibility**  
-  Leverages GDAL’s virtual file I/O to access data hosted on local storage or cloud object stores (future enhancement: S3, /vsicurl/).
-
-- **Metadata Extraction**  
-  Parses core EOPF metadata (dimensions, data types, partial georeferencing if present). Additional coverage of advanced attributes (e.g. sensor-specific metadata) will be added incrementally.
-
-- **Integration**  
-  Once installed, any GDAL-based application automatically recognizes EOPF datasets. For example, QGIS “Add Raster Layer” can ingest EOPF data with no additional configuration.
+> 💡 **Why this matters:** Transform complex Earth observation data formats into standard GDAL datasets that work everywhere—from desktop GIS to cloud analytics pipelines.
 
 ---
 
-## Status
+## ✨ What Makes This Special
 
-| Feature                        | Status       |
-|--------------------------------|-------------|
-| Zarr-based read                | In progress |
-| Multi-band support             | Planned     |
-| Metadata and georeferencing    | Planned     |
-| Write support                  | Planned     |
-| Cloud (/vsis3/) access         | Planned     |
-| QGIS usage validation          | Ongoing     |
-
-All functionality is under continuous development. Refer to the [Roadmap](docs/roadmap.md) or GitHub Issues for the full development timeline.
+🎯 **Instant QGIS Integration** - Just click "Add Raster Layer" and it works  
+🔍 **Smart Geospatial Detection** - Automatic CRS and geotransform from metadata  
+🚀 **Production Ready** - Cross-platform, thread-safe, memory-efficient  
+🌐 **Cloud Native** - HTTP/HTTPS access, STAC metadata support  
+🐍 **Python Friendly** - NumPy integration, standard GDAL bindings  
 
 ---
 
-## Table of Contents
+## 🚀 Key Capabilities
 
-1. [Requirements](#requirements)  
-2. [Building](#building)  
-3. [Installing the Plugin](#installing-the-plugin)  
-4. [Usage](#usage)  
-5. [Testing](#testing)  
-6. [Contributing](#contributing)  
-7. [License](#license)  
-8. [Contact & Credits](#contact--credits)
+### **Data Access & Integration**
+
+- ✅ **Multiple access patterns**: `EOPFZARR:/path/to/data.zarr`, open options, auto-detection
+- ✅ **Subdataset support** for hierarchical data structures
+- ✅ **Virtual file system** support (`/vsicurl/`, network paths)
+- ✅ **Chunked data optimization** for large datasets
+
+### **Geospatial Intelligence**
+
+- ✅ **Automatic CRS detection** from EPSG codes and STAC metadata
+- ✅ **Smart geotransform calculation** from corner coordinates
+- ✅ **Multi-coordinate system support** (UTM, Geographic)
+- ✅ **Sentinel-2 tile naming** convention inference
+
+### **Application Compatibility**
+
+- ✅ **QGIS seamless integration** - zero configuration required
+- ✅ **Python API support** with NumPy integration
+- ✅ **Command-line tools** (`gdalinfo`, `gdal_translate`, `gdalwarp`)
+- ✅ **Cross-platform support** (Windows, macOS, Linux)
+
+### **Performance & Reliability**
+
+- ✅ **Thread-safe operations** for concurrent access
+- ✅ **Memory-efficient** block-based I/O
+- ✅ **Robust error handling** with detailed diagnostics
+- ✅ **Production deployment** ready
 
 ---
 
-## Requirements
+## 📊 Current Status & Roadmap
 
-- **GDAL** >= 3.x (development headers required, e.g. `libgdal-dev` on Debian/Ubuntu)  
-- **C++17** or later (recommended for improved JSON parsing, concurrency, etc.)  
-- **CMake** >= 3.10 (build system)  
-- **(Optional) Python** for extended testing or data generation scripts
+| Feature | Status | GDAL Version | Notes |
+|---------|--------|--------------|-------|
+| **EOPF Zarr Reading** | ✅ **Complete** | 3.10+ | Production ready |
+| **Multi-band Support** | ✅ **Complete** | 3.10+ | Individual band access |
+| **Geospatial Metadata** | ✅ **Complete** | 3.10+ | CRS, geotransform, STAC |
+| **QGIS Integration** | ✅ **Complete** | 3.10+ | Zero-config compatibility |
+| **Python API** | ✅ **Complete** | 3.10+ | NumPy integration |
+| **Cross-platform** | ✅ **Complete** | 3.10+ | Windows, macOS, Linux |
+| **Write Support** | 🔄 **Planned** | Future | Read-only currently |
+| **S3 Integration** | 🔄 **Planned** | Future | Via `/vsis3/` |
 
-On Linux, typical packages might include:
+## 🎯 Quick Examples
+
+### Command Line Power
+
 ```bash
-sudo apt-get update && sudo apt-get install -y \
-  gdal-bin libgdal-dev \
-  build-essential cmake \
-  python3 python3-pip
+# Inspect any EOPF dataset
+gdalinfo EOPFZARR:/path/to/sentinel2.zarr
+
+# Convert to standard formats  
+gdal_translate EOPFZARR:/data.zarr output.tif
+
+# Reproject and resample
+gdalwarp -t_srs EPSG:4326 -tr 0.001 0.001 EOPFZARR:/data.zarr reprojected.tif
 ```
 
----
+### Python Data Science
 
-## Building
+```python
+from osgeo import gdal
+import numpy as np
 
-1. **Clone the Repository**  
-   ```bash
-    https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
-    cd GDAL-ZARR-EOPF
-   ```
+# Open and process EOPF data
+ds = gdal.Open('EOPFZARR:/path/to/data.zarr')
+data = ds.ReadAsArray()  # Direct NumPy integration
 
-2. **Configure with CMake**  
-   ```bash
-   mkdir build
-   cd build
-   cmake .. -DCMAKE_BUILD_TYPE=Release
-  
-   ```
-   The CMake script attempts to locate GDAL via `find_package(GDAL REQUIRED)`. If GDAL is not found automatically, set `GDAL_DIR` or `GDAL_INCLUDE_DIR/GDAL_LIBRARY` manually.
-
-3. **Compile**  
-   ```bash
-    cmake --build . -j$(nproc)
-   ```
-   This produces a shared library named something like `gdal_EOPFZarr.so` (on Linux) or `gdal_EOPFZarr.dll` (Windows).
-
----
-
-## Installing the Plugin
-
-### Option A: Copy to GDAL’s Plugin Directory
-
-Move or copy the resulting library to GDAL’s plugin path, such as:
-- **Linux**: `/usr/lib/gdalplugins/` or `/usr/local/lib/gdalplugins/`
-- **Windows**: `C:\Program Files\GDAL\gdalplugins\` (varies depending on your setup)
-
-### Option B: Use `GDAL_DRIVER_PATH`
-
-Set an environment variable so GDAL knows where to find your plugin:
-```bash
-export GDAL_DRIVER_PATH="/path/to/build"
+# Works with any GDAL-compatible library
+import rasterio
+with rasterio.open('EOPFZARR:/data.zarr') as src:
+    array = src.read()
 ```
-Replace `/path/to/build` with the actual directory containing `gdal_EOPF.so` (or `.dll` on Windows).
+
+### QGIS Integration
+
+1. **Open QGIS** → **Layer** → **Add Raster Layer**
+2. **Browse to** your `.zarr` file or directory  
+3. **Click Open** - that's it! No plugins, no configuration needed.
 
 ---
 
-## Usage
+## 📖 Table of Contents
 
-1. **Check Formats**  
+1. [🚀 Quick Start](#-quick-start)
+2. [💻 Installation](#-installation)  
+3. [📋 Requirements](#-requirements)
+4. [🔧 Building from Source](#-building-from-source)
+5. [🧪 Testing](#-testing)
+6. [🤝 Contributing](#-contributing)
+7. [📄 License](#-license)
+8. [🙋 Support & Community](#-support--community)
+
+---
+
+## 🚀 Quick Start
+
+**Get up and running in 3 steps:**
+
+1. **Get the plugin** - See [Getting Started Guide](GETTING_STARTED.md) for installation options:
+   - [Build from source](GETTING_STARTED.md#option-1-build-from-source-recommended) (recommended)
+   - [Use CI artifacts](GETTING_STARTED.md#option-2-github-actions-artifacts) from successful builds
+   - [Request access](GETTING_STARTED.md#option-3-request-access) to development builds
+
+2. **Install** with our automated scripts:
+
+   ```bash
+   # Windows
+   install-windows.bat
+   
+   # macOS  
+   ./install-macos.sh
+   
+   # Linux
+   ./install-linux.sh
+   ```
+
+3. **Verify** it's working:
+
    ```bash
    gdalinfo --formats | grep EOPFZARR
    ```
-   You should see something like:  
-   ```
-   EOPFZarr (ro): Earth Observation Processing Framework
-   ```
 
-2. **Open an EOPF Dataset**  
-   ```bash
-   gdalinfo -oo EOPF_PROCESS=YES /path/to/EOPF_Zarr_Dataset/
-   ```
-   or in Python:
-   ```python
-   from osgeo import gdal
-   ds = gdal.OpenEx(zarr_path, gdal.OF_READONLY, open_options=['EOPF_PROCESS=YES'])
-   # This will activate your EOPFZarr plugin.
-   ```
-   If everything is set up correctly, the plugin interprets the EOPF data and displays or processes it like any other GDAL-supported format.
-
-3. **In QGIS**  
-   - Ensure the plugin library is discoverable by GDAL (see [Installing the Plugin](#installing-the-plugin)).  
-   - Launch QGIS → **Add Raster Layer** → Select the EOPF directory.  
-   - Confirm it displays the data with correct band(s), georeferencing, and metadata.
+**That's it!** Now open any `.zarr` file in QGIS or use `EOPFZARR:/path/to/data.zarr` in your workflows.
 
 ---
 
-## Testing
+## 💻 Installation
 
-We provide **two** types of tests:
+**Before installing:** Make sure you have **GDAL 3.10+** installed. Check with `gdalinfo --version`.
 
-1. **C++ Tests** (optional)  
-   - Located in `tests/`. Built with CMake + CTest.  
-   ```bash
-   cd build
-   ctest --verbose
-   ```
+### 📦 Getting the Plugin
 
-2. **Python-based Tests**  
-   - Python scripts or `pytest` tests that open EOPF data. For example, `tests/test_eopf.py` might validate chunk reading.  
-   ```bash
-   pip install -r python/requirements.txt
-   pytest tests/
-   ```
-3. **Sample Data**  
-   - Minimal Zarr/EOPF directories are in `tests/sample_data/`.  
-   - Future expansions will include real-world reference data for integration testing.
+Since official releases are pending approval, current options are:
+
+1. **[Build from source](GETTING_STARTED.md#option-1-build-from-source-recommended)** (recommended)
+2. **[Use CI artifacts](GETTING_STARTED.md#option-2-github-actions-artifacts)** from GitHub Actions
+3. **[Request access](GETTING_STARTED.md#option-3-request-access)** to development builds
+
+See our [Getting Started Guide](GETTING_STARTED.md) for detailed instructions on each method.
+
+### ⚡ Installing the Plugin
+
+Once you have the plugin binary, use our installation scripts for automatic setup:
+
+**Windows:**
+
+```cmd
+install-windows.bat
+```
+
+- Supports OSGeo4W, Program Files, and custom GDAL installations
+- Automatic GDAL version detection and plugin directory discovery
+
+**macOS:**
+
+```bash
+./install-macos.sh          # Auto-detect architecture
+./install-macos.sh universal # Use universal binary
+```
+
+- Works with Homebrew, Conda, and system GDAL installations
+- Intel and Apple Silicon support
+
+**Linux:**
+
+```bash
+./install-linux.sh         # Install built plugin
+./install-linux.sh debug   # Install debug version for troubleshooting
+```
+
+- Compatible with package manager and custom GDAL installations
+
+### 🔧 Manual Installation
+
+If you prefer manual installation or the automatic scripts don't work for your setup:
+
+**Copy to GDAL Plugin Directory:**
+
+- **Linux**: `/usr/lib/gdalplugins/` or `/usr/local/lib/gdalplugins/`
+- **Windows**: `C:\OSGeo4W\apps\gdal\lib\gdalplugins\` or `C:\Program Files\GDAL\gdalplugins\`
+- **macOS**: `/usr/local/lib/gdalplugins/` or your Homebrew/Conda path
+
+**Or Set Environment Variable:**
+
+```bash
+export GDAL_DRIVER_PATH="/path/to/plugin/directory:$GDAL_DRIVER_PATH"
+```
 
 ---
 
-## Contributing
+## 📋 Requirements
 
-1. **Fork & Branch**  
-   - Fork this repo, create feature branches, and submit Pull Requests.  
-2. **Coding Style**  
-   - Follow [GDAL’s guidelines](https://gdal.org/development/rfc/index.html) for driver formatting, error handling, etc.  
-3. **Issues & Roadmap**  
-   - See GitHub Issues for our backlog and planned features (multi-band metadata, HPC performance, S3 integration).  
-   - We welcome bug reports, feature requests, or suggestions.
+- **GDAL 3.10+** (3.11+ recommended) - [Download](https://gdal.org/download.html)
+- **Compatible OS**: Windows, macOS, Linux
+- **For building**: C++17 compiler, CMake 3.10+
 
-**Security**: If you discover a security vulnerability in the plugin, please contact the maintainers directly before creating a public issue.
+**Quick GDAL version check:**
+
+```bash
+gdalinfo --version
+```
+
+**Installation guides:**
+
+- **Windows**: Use [OSGeo4W](https://trac.osgeo.org/osgeo4w/) for latest GDAL
+- **macOS**: `brew install gdal` for Homebrew users
+- **Linux**: Use your package manager or [UbuntuGIS](https://launchpad.net/~ubuntugis/+archive/ubuntu/ppa) PPA
+
+---
+
+## 🔧 Building from Source
+
+**This is currently the primary way to get the plugin.** Pre-built releases are pending stakeholder approval.
+
+### Prerequisites
+
+- **GDAL 3.10+** (check with `gdalinfo --version`)
+- **C++17 compiler** (Visual Studio 2019+, GCC 8+, Clang 7+)
+- **CMake 3.10+**
+
+### Build Steps
+
+```bash
+# Clone repository
+git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+cd GDAL-ZARR-EOPF
+
+# Build
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . -j$(nproc)
+
+# Install (use our automated scripts)
+cd ..
+./install-windows.bat    # Windows
+./install-macos.sh       # macOS  
+./install-linux.sh       # Linux
+```
+
+**Alternative methods:** See [GETTING_STARTED.md](GETTING_STARTED.md) for GitHub Actions artifacts and other options.
 
 ---
 
-## License
+## 🧪 Testing
 
-This project is released under the **MIT License**, compatible with GDAL’s open-source licensing. Please see the [LICENSE](LICENSE) file for details. By contributing, you agree your contributions will be licensed under the same terms.
+**Verify installation:**
+
+```bash
+gdalinfo --formats | grep EOPFZARR
+# Should show: EOPFZARR -raster- (rovs): EOPF Zarr Wrapper Driver
+```
+
+**Test with sample data:**
+
+- Check out our [Getting Started Guide](GETTING_STARTED.md) for detailed testing instructions
+- See [User Guide](docs/user-guide.md) for comprehensive examples
+- Browse [Usage Examples](USAGE_EXAMPLES.md) for quick reference
 
 ---
 
-## Contact & Credits
+## 🤝 Contributing
 
-- **Maintainers**: EURAC, [Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)  
-- **Acknowledgments**:  
-  - ESA for EOPF specification, sample data, or project sponsorship  
-  - GDAL & QGIS communities for providing the geospatial foundation
+We welcome contributions! Here's how to get involved:
+
+- **🐛 Found a bug?** [Open an issue](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
+- **💡 Have an idea?** [Start a discussion](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/discussions)
+- **🧪 Testing?** Use our [test user template](.github/ISSUE_TEMPLATE/test-user-report.md)
+- **🔧 Want to code?** See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup
 
 ---
+
+## 📄 License
+
+**MIT License** - See [LICENSE](LICENSE) for details. Compatible with GDAL's open-source licensing.
+
+---
+
+## 🙋 Support & Community
+
+- **📚 Documentation**: [User Guide](docs/user-guide.md) | [API Docs](docs/api.md) | [FAQ](docs/faq.md)
+- **🆘 Need help?** [Troubleshooting Guide](docs/troubleshooting.md) | [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
+- **💬 Discussions**: [GitHub Discussions](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/discussions)
+- **📧 Contact**: [Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues) for bug reports and feature requests
+
+**Credits:** Thanks to ESA for EOPF specifications, and the GDAL & QGIS communities for the geospatial foundation.
+
+---
+
+<div align="center">
+
+**⭐ Star this repository if you find it useful!**
+
+[Getting Started Guide](GETTING_STARTED.md) • [View Documentation](docs/) • [Report Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
+
+</div>
