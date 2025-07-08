@@ -74,3 +74,6 @@ test_latest_dll.py
 test_latest_simple.bat
 test_latest_simple.ps1
 update_gdal_guide.bat
+debug-install.bat
+test-install-full.bat
+test-plugin-detection.bat
