@@ -118,13 +118,7 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake -S . -B build -G Ninja \
                    -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
-
-      - name: Install plug-in into system dir (Linux)
-        if: runner.os == 'Linux'
-        run: |
-            sudo mkdir -p $(gdal-config --prefix)/lib/gdalplugins
-            sudo cp build/gdal_EOPFZarr.so \
-                    $(gdal-config --prefix)/lib/gdalplugins/
+                   
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
@@ -137,14 +131,9 @@ jobs:
       #  Smoke tests (CLI + Python)
       #################################################
       - name: Smoke test (gdalinfo)
-        if: runner.os == 'Linux'
-        run: gdalinfo --formats | grep -q EOPFZARR
-
-      - name: Smoke test (gdalinfo)
         shell: bash
-        if: runner.os != 'Linux'
         env:
-          GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build/lib
         run: |
           gdalinfo --formats | grep -q EOPFZARR
 
