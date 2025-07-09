@@ -157,9 +157,9 @@ jobs:
         with:
           name: gdal_EOPFZarr-${{ runner.os }}-gdal${{ matrix.gdal }}
           path: |
-            build/gdal_EOPFZarr*.so
-            build/gdal_EOPFZarr*.dll
-            build/gdal_EOPFZarr*.dylib
+            build/Release/gdal_EOPFZarr*.so
+            build/Release/gdal_EOPFZarr*.dll
+            build/Release/gdal_EOPFZarr*.dylib
 
   ###############################################################################
   #  CodeQL security scan (quick, free for OSS)
