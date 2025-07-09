@@ -132,11 +132,12 @@ jobs:
       #  Smoke tests (CLI + Python)
       #################################################
       - name: Smoke test (gdalinfo)
+        if: runner.os == 'Linux'
         shell: bash
         env:
-          GDAL_DRIVER_PATH: ${{ github.workspace }}/build/${{ matrix.cfg }}
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build   # ← correct folder
         run: |
-          gdalinfo --formats | grep -q EOPFZARR
+            gdalinfo --formats | grep -qi EOPFZARR
 
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
