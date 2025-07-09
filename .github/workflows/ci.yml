@@ -133,7 +133,7 @@ jobs:
       - name: Smoke test (gdalinfo)
         shell: bash
         env:
-          GDAL_DRIVER_PATH: ${{ github.workspace }}/build/lib
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build/${{ matrix.cfg }}
         run: |
           gdalinfo --formats | grep -q EOPFZARR
 
