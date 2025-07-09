@@ -1,0 +1,173 @@
+name: CI • Build / Test / Static-Checks
+
+###############################################################################
+#  Global guard rails
+###############################################################################
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read         # least-privilege by default
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**/*.cpp'
+      - '**/*.c'
+      - '**/*.h'
+      - '**/CMakeLists.txt'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 3 * * 1'  # Monday 03:00 UTC – detect upstream GDAL breakage
+  workflow_dispatch:
+
+jobs:
+  ###############################################################################
+  #  Lint / static analysis (fast fail)
+  ###############################################################################
+  lint:
+    runs-on: ubuntu-22.04
+    name: Lint • cppcheck & clang-format
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cppcheck clang-format
+
+      - name: cppcheck (hard-fail)
+        run: |
+          cppcheck --enable=all --inconclusive --error-exitcode=1 \
+                   src/ include/
+
+      - name: clang-format (hard-fail)
+        run: |
+          files=$(git ls-files '*.cpp' '*.h')
+          clang-format --style=file --dry-run --Werror $files
+
+  ###############################################################################
+  #  Build & test matrix  (Linux, macOS, Windows  ×  GDAL 3.10 / 3.11)
+  ###############################################################################
+  build-test:
+    name: Build & Test ${{ matrix.os }} / GDAL ${{ matrix.gdal }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:   [ubuntu-22.04, macos-14, windows-latest]
+        gdal: [3.10, 3.11]
+        cfg:  [Release]
+
+        # Windows installer only ships latest GDAL -> keep one variant
+        exclude:
+          - os: windows-latest
+            gdal: 3.10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      #################################################
+      #  Compiler cache (Linux/macos)  —  ccache
+      #################################################
+      - if: runner.os != 'Windows'
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ${{ runner.os }}-gdal${{ matrix.gdal }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+          restore-keys: ${{ runner.os }}-gdal${{ matrix.gdal }}-
+
+      #################################################
+      #  Platform-specific dependencies
+      #################################################
+      - name: Install deps (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+               "gdal-bin=${{ matrix.gdal }}*" \
+               "libgdal-dev=${{ matrix.gdal }}*" \
+               cmake ninja-build build-essential
+
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gdal cmake ninja
+
+      - name: Install deps (Windows / OSGeo4W)
+        if: runner.os == 'Windows'
+        uses: echoix/setup-OSGeo4W@v0.2.0
+        with:
+          packages: gdal-devel cmake ninja
+          site: https://download.osgeo.org/osgeo4w/v2/
+
+      #################################################
+      #  Configure → Build
+      #################################################
+      - name: Configure
+        run: cmake -S . -B build -G Ninja \
+                   -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      #################################################
+      #  Smoke tests (CLI + Python)
+      #################################################
+      - name: Smoke test (gdalinfo)
+        shell: bash
+        env:
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+        run: |
+          gdalinfo --formats | grep -q EOPFZARR
+
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+
+      - name: Install Python deps
+        shell: bash
+        run: |
+          python -m pip install -U pip
+          GDAL_VERSION=$(gdal-config --version || echo $GDAL_VERSION)
+          pip install gdal==$GDAL_VERSION
+          pip install -r tests/requirements.txt
+
+      - name: pytest
+        shell: bash
+        env:
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+        run: pytest -xvs tests/python
+
+      #################################################
+      #  Upload artefact
+      #################################################
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gdal_EOPFZarr-${{ runner.os }}-gdal${{ matrix.gdal }}
+          path: |
+            build/gdal_EOPFZarr*.so
+            build/gdal_EOPFZarr*.dll
+            build/gdal_EOPFZarr*.dylib
+
+  ###############################################################################
+  #  CodeQL security scan (quick, free for OSS)
+  ###############################################################################
+  codeql:
+    runs-on: ubuntu-22.04
+    if: github.event_name != 'schedule'
+    permissions:
+      security-events: write
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with: { languages: cpp }
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
