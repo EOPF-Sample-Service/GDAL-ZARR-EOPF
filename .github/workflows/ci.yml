@@ -99,6 +99,7 @@ jobs:
         with:
           packages: gdal-devel cmake ninja
           site: https://download.osgeo.org/osgeo4w/v2/
+          root: C:\OSGeo4W
     
       - name: Set up MSVC tool-chain
         if: runner.os == 'Windows'
@@ -126,13 +127,13 @@ jobs:
 
       - name: Configure (Windows • Ninja+MSVC)
         if: runner.os == 'Windows'
-        shell: pwsh              # PowerShell 7
         run: |
-            cmake -S . -B build -G "Ninja" `
-                -DCMAKE_BUILD_TYPE=Release `
-                -DGDAL_INCLUDE_DIR="$Env:OSGEO4W_ROOT\include" `
-                -DGDAL_LIBRARY="$Env:OSGEO4W_ROOT\lib\gdal_i.lib"
-
+            cmake -S . -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" `
+            -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+            cmake --build build --config Release
       #################################################
       #  Smoke tests (CLI + Python)
       #################################################
