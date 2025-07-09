@@ -119,12 +119,14 @@ jobs:
         run: cmake -S . -B build -G Ninja \
                    -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
 
-      - name: Configure (Windows)
+      - name: Configure (Windows • Ninja+MSVC)
         if: runner.os == 'Windows'
-        run: cmake -S . -B build -G Ninja ^
-                   -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
-                   -DGDAL_INCLUDE_DIR="$Env:GDAL_INCLUDE_DIR" ^
-                   -DGDAL_LIBRARY="$Env:GDAL_LIBRARY"
+        shell: cmd
+        run: |
+            cmake -S . -B build -G "Ninja" ^
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
+            -DGDAL_INCLUDE_DIR="%OSGEO4W_ROOT%\include" ^
+            -DGDAL_LIBRARY="%OSGEO4W_ROOT%\lib\gdal_i.lib"
 
       #################################################
       #  Smoke tests (CLI + Python)
