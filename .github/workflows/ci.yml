@@ -154,7 +154,7 @@ jobs:
         run: |
             python -m pip install --upgrade pip
             # Get the system GDAL version first
-            GDAL_VERSION=$(gdal-config --version)
+            GDAL_VERSION=$(gdal-config --version || echo $GDAL_VERSION)
             echo "System GDAL version: ${GDAL_VERSION}"
             # Install the matching GDAL Python bindings
             pip install gdal==${GDAL_VERSION}
