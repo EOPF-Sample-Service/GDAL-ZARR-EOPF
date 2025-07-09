@@ -64,7 +64,6 @@ jobs:
         os:   [ubuntu-22.04, ubuntu-24.04, macos-14, windows-latest]
         cfg:  [Release]
 
-
     steps:
       - uses: actions/checkout@v4
 
@@ -100,16 +99,32 @@ jobs:
         with:
           packages: gdal-devel cmake ninja
           site: https://download.osgeo.org/osgeo4w/v2/
+    
+      - name: Set up MSVC tool-chain
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Export GDAL paths
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "GDAL_INCLUDE_DIR=$env:OSGEO4W_ROOT\include" >> $env:GITHUB_ENV
+          echo "GDAL_LIBRARY=$env:OSGEO4W_ROOT\lib\gdal_i.lib" >> $env:GITHUB_ENV
 
       #################################################
       #  Configure → Build
       #################################################
-      - name: Configure
+      - name: Configure (Linux / macOS)
+        if: runner.os != 'Windows'
         run: cmake -S . -B build -G Ninja \
                    -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
 
-      - name: Build
-        run: cmake --build build --parallel
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -G Ninja ^
+                   -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
+                   -DGDAL_INCLUDE_DIR="$Env:GDAL_INCLUDE_DIR" ^
+                   -DGDAL_LIBRARY="$Env:GDAL_LIBRARY"
 
       #################################################
       #  Smoke tests (CLI + Python)
