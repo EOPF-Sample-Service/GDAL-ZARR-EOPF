@@ -116,9 +116,10 @@ jobs:
       #################################################
       - name: Configure (Linux / macOS)
         if: runner.os != 'Windows'
-        run: cmake -S . -B build -G Ninja \
-                   -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
-                   
+        run: |
+          cmake -S . -B build/${{ matrix.cfg }} \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
