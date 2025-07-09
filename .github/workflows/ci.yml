@@ -119,20 +119,30 @@ jobs:
         run: cmake -S . -B build -G Ninja \
                    -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
 
-      - name: Configure (Windows • Ninja+MSVC)
-        if: runner.os == 'Windows'
-        shell: cmd
+      - name: Install plug-in into system dir (Linux)
+        if: runner.os == 'Linux'
         run: |
-            cmake -S . -B build -G "Ninja" ^
-            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
-            -DGDAL_INCLUDE_DIR="%OSGEO4W_ROOT%\include" ^
-            -DGDAL_LIBRARY="%OSGEO4W_ROOT%\lib\gdal_i.lib"
+            sudo mkdir -p $(gdal-config --prefix)/lib/gdalplugins
+            sudo cp build/gdal_EOPFZarr.so \
+                    $(gdal-config --prefix)/lib/gdalplugins/
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -G Ninja ^
+                   -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} ^
+                   -DGDAL_INCLUDE_DIR="$Env:GDAL_INCLUDE_DIR" ^
+                   -DGDAL_LIBRARY="$Env:GDAL_LIBRARY"
 
       #################################################
       #  Smoke tests (CLI + Python)
       #################################################
       - name: Smoke test (gdalinfo)
+        if: runner.os == 'Linux'
+        run: gdalinfo --formats | grep -q EOPFZARR
+
+      - name: Smoke test (gdalinfo)
         shell: bash
+        if: runner.os != 'Linux'
         env:
           GDAL_DRIVER_PATH: ${{ github.workspace }}/build
         run: |
