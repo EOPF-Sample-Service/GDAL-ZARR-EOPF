@@ -114,12 +114,15 @@ jobs:
       #################################################
       #  Configure → Build
       #################################################
-      - name: Configure (Linux / macOS)
+      - name: Configure (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          cmake -S . -B build/${{ matrix.cfg }} \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+            cmake -S . -B build/${{ matrix.cfg }} -G Ninja \
+                -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+      
+      - name: Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake --build build/${{ matrix.cfg }} --parallel
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
@@ -135,7 +138,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         env:
-          GDAL_DRIVER_PATH: ${{ github.workspace }}/build   # ← correct folder
+            GDAL_DRIVER_PATH: ${{ github.workspace }}/build/${{ matrix.cfg }}
         run: |
             gdalinfo --formats | grep -qi EOPFZARR
 
