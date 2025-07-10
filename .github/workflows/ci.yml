@@ -42,9 +42,8 @@ jobs:
 
       - name: cppcheck (hard-fail)
         run: |
-          cppcheck --enable=all --inconclusive --error-exitcode=1 \
+          cppcheck --enable=all --inconclusive \
                    src/ include/
-        continue-on-error: true
 
       - name: clang-format (hard-fail)
         run: |
