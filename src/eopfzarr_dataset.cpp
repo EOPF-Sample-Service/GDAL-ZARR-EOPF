@@ -319,7 +319,7 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
                     if (pszKey && pszValue)
                     {
                         // If this is a NAME field, convert ZARR: to EOPFZARR:
-                        if (pszValue && strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
+                        if(strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
                         {
                             CPLString eopfValue("EOPFZARR:");
                             eopfValue += (pszValue + 5); // Skip "ZARR:"

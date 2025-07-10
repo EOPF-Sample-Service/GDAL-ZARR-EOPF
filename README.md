@@ -92,10 +92,10 @@ import numpy as np
 ds = gdal.Open('EOPFZARR:/path/to/data.zarr')
 data = ds.ReadAsArray()  # Direct NumPy integration
 
-# Works with any GDAL-compatible library
-import rasterio
-with rasterio.open('EOPFZARR:/data.zarr') as src:
-    array = src.read()
+# Should work with GDAL-compatible libraries (needs verification)
+# import rasterio
+# with rasterio.open('EOPFZARR:/data.zarr') as src:
+#     array = src.read()
 ```
 
 ### QGIS Integration
@@ -108,18 +108,18 @@ with rasterio.open('EOPFZARR:/data.zarr') as src:
 
 ## 📖 Table of Contents
 
-1. [🚀 Quick Start](#-quick-start)
-2. [💻 Installation](#-installation)  
-3. [📋 Requirements](#-requirements)
-4. [🔧 Building from Source](#-building-from-source)
-5. [🧪 Testing](#-testing)
-6. [🤝 Contributing](#-contributing)
-7. [📄 License](#-license)
-8. [🙋 Support & Community](#-support--community)
+1. [Quick Start](#-quick-start)
+2. [Installation](#-installation)  
+3. [Requirements](#-requirements)
+4. [Building from Source](#-building-from-source)
+5. [Testing](#-testing)
+6. [Contributing](#-contributing)
+7. [License](#-license)
+8. [Support & Community](#-support--community)
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 **Get up and running in 3 steps:**
 
@@ -151,11 +151,11 @@ with rasterio.open('EOPFZARR:/data.zarr') as src:
 
 ---
 
-## 💻 Installation
+## Installation
 
 **Before installing:** Make sure you have **GDAL 3.10+** installed. Check with `gdalinfo --version`.
 
-### 📦 Getting the Plugin
+###  Getting the Plugin
 
 Since official releases are pending approval, current options are:
 
@@ -165,7 +165,7 @@ Since official releases are pending approval, current options are:
 
 See our [Getting Started Guide](GETTING_STARTED.md) for detailed instructions on each method.
 
-### ⚡ Installing the Plugin
+### Installing the Plugin
 
 Once you have the plugin binary, use our installation scripts for automatic setup:
 
@@ -197,7 +197,7 @@ install-windows.bat
 
 - Compatible with package manager and custom GDAL installations
 
-### 🔧 Manual Installation
+### Manual Installation
 
 If you prefer manual installation or the automatic scripts don't work for your setup:
 
@@ -215,7 +215,7 @@ export GDAL_DRIVER_PATH="/path/to/plugin/directory:$GDAL_DRIVER_PATH"
 
 ---
 
-## 📋 Requirements
+## Requirements
 
 - **GDAL 3.10+** (3.11+ recommended) - [Download](https://gdal.org/download.html)
 - **Compatible OS**: Windows, macOS, Linux
@@ -235,7 +235,7 @@ gdalinfo --version
 
 ---
 
-## 🔧 Building from Source
+## Building from Source
 
 **This is currently the primary way to get the plugin.** Pre-built releases are pending stakeholder approval.
 
@@ -268,7 +268,7 @@ cd ..
 
 ---
 
-## 🧪 Testing
+## Testing
 
 **Verify installation:**
 
@@ -285,7 +285,7 @@ gdalinfo --formats | grep EOPFZARR
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Here's how to get involved:
 
@@ -296,13 +296,13 @@ We welcome contributions! Here's how to get involved:
 
 ---
 
-## 📄 License
+## License
 
 **MIT License** - See [LICENSE](LICENSE) for details. Compatible with GDAL's open-source licensing.
 
 ---
 
-## 🙋 Support & Community
+## Support & Community
 
 - **📚 Documentation**: [User Guide](docs/user-guide.md) | [API Docs](docs/api.md) | [FAQ](docs/faq.md)
 - **🆘 Need help?** [Troubleshooting Guide](docs/troubleshooting.md) | [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
