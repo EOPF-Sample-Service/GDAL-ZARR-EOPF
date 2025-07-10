@@ -5,7 +5,7 @@
 [![GDAL Version](https://img.shields.io/badge/GDAL-3.10%2B-blue.svg)](https://gdal.org)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF)
 
-**Seamless Earth Observation Data Access** 🚀  
+**Seamless Earth Observation Data Access**   
 The GDAL EOPF-Zarr plugin brings **Earth Observation Processing Framework (EOPF)** datasets directly into your existing GIS workflows. Open Zarr-based Earth observation data in [QGIS](https://qgis.org), process it with standard GDAL tools, or analyze it with Python—all with **zero configuration** and **full geospatial intelligence**.
 
 > 💡 **Why this matters:** Transform complex Earth observation data formats into standard GDAL datasets that work everywhere—from desktop GIS to cloud analytics pipelines.
@@ -14,15 +14,15 @@ The GDAL EOPF-Zarr plugin brings **Earth Observation Processing Framework (EOPF)
 
 ## ✨ What Makes This Special
 
-🎯 **Instant QGIS Integration** - Just click "Add Raster Layer" and it works  
-🔍 **Smart Geospatial Detection** - Automatic CRS and geotransform from metadata  
-🚀 **Production Ready** - Cross-platform, thread-safe, memory-efficient  
-🌐 **Cloud Native** - HTTP/HTTPS access, STAC metadata support  
-🐍 **Python Friendly** - NumPy integration, standard GDAL bindings  
+**Instant QGIS Integration** - Just click "Add Raster Layer" and it works  
+**Smart Geospatial Detection** - Automatic CRS and geotransform from metadata  
+**Production Ready** - Cross-platform, thread-safe, memory-efficient  
+**Cloud Native** - HTTP/HTTPS access, STAC metadata support  
+**Python Friendly** - NumPy integration, standard GDAL bindings  
 
 ---
 
-## 🚀 Key Capabilities
+## Key Capabilities
 
 ### **Data Access & Integration**
 
@@ -54,7 +54,7 @@ The GDAL EOPF-Zarr plugin brings **Earth Observation Processing Framework (EOPF)
 
 ---
 
-## 📊 Current Status & Roadmap
+## Current Status & Roadmap
 
 | Feature | Status | GDAL Version | Notes |
 |---------|--------|--------------|-------|
@@ -67,7 +67,7 @@ The GDAL EOPF-Zarr plugin brings **Earth Observation Processing Framework (EOPF)
 | **Write Support** | 🔄 **Planned** | Future | Read-only currently |
 | **S3 Integration** | 🔄 **Planned** | Future | Via `/vsis3/` |
 
-## 🎯 Quick Examples
+## Quick Examples
 
 ### Command Line Power
 
