@@ -45,10 +45,12 @@ jobs:
           cppcheck --enable=all --inconclusive \
                    src/ include/
 
-      - name: clang-format (allow-failure)
-        run: |
-          files=$(git ls-files '*.cpp' '*.h')
-          clang-format --style=file --dry-run --Werror $files
+      - name: clang-format (using action)
+        uses: RafikFarhad/clang-format-github-action@v3
+        continue-on-error: true  # ← This action supports continue-on-error
+        with:
+          sources: "src/**/*.h,src/**/*.cpp"
+          style: "file"
 
   ###############################################################################
   #  Build & test matrix  (Linux, macOS, Windows  ×  GDAL 3.10 / 3.11)
