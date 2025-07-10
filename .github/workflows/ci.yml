@@ -45,7 +45,7 @@ jobs:
           cppcheck --enable=all --inconclusive \
                    src/ include/
 
-      - name: clang-format (hard-fail)
+      - name: clang-format (allow-failure)
         run: |
           files=$(git ls-files '*.cpp' '*.h')
           clang-format --style=file --dry-run --Werror $files
