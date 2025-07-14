@@ -68,41 +68,6 @@ static std::string CreateQGISCompatiblePath(const std::string &path)
     return qgisPath;
 }
 
-// Helper function to detect if a path is a URL or virtual file system path
-static bool IsUrlOrVirtualPath(const std::string &path)
-{
-    CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Checking path: %s", path.c_str());
-    
-    // Check for URL schemes
-    if (path.find("://") != std::string::npos)
-    {
-        size_t schemeEnd = path.find("://");
-        std::string scheme = path.substr(0, schemeEnd);
-        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected URL scheme: %s", scheme.c_str());
-        return true;
-    }
-    
-    // Check for GDAL virtual file systems
-    if (STARTS_WITH_CI(path.c_str(), "/vsi"))
-    {
-        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected virtual file system");
-        return true;
-    }
-    
-    // Additional comprehensive checks
-    if (path.find("/vsicurl/") != std::string::npos ||
-        path.find("/vsis3/") != std::string::npos ||
-        path.find("/vsiaz/") != std::string::npos ||
-        path.find("/vsigs/") != std::string::npos ||
-        path.find("http://") != std::string::npos ||
-        path.find("https://") != std::string::npos ||
-        path.find("ftp://") != std::string::npos)
-    {
-        return true;
-    }
-    
-    return false;
-}
 
 std::string ConstructMetadataPath(const std::string& basePath, const std::string& metadataFile)
 {
@@ -696,7 +661,7 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     GDALDriver *driver = new GDALDriver();
     driver->SetDescription("EOPFZARR");
     driver->SetMetadataItem(GDAL_DMD_LONGNAME,
-                            "EOPF Zarr Wrapper Driver Mac 3");
+                            "EOPF Zarr Wrapper Driver");
     driver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");

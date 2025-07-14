@@ -720,9 +720,9 @@ static void ExtractCoordinateMetadata(const CPLJSONObject &obj, GDALDataset &ds)
     }
 }
 
-extern bool IsUrlOrVirtualPath(const std::string &path);
 
-// Add this to eopf_metadata.cpp after includes
+namespace EOPF {
+
 std::string ConstructMetadataPath(const std::string &basePath,
                                   const std::string &metadataFile)
 {
@@ -744,13 +744,14 @@ std::string ConstructMetadataPath(const std::string &basePath,
                                    nullptr);
     }
 }
+}
 
 /* ------------------------------------------------------------------ */
 /*      Check for .zmetadata file that may have consolidated metadata */
 /* ------------------------------------------------------------------ */
 static bool LoadZMetadata(const std::string &rootPath, CPLJSONDocument &doc)
 {
-    std::string zmetaPath = ConstructMetadataPath(rootPath, ".zmetadata");
+    std::string zmetaPath = EOPF::ConstructMetadataPath(rootPath, ".zmetadata");
     if (!doc.Load(zmetaPath))
         return false;
 
@@ -967,4 +968,39 @@ void EOPF::AttachMetadata(GDALDataset &ds, const std::string &rootPath)
         CPLDebug("EOPFZARR", "spatial_ref metadata item is empty or null, "
                              "cannot set SRS in domains.");
     }
+}
+
+bool IsUrlOrVirtualPath(const std::string& path)
+{
+    CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Checking path: %s", path.c_str());
+
+    // Check for URL schemes
+    if (path.find("://") != std::string::npos)
+    {
+        size_t schemeEnd = path.find("://");
+        std::string scheme = path.substr(0, schemeEnd);
+        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected URL scheme: %s", scheme.c_str());
+        return true;
+    }
+
+    // Check for GDAL virtual file systems
+    if (STARTS_WITH_CI(path.c_str(), "/vsi"))
+    {
+        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected virtual file system");
+        return true;
+    }
+
+    // Additional comprehensive checks
+    if (path.find("/vsicurl/") != std::string::npos ||
+        path.find("/vsis3/") != std::string::npos ||
+        path.find("/vsiaz/") != std::string::npos ||
+        path.find("/vsigs/") != std::string::npos ||
+        path.find("http://") != std::string::npos ||
+        path.find("https://") != std::string::npos ||
+        path.find("ftp://") != std::string::npos)
+    {
+        return true;
+    }
+
+    return false;
 }

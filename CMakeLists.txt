@@ -178,6 +178,19 @@ add_custom_target(rebuild-install
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
+# Enable testing
+enable_testing()
+
+if(WIN32)
+  add_test(NAME driver_registration
+    COMMAND gdalinfo --formats
+  )
+else()
+  add_test(NAME driver_registration
+    COMMAND bash -c "gdalinfo --formats | grep EOPFZARR"
+  )
+endif()
+
 # Print configuration summary
 message(STATUS "")
 message(STATUS "=== EOPF Zarr Plugin Configuration Summary ===")

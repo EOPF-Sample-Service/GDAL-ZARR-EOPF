@@ -1,4 +1,11 @@
 #pragma once
+
+#ifdef _MSC_VER
+#pragma warning(disable: 4251)
+#pragma warning(disable: 4189)
+#pragma warning(disable: 4100)
+#pragma warning(disable: 4067)
+#endif
 #include "gdal_priv.h"
 #include "gdal_pam.h"
 #include "gdal_version.h"
