@@ -1,190 +1,210 @@
-cmake_minimum_required(VERSION 3.14)
-project(EOPFZarr LANGUAGES CXX)
-set(CMAKE_CXX_STANDARD 17)
+cmake_minimum_required(VERSION 3.16)
+project(GDAL_EOPF_Zarr)
 
-# Include CTest for testing capabilities
-include(CTest)
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/eopfzarr_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/include/eopfzarr_config.h"
 )
 
-# Find GDAL using the modern imported target
+# Find GDAL
 find_package(GDAL REQUIRED)
 
-# Check GDAL version compatibility
+# Enhanced GDAL version detection and compatibility
 if(GDAL_VERSION)
     message(STATUS "Found GDAL version: ${GDAL_VERSION}")
     
-    # Extract major.minor version for compatibility check
-    string(REGEX MATCH "^([0-9]+\\.[0-9]+)" GDAL_MAJOR_MINOR "${GDAL_VERSION}")
-    message(STATUS "GDAL major.minor version: ${GDAL_MAJOR_MINOR}")
-    
-    # Create version number for preprocessor defines
-    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" GDAL_VERSION_MATCH "${GDAL_VERSION}")
+    # Create proper version number for preprocessor defines
+    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" GDAL_VERSION_MATCH "${GDAL_VERSION}")
     if(GDAL_VERSION_MATCH)
         set(GDAL_VERSION_MAJOR ${CMAKE_MATCH_1})
         set(GDAL_VERSION_MINOR ${CMAKE_MATCH_2})
-        math(EXPR GDAL_VERSION_NUMBER "${GDAL_VERSION_MAJOR} * 100 + ${GDAL_VERSION_MINOR}")
-        message(STATUS "GDAL version define: GDAL_VERSION_NUM=${GDAL_VERSION_NUMBER}")
-        add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUMBER})
+        set(GDAL_VERSION_PATCH ${CMAKE_MATCH_3})
+        
+        # Calculate version number (e.g., 3.11.0 -> 3110000)
+        math(EXPR GDAL_VERSION_NUM "${GDAL_VERSION_MAJOR} * 1000000 + ${GDAL_VERSION_MINOR} * 10000 + ${GDAL_VERSION_PATCH} * 100")
+        
+        message(STATUS "GDAL version number: ${GDAL_VERSION_NUM}")
+        add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUM})
     endif()
     
-    # Warn about potential version mismatches
-    if(GDAL_VERSION VERSION_LESS "3.8")
-        message(WARNING "GDAL version ${GDAL_VERSION} is older than recommended (3.8+). Some features may not work.")
+    # Compatibility warnings
+    if(GDAL_VERSION VERSION_LESS "3.4")
+        message(WARNING "GDAL version ${GDAL_VERSION} may have limited Zarr support. Recommended: 3.8+")
+    elseif(GDAL_VERSION VERSION_LESS "3.8")
+        message(WARNING "GDAL version ${GDAL_VERSION} has basic Zarr support. Recommended: 3.8+ for best performance")
     else()
-        message(STATUS "✅ GDAL version ${GDAL_VERSION} check passed - compatible for EOPF Zarr driver")
+        message(STATUS "✅ GDAL version ${GDAL_VERSION} - excellent Zarr support")
     endif()
 else()
-    message(WARNING "Could not determine GDAL version. Build may have compatibility issues.")
+    message(FATAL_ERROR "Could not determine GDAL version. Please check your GDAL installation.")
 endif()
 
-# If GDAL imported target is not available, try with pkg-config as fallback
-if(NOT TARGET GDAL::GDAL)
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(GDAL REQUIRED gdal)
-        if(GDAL_FOUND)
-            add_library(GDAL::GDAL INTERFACE IMPORTED)
-            target_include_directories(GDAL::GDAL INTERFACE ${GDAL_INCLUDE_DIRS})
-            target_link_libraries(GDAL::GDAL INTERFACE ${GDAL_LIBRARIES})
-            target_compile_options(GDAL::GDAL INTERFACE ${GDAL_CFLAGS_OTHER})
-            message(STATUS "Using pkg-config GDAL: ${GDAL_VERSION}")
-        endif()
-    endif()
+# Feature detection for XMLInit signature
+if(GDAL_VERSION VERSION_GREATER_EQUAL "3.4.0")
+    add_definitions(-DGDAL_HAS_CONST_XML_NODE=1)
+    message(STATUS "Using const XMLInit signature for GDAL ${GDAL_VERSION}")
+else()
+    message(STATUS "Using non-const XMLInit signature for GDAL ${GDAL_VERSION}")
 endif()
 
-# Verify GDAL target is available
-if(NOT TARGET GDAL::GDAL)
-    message(FATAL_ERROR "GDAL not found. Please install GDAL development packages.")
+# Feature detection for RefUnderlyingRasterBand signature
+if(GDAL_VERSION VERSION_GREATER_EQUAL "3.5.0")
+    add_definitions(-DGDAL_HAS_CONST_REF_UNDERLYING=1)
+    message(STATUS "Using const RefUnderlyingRasterBand signature for GDAL ${GDAL_VERSION}")
+else()
+    message(STATUS "Using non-const RefUnderlyingRasterBand signature for GDAL ${GDAL_VERSION}")
 endif()
 
-# Print GDAL information for debugging
-message(STATUS "GDAL include directories: ${GDAL_INCLUDE_DIRS}")
-message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
-
-# Add version compatibility defines
-if(GDAL_VERSION)
-    # Define GDAL version for compatibility checks in code
-    string(REPLACE "." "" GDAL_VERSION_NUM "${GDAL_VERSION}")
-    string(SUBSTRING "${GDAL_VERSION_NUM}" 0 3 GDAL_VERSION_NUM)
-    add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUM})
-    message(STATUS "GDAL version define: GDAL_VERSION_NUM=${GDAL_VERSION_NUM}")
+# Compiler-specific options
+if(MSVC)
+    add_compile_options(/W4)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Main driver library (MODULE)
-add_library(gdal_EOPFZarr MODULE
+# Debug/Release configurations
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DDEBUG)
+    message(STATUS "Debug build enabled")
+else()
+    add_definitions(-DNDEBUG)
+    message(STATUS "Release build enabled")
+endif()
+
+# Source files
+set(SOURCES
     src/eopfzarr_driver.cpp
     src/eopfzarr_dataset.cpp
     src/eopf_metadata.cpp
 )
 
+# Header files
+set(HEADERS
+    src/eopfzarr_dataset.h
+    src/eopf_metadata.h
+)
+
+# Create the plugin library
+add_library(gdal_EOPFZarr SHARED ${SOURCES} ${HEADERS})
+
+# Set library properties
+set_target_properties(gdal_EOPFZarr PROPERTIES
+    PREFIX ""  # Remove lib prefix on Unix systems
+    SUFFIX ".so"  # Ensure .so extension on Unix
+)
+
+# Platform-specific library naming
+if(WIN32)
+    set_target_properties(gdal_EOPFZarr PROPERTIES SUFFIX ".dll")
+elseif(APPLE)
+    set_target_properties(gdal_EOPFZarr PROPERTIES SUFFIX ".dylib")
+endif()
+
 target_include_directories(gdal_EOPFZarr PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 
-target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
-
-# Output properties for plugin
-if (WIN32)
-    set_target_properties(gdal_EOPFZarr PROPERTIES
-        PREFIX ""
-        OUTPUT_NAME "gdal_EOPFZarr"
-        SUFFIX ".dll")
-
-    # Simplified .def file - just export the standard entry points
-    set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/eopfzarr_exports.def")
-    file(WRITE ${DEF_FILE} "EXPORTS\n")
-    file(APPEND ${DEF_FILE} "    GDALRegisterMe\n")
-    file(APPEND ${DEF_FILE} "    GDALRegister_EOPFZarr\n")
-
-    # Add the .def file to the library
-    target_link_options(gdal_EOPFZarr PRIVATE "/DEF:${DEF_FILE}")
-elseif (APPLE)
-    set_target_properties(gdal_EOPFZarr PROPERTIES
-        PREFIX ""
-        SUFFIX ".dylib")
-else()
-    set_target_properties(gdal_EOPFZarr PROPERTIES
-        PREFIX ""
-        SUFFIX ".so")
-endif()
-
-# Install to GDAL plugins directory
-if(WIN32)
-    set(GDAL_PLUGINS_DIR "$ENV{GDAL_DRIVER_PATH}" CACHE PATH "Directory where GDAL plugins are installed")
-    if(NOT GDAL_PLUGINS_DIR)
-        set(GDAL_PLUGINS_DIR "$ENV{PROGRAMDATA}/GDAL/plugins")
-    endif()
-else()
-    set(GDAL_PLUGINS_DIR "${CMAKE_INSTALL_PREFIX}/lib/gdalplugins" CACHE PATH "Directory where GDAL plugins are installed")
-endif()
-
-install(TARGETS gdal_EOPFZarr 
-    LIBRARY DESTINATION ${GDAL_PLUGINS_DIR}
+# Include directories
+target_include_directories(gdal_EOPFZarr PRIVATE
+    ${GDAL_INCLUDE_DIRS}
+    src/
 )
 
-enable_testing()
-# Set the test environment to find gdalinfo command
-find_program(GDALINFO_EXECUTABLE gdalinfo)
-if(NOT GDALINFO_EXECUTABLE)
-    message(WARNING "gdalinfo not found, tests may fail")
-endif()
+# Link libraries
+target_link_libraries(gdal_EOPFZarr PRIVATE
+    ${GDAL_LIBRARIES}
+)
 
-if(WIN32)
-    add_test(NAME driver_registration
-             COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
-elseif(APPLE)
-    add_test(NAME driver_registration 
-             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
+# Compiler definitions
+target_compile_definitions(gdal_EOPFZarr PRIVATE
+    GDAL_COMPILATION
+)
+
+# Find GDAL installation directory dynamically
+find_program(GDAL_CONFIG gdal-config)
+if(GDAL_CONFIG)
+    execute_process(COMMAND ${GDAL_CONFIG} --prefix
+                   OUTPUT_VARIABLE GDAL_PREFIX
+                   OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(GDAL_PLUGINS_DIR "${GDAL_PREFIX}/lib/gdalplugins")
+    message(STATUS "GDAL plugins directory: ${GDAL_PLUGINS_DIR}")
 else()
-    add_test(NAME driver_registration 
-             COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
+    # Fallback for Homebrew installation on Mac
+    if(APPLE)
+        set(GDAL_PLUGINS_DIR "/opt/homebrew/lib/gdalplugins")
+    elseif(WIN32)
+        set(GDAL_PLUGINS_DIR "${CMAKE_INSTALL_PREFIX}/lib/gdalplugins")
+    else()
+        set(GDAL_PLUGINS_DIR "${CMAKE_INSTALL_PREFIX}/lib/gdalplugins")
+    endif()
+    message(WARNING "gdal-config not found, using fallback path: ${GDAL_PLUGINS_DIR}")
 endif()
 
-# Check for GDALPamDataset XML initialization compatibility
-include(CheckCXXSourceCompiles)
+# Install target with dynamic path and proper permissions
+install(TARGETS gdal_EOPFZarr
+    LIBRARY DESTINATION ${GDAL_PLUGINS_DIR}
+    RUNTIME DESTINATION ${GDAL_PLUGINS_DIR}  # For Windows DLLs
+    COMPONENT Runtime
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+)
 
-# Set up include directories for the test
-set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
+# Add custom target for plugin-only installation during development
+add_custom_target(install-plugin
+    COMMAND ${CMAKE_COMMAND} --install . --component Runtime
+    DEPENDS gdal_EOPFZarr
+    COMMENT "Installing EOPF Zarr plugin to GDAL plugins directory"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
 
-# Test for const CPLXMLNode in XMLInit
-check_cxx_source_compiles("
-#include <gdal_pam.h>
-class Test : public GDALPamDataset {
-protected:
-    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
-};
-int main() { return 0; }
-" GDAL_HAS_CONST_XML_NODE)
+# Add custom target for build and install in one step
+add_custom_target(build-install
+    COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG> --target gdal_EOPFZarr
+    COMMAND ${CMAKE_COMMAND} --install . --component Runtime
+    COMMENT "Building and installing EOPF Zarr plugin"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
 
-if(GDAL_HAS_CONST_XML_NODE)
-    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
-    add_definitions(-DGDAL_HAS_CONST_XML_NODE)
+# Add custom target for clean build and install
+add_custom_target(rebuild-install
+    COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG> --target clean
+    COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG> --target gdal_EOPFZarr
+    COMMAND ${CMAKE_COMMAND} --install . --component Runtime
+    COMMENT "Clean building and installing EOPF Zarr plugin"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+# Print configuration summary
+message(STATUS "")
+message(STATUS "=== EOPF Zarr Plugin Configuration Summary ===")
+message(STATUS "GDAL Version: ${GDAL_VERSION}")
+message(STATUS "GDAL Version Number: ${GDAL_VERSION_NUM}")
+message(STATUS "GDAL Include Dirs: ${GDAL_INCLUDE_DIRS}")
+message(STATUS "GDAL Libraries: ${GDAL_LIBRARIES}")
+message(STATUS "Plugin Install Directory: ${GDAL_PLUGINS_DIR}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+if(GDAL_VERSION VERSION_GREATER_EQUAL "3.4.0")
+    message(STATUS "XMLInit Signature: const CPLXMLNode*")
 else()
-    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
+    message(STATUS "XMLInit Signature: CPLXMLNode*")
 endif()
-
-# Test for RefUnderlyingRasterBand signature
-check_cxx_source_compiles("
-#include <gdal_proxy.h>
-class Test : public GDALProxyRasterBand {
-public:
-    GDALRasterBand* RefUnderlyingRasterBand(bool bForceOpen = true) const override { return nullptr; }
-};
-int main() { return 0; }
-" GDAL_HAS_CONST_REF_UNDERLYING)
-
-if(GDAL_HAS_CONST_REF_UNDERLYING)
-    message(STATUS "GDAL RefUnderlyingRasterBand uses const method with bool parameter")
-    add_definitions(-DGDAL_HAS_CONST_REF_UNDERLYING)
+if(GDAL_VERSION VERSION_GREATER_EQUAL "3.5.0")
+    message(STATUS "RefUnderlyingRasterBand: const version")
 else()
-    message(STATUS "GDAL RefUnderlyingRasterBand uses non-const method without parameters")
+    message(STATUS "RefUnderlyingRasterBand: non-const version")
 endif()
+message(STATUS "===============================================")
+message(STATUS "")
 
-# Reset CMAKE_REQUIRED variables
-unset(CMAKE_REQUIRED_INCLUDES)
-unset(CMAKE_REQUIRED_LIBRARIES)
+# Usage instructions
+message(STATUS "Usage:")
+message(STATUS "  Build only:           cmake --build . --target gdal_EOPFZarr")
+message(STATUS "  Build and install:    cmake --build . --target build-install")
+message(STATUS "  Install only:         cmake --build . --target install-plugin")
+message(STATUS "  Clean rebuild:        cmake --build . --target rebuild-install")
+message(STATUS "")

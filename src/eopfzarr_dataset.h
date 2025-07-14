@@ -52,14 +52,12 @@ class EOPFZarrDataset : public GDALPamDataset
 
   protected:
     // In your header file:
-    CPLErr TryLoadXML(char **papszSiblingFiles = nullptr);
+    CPLErr TryLoadXML(CSLConstList papszSiblingFiles = nullptr) override;
     
-    // XMLInit signature varies by GDAL version
-#ifdef GDAL_HAS_CONST_XML_NODE
-    CPLErr XMLInit(const CPLXMLNode *psTree, const char *pszUnused) override;
-#else
-    CPLErr XMLInit(CPLXMLNode *psTree, const char *pszUnused) override;
-#endif
+// XMLInit signature varies by GDAL version
+// Use version-based conditional compilation
+virtual CPLErr XMLInit(const CPLXMLNode *psTree, const char *pszUnused) override;
+
 
     CPLXMLNode *SerializeToXML(const char *pszUnused) override;
 };

@@ -427,7 +427,7 @@ const GDAL_GCP *EOPFZarrDataset::GetGCPs()
     return mInner->GetGCPs();
 }
 
-CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
+CPLErr EOPFZarrDataset::TryLoadXML(CSLConstList papszSiblingFiles)
 {
     if (!m_bPamInitialized)
         return CE_None;
@@ -438,7 +438,7 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 // Update the implementation:
 
 // XMLInit implementation varies by GDAL version
-#ifdef GDAL_HAS_CONST_XML_NODE
+#ifdef GDAL_VERSION_NUM >= 3040000
 CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused) {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
