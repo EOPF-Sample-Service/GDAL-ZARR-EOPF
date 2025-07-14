@@ -7,8 +7,9 @@
  **********************************************************************/
 #include "eopfzarr_dataset.h"
 #include "gdal_priv.h"
+#include "cpl_conv.h"
 #include "cpl_vsi.h"
-#include "cpl_string.h"  // Added for CSL functions (CSLRemove, CSLDuplicate, etc.)
+#include "cpl_string.h" // Added for CPLFormFilename and CSL functions (CSLRemove, CSLDuplicate, etc.)
 #include <string>
 #include <algorithm>
 #include "eopf_metadata.h"
@@ -28,7 +29,7 @@ static GDALDriver *gEOPFDriver = nullptr; /* global ptr for reuse */
 /* -------------------------------------------------------------------- */
 static bool HasFile(const std::string &path)
 {
-    VSIStatBufL sStat;  // Use VSIStatBufL for VSIStatL
+    VSIStatBufL sStat; // Use VSIStatBufL for VSIStatL
     return VSIStatL(path.c_str(), &sStat) == 0;
 }
 
@@ -68,8 +69,7 @@ static std::string CreateQGISCompatiblePath(const std::string &path)
     return qgisPath;
 }
 
-
-std::string ConstructMetadataPath(const std::string& basePath, const std::string& metadataFile)
+std::string ConstructMetadataPath(const std::string &basePath, const std::string &metadataFile)
 {
     // For URLs and virtual paths, use forward slashes
     if (IsUrlOrVirtualPath(basePath))
@@ -82,10 +82,16 @@ std::string ConstructMetadataPath(const std::string& basePath, const std::string
         }
         return cleanPath + "/" + metadataFile;
     }
+
     else
     {
-        // For local paths, use CPLFormFilename
-        return CPLFormFilenameSafe(basePath.c_str(), metadataFile.c_str(), nullptr);
+        // Use platform-specific path separator
+#ifdef _WIN32
+        const char *separator = "\\";
+#else
+        const char *separator = "/";
+#endif
+        return basePath + separator + metadataFile;
     }
 }
 std::pair<std::string, std::string>
@@ -97,8 +103,8 @@ ParseSubdatasetPath(const std::string &fullPath)
     size_t colonPos = fullPath.find("\":");
     if (colonPos != std::string::npos)
     {
-        basePath = fullPath.substr(0, colonPos + 1);     // Include the quote
-        subdatasetPath = fullPath.substr(colonPos + 2);  // Skip ":
+        basePath = fullPath.substr(0, colonPos + 1);    // Include the quote
+        subdatasetPath = fullPath.substr(colonPos + 2); // Skip ":
     }
     else
     {
@@ -455,7 +461,7 @@ static GDALDataset *OpenSubdataset(const std::string &mainPath,
             // Try to extract subdataset path from ZARR path
             std::string extractedPath = pszValue;
             size_t pathEndPos =
-                extractedPath.find("\":", 5);  // Look for ": after ZARR:
+                extractedPath.find("\":", 5); // Look for ": after ZARR:
 
             if (pathEndPos != std::string::npos)
             {
@@ -587,7 +593,7 @@ static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
         poUnderlyingDS = static_cast<GDALDataset *>(GDALOpenEx(
             zarrPath.c_str(),
             poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
-            azDrvList,  // Explicitly use Zarr driver
+            azDrvList, // Explicitly use Zarr driver
             papszOpenOptions, nullptr));
 
         // If the formatted version failed, try the original path
@@ -606,7 +612,7 @@ static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
         if (!poUnderlyingDS && STARTS_WITH_CI(mainPath.c_str(), "/vsicurl/"))
         {
             std::string directUrl =
-                mainPath.substr(9);  // Remove "/vsicurl/" prefix
+                mainPath.substr(9); // Remove "/vsicurl/" prefix
             CPLDebug("EOPFZARR", "VSI path failed, trying direct URL: %s",
                      directUrl.c_str());
 

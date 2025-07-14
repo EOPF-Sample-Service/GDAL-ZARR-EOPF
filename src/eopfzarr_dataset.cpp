@@ -427,18 +427,18 @@ const GDAL_GCP *EOPFZarrDataset::GetGCPs()
     return mInner->GetGCPs();
 }
 
-CPLErr EOPFZarrDataset::TryLoadXML(CSLConstList papszSiblingFiles)
-{
-    if (!m_bPamInitialized)
-        return CE_None;
-
+#if GDAL_VERSION_NUM >= 3090000
+CPLErr EOPFZarrDataset::TryLoadXML(CSLConstList papszSiblingFiles) {
+    return GDALPamDataset::TryLoadXML(const_cast<char**>(papszSiblingFiles));
+}
+#else
+CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles) {
     return GDALPamDataset::TryLoadXML(papszSiblingFiles);
 }
+#endif
 
-// Update the implementation:
-
-// XMLInit implementation varies by GDAL version
-#ifdef GDAL_VERSION_NUM >= 3040000
+// Fix the preprocessor directive (line 441)
+#if GDAL_VERSION_NUM >= 3040000  // Change from #ifdef to #if
 CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused) {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
