@@ -117,14 +117,21 @@ jobs:
       #################################################
       #  Configure → Build
       #################################################
-      - name: Configure (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
         run: |
             cmake -S . -B build/${{ matrix.cfg }} -G Ninja \
                 -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
       
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build/${{ matrix.cfg }} -G Ninja \
+                -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
+                -DCMAKE_OSX_ARCHITECTURES=arm64
+      
       - name: Build (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         run: cmake --build build/${{ matrix.cfg }} --parallel
 
       - name: Configure (Windows • Ninja+MSVC)
