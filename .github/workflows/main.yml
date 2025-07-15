@@ -344,7 +344,7 @@ jobs:
         cmake -S . -B build \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           -DCMAKE_OSX_ARCHITECTURES=arm64
           
     - name: Build
