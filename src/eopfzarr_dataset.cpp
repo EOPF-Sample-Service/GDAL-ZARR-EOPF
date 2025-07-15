@@ -7,8 +7,6 @@
 #include <cstring>
 #include <utility>
 
-
-
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver *selfDrv)
     : mInner(std::move(inner)),
       mSubdatasets(nullptr),
@@ -319,11 +317,28 @@ char **EOPFZarrDataset::GetMetadata(const char *pszDomain)
                     if (pszKey && pszValue)
                     {
                         // If this is a NAME field, convert ZARR: to EOPFZARR:
-                        if(strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
+                        if (strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
                         {
-                            CPLString eopfValue("EOPFZARR:");
-                            eopfValue += (pszValue + 5); // Skip "ZARR:"
-                            mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue);
+                            std::string zarrValue(pszValue + 5); // Skip "ZARR:"
+                            size_t colonPos = zarrValue.find("\":");
+                            if (colonPos != std::string::npos)
+                            {
+                                // Already in "path":subds format
+                                std::string eopfValue = "EOPFZARR:" + zarrValue;
+                                mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue.c_str());
+                            }
+                            else
+                            {
+                                // Convert "/path/array" to "/path":/array
+                                size_t lastSlash = zarrValue.rfind('/', zarrValue.find(".zarr") + 5);
+                                if (lastSlash != std::string::npos)
+                                {
+                                    std::string rootPath = zarrValue.substr(0, lastSlash);
+                                    std::string subdsPath = zarrValue.substr(lastSlash);
+                                    std::string eopfValue = "EOPFZARR:\"" + rootPath + "\":" + subdsPath;
+                                    mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue.c_str());
+                                }
+                            }
                         }
                         else
                         {
@@ -439,11 +454,13 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 
 // XMLInit implementation varies by GDAL version
 #ifdef GDAL_HAS_CONST_XML_NODE
-CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode* psTree, const char* pszUnused) {
+CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode *psTree, const char *pszUnused)
+{
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
 #else
-CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode* psTree, const char* pszUnused) {
+CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode *psTree, const char *pszUnused)
+{
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
 #endif
@@ -455,7 +472,7 @@ CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
 
 // Implementation of EOPFZarrRasterBand
 
-EOPFZarrRasterBand::EOPFZarrRasterBand(EOPFZarrDataset* poDS, GDALRasterBand* poUnderlyingBand, int nBand)
+EOPFZarrRasterBand::EOPFZarrRasterBand(EOPFZarrDataset *poDS, GDALRasterBand *poUnderlyingBand, int nBand)
     : m_poUnderlyingBand(poUnderlyingBand),
       m_poDS(poDS)
 {
@@ -464,7 +481,7 @@ EOPFZarrRasterBand::EOPFZarrRasterBand(EOPFZarrDataset* poDS, GDALRasterBand* po
     this->nBand = nBand;
     this->eDataType = poUnderlyingBand->GetRasterDataType();
     poUnderlyingBand->GetBlockSize(&this->nBlockXSize, &this->nBlockYSize);
-    
+
     // Copy other properties from underlying band
     this->eAccess = poUnderlyingBand->GetAccess();
 }
@@ -476,15 +493,17 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
 
 // RefUnderlyingRasterBand implementation varies by GDAL version
 #ifdef GDAL_HAS_CONST_REF_UNDERLYING
-GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const {
+GDALRasterBand *EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
+{
     return m_poUnderlyingBand;
 }
 #else
-GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand() {
+GDALRasterBand *EOPFZarrRasterBand::RefUnderlyingRasterBand()
+{
     return m_poUnderlyingBand;
 }
 #endif
-CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
+CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void *pImage)
 {
     // Simply delegate to the underlying band
     if (m_poUnderlyingBand)
@@ -492,6 +511,6 @@ CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pIma
 
     // Return failure if there's no underlying band
     CPLError(CE_Failure, CPLE_AppDefined,
-        "EOPFZarrRasterBand::IReadBlock: No underlying raster band");
+             "EOPFZarrRasterBand::IReadBlock: No underlying raster band");
     return CE_Failure;
 }

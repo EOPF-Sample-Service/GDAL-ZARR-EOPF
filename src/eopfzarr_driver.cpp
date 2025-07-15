@@ -69,245 +69,225 @@ static std::string CreateQGISCompatiblePath(const std::string &path)
 }
 
 // Helper function to detect if a path is a URL or virtual file system path
-static bool IsUrlOrVirtualPath(const std::string &path)
+static bool IsUrlOrVirtualPath(const std::string& path)
 {
     CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Checking path: %s", path.c_str());
-
+    
+    // Check for GDAL virtual file systems - these should NEVER be normalized on Windows
+    if (STARTS_WITH_CI(path.c_str(), "/vsi")) {
+        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected virtual file system");
+        return true;
+    }
+    
     // Check for URL schemes
-    if (path.find("://") != std::string::npos)
-    {
-        // Extract scheme
+    if (path.find("://") != std::string::npos) {
         size_t schemeEnd = path.find("://");
         std::string scheme = path.substr(0, schemeEnd);
         CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected URL scheme: %s", scheme.c_str());
         return true;
     }
-
-    // Check for GDAL virtual file systems
-    if (STARTS_WITH_CI(path.c_str(), "/vsi"))
-    {
-        CPLDebug("EOPFZARR", "IsUrlOrVirtualPath: Detected virtual file system");
-        return true;
-    }
-
+    
     return false;
 }
 
-static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPath, std::string &subdatasetPath)
+static bool ParseSubdatasetPath(const std::string &fullPath,
+                                std::string       &mainPath,
+                                std::string       &subdatasetPath)
 {
-    // Debug the original path
-    CPLDebug("EOPFZARR", "ParseSubdatasetPath: Parsing path: %s", fullPath.c_str());
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: in=\"%s\"", fullPath.c_str());
 
-    // First, check for EOPFZARR: prefix
+    // 1. Strip prefix
     const char *pszPrefix = "EOPFZARR:";
-    std::string pathWithoutPrefix = fullPath;
-    if (STARTS_WITH_CI(fullPath.c_str(), pszPrefix))
-    {
-        pathWithoutPrefix = fullPath.substr(strlen(pszPrefix));
-        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Removed prefix, now: %s", pathWithoutPrefix.c_str());
-    }
+    std::string withoutPrefix = STARTS_WITH_CI(fullPath.c_str(), pszPrefix)
+                                ? fullPath.substr(strlen(pszPrefix))
+                                : fullPath;
 
-    // Check if this is a URL or virtual path - if so, don't parse for subdatasets
-    if (IsUrlOrVirtualPath(pathWithoutPrefix))
+    // 2. Handle quoted form or VFS paths
+    if (!withoutPrefix.empty() && withoutPrefix[0] == '\"')
     {
-        mainPath = pathWithoutPrefix;
-        subdatasetPath = "";
-        CPLDebug("EOPFZARR", "ParseSubdatasetPath: URL/Virtual path detected early, no subdataset parsing - Main: %s", mainPath.c_str());
-        return false;
-    }
+        size_t quoteColon = withoutPrefix.find("\":");
+        size_t endQuote   = withoutPrefix.find('\"', 1);
 
-    // Check for quoted path format: "path":subds
-    size_t startQuote = pathWithoutPrefix.find('\"');
-    if (startQuote != std::string::npos)
-    {
-        size_t endQuote = pathWithoutPrefix.find('\"', startQuote + 1);
-        if (endQuote != std::string::npos && endQuote > startQuote + 1)
+        if (quoteColon != std::string::npos)     /* Form: "main":subds */
         {
-            // We have a quoted path - extract it
-            mainPath = pathWithoutPrefix.substr(startQuote + 1, endQuote - startQuote - 1);
-
-            // Now check if there's a subdataset part after the quoted path
-            if (endQuote + 1 < pathWithoutPrefix.length() && pathWithoutPrefix[endQuote + 1] == ':')
+            mainPath       = withoutPrefix.substr(1, quoteColon - 1);
+            subdatasetPath = withoutPrefix.substr(quoteColon + 2);
+            CPLDebug("EOPFZARR", "  ➜ quoted+subds  main=\"%s\"  sub=\"%s\"",
+                     mainPath.c_str(), subdatasetPath.c_str());
+        }
+        else if (endQuote != std::string::npos)  /* Form: "main" */
+        {
+            mainPath       = withoutPrefix.substr(1, endQuote - 1);
+            subdatasetPath.clear();
+            CPLDebug("EOPFZARR", "  ➜ quoted root   main=\"%s\"", mainPath.c_str());
+        }
+        else
+        {
+            mainPath = withoutPrefix;
+            subdatasetPath.clear();
+        }
+    }
+    else if (IsUrlOrVirtualPath(withoutPrefix))
+    {
+        // For URLs/VFS, split at .zarr if subdataset is present
+        size_t zarrPos = withoutPrefix.find(".zarr");
+        if (zarrPos != std::string::npos)
+        {
+            size_t slashPos = withoutPrefix.find('/', zarrPos + 5); // Next '/' after ".zarr"
+            if (slashPos != std::string::npos)
             {
-                // We have a subdataset part - everything after the colon
-                subdatasetPath = pathWithoutPrefix.substr(endQuote + 2);
-                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path with subdataset - Main: %s, Subds: %s",
+                mainPath = withoutPrefix.substr(0, slashPos);
+                subdatasetPath = withoutPrefix.substr(slashPos + 1);
+                CPLDebug("EOPFZARR", "  ➜ URL/VFS with subds  main=\"%s\"  sub=\"%s\"",
                          mainPath.c_str(), subdatasetPath.c_str());
-
-                // Fix Windows paths - replace forward slashes with backward slashes
-#ifdef _WIN32
-                // Replace forward slashes with backslashes
-                for (size_t i = 0; i < mainPath.length(); ++i)
-                {
-                    if (mainPath[i] == '/')
-                    {
-                        mainPath[i] = '\\';
-                    }
-                }
-
-                // Remove leading slash if present in Windows paths (e.g., /C:/...)
-                if (!mainPath.empty() && mainPath[0] == '\\' &&
-                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-                {
-                    mainPath = mainPath.substr(1);
-                }
-
-                // Remove trailing slash if present
-                if (!mainPath.empty() && mainPath.back() == '\\')
-                {
-                    mainPath.pop_back();
-                }
-#endif
-                return true;
             }
-            // No subdataset part, just a quoted path
             else
             {
-                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path without subdataset - Main: %s", mainPath.c_str());
-                subdatasetPath = "";
-#ifdef _WIN32
-                // Fix Windows paths - same as above
-                for (size_t i = 0; i < mainPath.length(); ++i)
-                {
-                    if (mainPath[i] == '/')
-                    {
-                        mainPath[i] = '\\';
-                    }
-                }
-
-                if (!mainPath.empty() && mainPath[0] == '\\' &&
-                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-                {
-                    mainPath = mainPath.substr(1);
-                }
-
-                if (!mainPath.empty() && mainPath.back() == '\\')
-                {
-                    mainPath.pop_back();
-                }
-#endif
-                return false;
+                mainPath = withoutPrefix;
+                subdatasetPath.clear();
+                CPLDebug("EOPFZARR", "  ➜ URL/VFS root   main=\"%s\"", mainPath.c_str());
             }
+        }
+        else
+        {
+            mainPath = withoutPrefix;
+            subdatasetPath.clear();
+            CPLDebug("EOPFZARR", "  ➜ URL/VFS path   main=\"%s\"", mainPath.c_str());
+        }
+    }
+    else
+    {
+        // Unquoted local style; split at the first *real* ':'
+        size_t delim = withoutPrefix.find(':');
+    #ifdef _WIN32
+        if (delim == 1)                 // C: drive letter – skip it
+            delim = withoutPrefix.find(':', 2);
+    #endif
+        if (delim != std::string::npos)
+        {
+            mainPath       = withoutPrefix.substr(0, delim);
+            subdatasetPath = withoutPrefix.substr(delim + 1);
+            CPLDebug("EOPFZARR", "  ➜ local split   main=\"%s\"  sub=\"%s\"",
+                     mainPath.c_str(), subdatasetPath.c_str());
+        }
+        else
+        {
+            mainPath       = withoutPrefix;
+            subdatasetPath.clear();
         }
     }
 
-    // Check for simple path with subdataset separator (e.g., EOPFZARR:path:subds)
-    // This is complicated on Windows due to drive letters (C:)
-    std::string tmpPath = pathWithoutPrefix;
-    size_t colonPos = tmpPath.find(':');
+    // 3. Decide if URL / VFS
+    const bool isVirtual = IsUrlOrVirtualPath(mainPath);
 
-#ifdef _WIN32
-    // On Windows, the first colon might be the drive letter
-    if (colonPos != std::string::npos && colonPos == 1)
+    // 4. WINDOWS normalisation (local paths **only**)
+    #ifdef _WIN32
+    if (!isVirtual)
     {
-        // This is likely a drive letter - look for another colon
-        colonPos = tmpPath.find(':', colonPos + 1);
-    }
-#endif
-
-    if (colonPos != std::string::npos)
-    {
-        mainPath = tmpPath.substr(0, colonPos);
-        subdatasetPath = tmpPath.substr(colonPos + 1);
-        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found simple path with subdataset - Main: %s, Subds: %s",
-                 mainPath.c_str(), subdatasetPath.c_str());
-
-#ifdef _WIN32
-        // Fix Windows paths - same as above
-        for (size_t i = 0; i < mainPath.length(); ++i)
-        {
-            if (mainPath[i] == '/')
-            {
-                mainPath[i] = '\\';
-            }
-        }
-
-        if (!mainPath.empty() && mainPath[0] == '\\' &&
-            mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-        {
-            mainPath = mainPath.substr(1);
-        }
-
-        if (!mainPath.empty() && mainPath.back() == '\\')
-        {
+        std::replace(mainPath.begin(), mainPath.end(), '/', '\\');
+        if (mainPath.size() > 2 && mainPath[0] == '\\' &&
+            mainPath[2] == ':' && mainPath[1] != '\\')
+            mainPath.erase(0, 1);
+        if (mainPath.size() > 3 && mainPath.back() == '\\')
             mainPath.pop_back();
-        }
-#endif
-        return true;
     }
+    #endif
 
-    // Not a subdataset path
-    mainPath = pathWithoutPrefix;
-    subdatasetPath = "";
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: out  main=\"%s\"  sub=\"%s\"  url=%s",
+             mainPath.c_str(), subdatasetPath.c_str(),
+             isVirtual ? "YES" : "NO");
 
-#ifdef _WIN32
-    // Fix Windows paths - same as above
-    for (size_t i = 0; i < mainPath.length(); ++i)
-    {
-        if (mainPath[i] == '/')
-        {
-            mainPath[i] = '\\';
-        }
-    }
-
-    if (!mainPath.empty() && mainPath[0] == '\\' &&
-        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-    {
-        mainPath = mainPath.substr(1);
-    }
-
-    if (!mainPath.empty() && mainPath.back() == '\\')
-    {
-        mainPath.pop_back();
-    }
-#endif
-
-    CPLDebug("EOPFZARR", "ParseSubdatasetPath: No subdataset found - Main: %s", mainPath.c_str());
-    return false;
+    return !subdatasetPath.empty();
 }
 
-static bool IsEOPFZarr(const std::string &path)
+static bool ParseSubdatasetPath2(const std::string &fullPath,
+                                std::string       &mainPath,
+                                std::string       &subdatasetPath)
 {
-    // Extract main path if this is a subdataset reference
-    std::string mainPath, subdatasetPath;
-    ParseSubdatasetPath(path, mainPath, subdatasetPath);
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: in=\"%s\"", fullPath.c_str());
 
-    // Use the main path for detection
-    std::string pathToCheck = mainPath;
+    // 1. strip prefix
+    const char *pszPrefix = "EOPFZARR:";
+    std::string withoutPrefix = STARTS_WITH_CI(fullPath.c_str(), pszPrefix)
+                                ? fullPath.substr(strlen(pszPrefix))
+                                : fullPath;
 
-    // 1. Check for .zmetadata file
-    std::string zmetaPath = CPLFormFilename(pathToCheck.c_str(), ".zmetadata", nullptr);
-    if (HasFile(zmetaPath))
+    // 2. QUOTED form
+    if (!withoutPrefix.empty() && withoutPrefix[0] == '\"')
     {
-        CPLJSONDocument doc;
-        if (doc.Load(zmetaPath))
+        size_t quoteColon = withoutPrefix.find("\":");   // look for "\":"
+        size_t endQuote   = withoutPrefix.find('\"', 1); // plain root form
+
+        if (quoteColon != std::string::npos)     /* form 1 */
         {
-            const CPLJSONObject &root = doc.GetRoot();
-            const CPLJSONObject &metadata = root.GetObj("metadata");
-            if (metadata.IsValid())
-            {
-                const CPLJSONObject &zattrs = metadata.GetObj(".zattrs");
-                if (zattrs.IsValid() &&
-                    (zattrs.GetObj("stac_discovery").IsValid() ||
-                     !zattrs.GetString("eopf_category").empty() ||
-                     !zattrs.GetString("eopf:resolutions").empty()))
-                {
-                    CPLDebug("EOPFZARR", "Dataset at %s identified as EOPF by .zmetadata markers", pathToCheck.c_str());
-                    return true;
-                }
-            }
+            mainPath       = withoutPrefix.substr(1, quoteColon - 1);
+            subdatasetPath = withoutPrefix.substr(quoteColon + 2); // skip ":
+            CPLDebug("EOPFZARR","  ➜ quoted+subds  main=\"%s\"  sub=\"%s\"",
+                     mainPath.c_str(), subdatasetPath.c_str());
+        }
+        else if (endQuote != std::string::npos)  /* form 2 */
+        {
+            mainPath       = withoutPrefix.substr(1, endQuote - 1);
+            subdatasetPath.clear();
+            CPLDebug("EOPFZARR","  ➜ quoted root   main=\"%s\"", mainPath.c_str());
+        }
+        else
+        {
+            mainPath = withoutPrefix;
+        }
+    }
+    else if (IsUrlOrVirtualPath(withoutPrefix))
+    {
+        // For URLs and GDAL VFS paths, do NOT split at colon
+        mainPath = withoutPrefix;
+        subdatasetPath.clear();
+        CPLDebug("EOPFZARR","  ➜ URL/VFS path   main=\"%s\"", mainPath.c_str());
+    }
+    else
+    {
+        // Unquoted local style; split at the first *real* ':'
+        size_t delim = withoutPrefix.find(':');
+    #ifdef _WIN32
+        if (delim == 1)                 // C: drive letter – skip it
+            delim = withoutPrefix.find(':', 2);
+    #endif
+        if (delim != std::string::npos)
+        {
+            mainPath       = withoutPrefix.substr(0, delim);
+            subdatasetPath = withoutPrefix.substr(delim + 1);
+            CPLDebug("EOPFZARR","  ➜ local split   main=\"%s\"  sub=\"%s\"",
+                     mainPath.c_str(), subdatasetPath.c_str());
+        }
+        else
+        {
+            mainPath       = withoutPrefix;
+            subdatasetPath.clear();
         }
     }
 
-    // 2. Check if it's a subdataset path with EOPFZARR prefix
-    if (STARTS_WITH_CI(path.c_str(), "EOPFZARR:"))
-    {
-        CPLDebug("EOPFZARR", "Path starts with EOPFZARR: prefix, accepting");
-        return true;
-    }
+    // 3. decide if URL / VFS
+    const bool isVirtual = IsUrlOrVirtualPath(mainPath);
 
-    return false;
+    // 4. WINDOWS normalisation (local paths **only**)
+    #ifdef _WIN32
+    if (!isVirtual)
+    {
+        std::replace(mainPath.begin(), mainPath.end(), '/', '\\');
+        if (mainPath.size() > 2 && mainPath[0] == '\\' &&
+            mainPath[2] == ':' && mainPath[1] != '\\')
+            mainPath.erase(0, 1);
+        if (mainPath.size() > 3 && mainPath.back() == '\\')
+            mainPath.pop_back();
+    }
+    #endif
+
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: out  main=\"%s\"  sub=\"%s\"  url=%s",
+             mainPath.c_str(), subdatasetPath.c_str(),
+             isVirtual ? "YES" : "NO");
+
+    return !subdatasetPath.empty();
 }
+
 /* -------------------------------------------------------------------- */
 /*      Identify — only accept Zarr files with the EOPF prefix           */
 /* -------------------------------------------------------------------- */
@@ -343,7 +323,20 @@ static GDALDataset *OpenSubdataset(const std::string &mainPath,
 {
     char *const azDrvList[] = {(char *)"Zarr", nullptr};
 
-    // Try direct path first - most reliable for QGIS
+    // Try direct path with Zarr syntax if subdataset is specified
+    GDALDataset *poDS = nullptr;
+    if (!subdatasetPath.empty())
+    {
+        std::string zarrPath = "ZARR:\"" + mainPath + "\":" + subdatasetPath;
+        CPLDebug("EOPFZARR", "Attempting to open subdataset with Zarr syntax: %s", zarrPath.c_str());
+        poDS = static_cast<GDALDataset *>(GDALOpenEx(zarrPath.c_str(),
+                                                     nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                                                     azDrvList, papszOpenOptions, nullptr));
+        if (poDS)
+            return poDS;
+    }
+
+    // Fallback to direct path concatenation
     std::string directPath = mainPath;
     if (!directPath.empty() && directPath.back() != '/' && directPath.back() != '\\')
 #ifdef _WIN32
@@ -354,19 +347,19 @@ static GDALDataset *OpenSubdataset(const std::string &mainPath,
     directPath += subdatasetPath;
 
     CPLDebug("EOPFZARR", "Attempting to open subdataset directly: %s", directPath.c_str());
-    GDALDataset *poDS = static_cast<GDALDataset *>(GDALOpenEx(directPath.c_str(),
-                                                              nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY, azDrvList, papszOpenOptions, nullptr));
-
+    poDS = static_cast<GDALDataset *>(GDALOpenEx(directPath.c_str(),
+                                                 nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                                                 azDrvList, papszOpenOptions, nullptr));
     if (poDS)
         return poDS;
 
-    // If direct access fails, try opening parent and then finding the subdataset
+    // If direct access fails, try opening parent and finding the subdataset
     CPLDebug("EOPFZARR", "Direct access failed, trying through parent dataset");
 
     // Open parent dataset
     GDALDataset *poParentDS = static_cast<GDALDataset *>(GDALOpenEx(mainPath.c_str(),
-                                                                    nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY, azDrvList, papszOpenOptions, nullptr));
-
+                                                                    nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                                                                    azDrvList, papszOpenOptions, nullptr));
     if (!poParentDS)
     {
         CPLDebug("EOPFZARR", "Failed to open parent dataset: %s", mainPath.c_str());
@@ -401,7 +394,7 @@ static GDALDataset *OpenSubdataset(const std::string &mainPath,
         const char *pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
         if (pszKey && pszValue && STARTS_WITH_CI(pszValue, "ZARR:"))
         {
-            // Try to extract subdataset path from ZARR path
+            // Extract subdataset path from ZARR path
             std::string extractedPath = pszValue;
             size_t pathEndPos = extractedPath.find("\":", 5); // Look for ": after ZARR:
 
@@ -418,19 +411,14 @@ static GDALDataset *OpenSubdataset(const std::string &mainPath,
 
                 if (subdsComponent == cleanSubdsPath)
                 {
-                    // Found a matching subdataset, open it directly
                     CPLDebug("EOPFZARR", "Found matching subdataset: %s", pszValue);
-
                     CPLErrorHandler oldHandler = CPLSetErrorHandler(CPLQuietErrorHandler);
                     poDS = static_cast<GDALDataset *>(GDALOpenEx(pszValue,
                                                                  nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
                                                                  azDrvList, papszOpenOptions, nullptr));
                     CPLSetErrorHandler(oldHandler);
-
                     if (poDS)
-                    {
                         return poDS;
-                    }
                 }
             }
         }
@@ -440,6 +428,7 @@ static GDALDataset *OpenSubdataset(const std::string &mainPath,
     CPLDebug("EOPFZARR", "No matching subdataset found for: %s", subdatasetPath.c_str());
     return nullptr;
 }
+
 
 static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
 {
@@ -592,7 +581,7 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     // Create our own driver without modifying Zarr driver
     GDALDriver *driver = new GDALDriver();
     driver->SetDescription("EOPFZARR");
-    driver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver");
+    driver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver 1");
     driver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
