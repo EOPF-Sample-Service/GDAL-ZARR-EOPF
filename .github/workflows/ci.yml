@@ -154,6 +154,20 @@ jobs:
         run: |
             gdalinfo --formats | grep -qi EOPFZARR
 
+      - name: Check Architecture (macOS)
+        if: runner.os == 'macOS'
+        run: file build/Release/gdal_EOPFZarr*.dylib
+      
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          export GDAL_DRIVER_PATH=${{ github.workspace }}/build/${{ matrix.cfg }}
+          gdalinfo --debug on --formats 2>&1 | tee gdalinfo.log
+          if ! grep -qi EOPFZarr gdalinfo.log; then
+            echo "EOPFZarr plugin not found in formats"
+            exit 1
+          fi
+
 
       #################################################
       #  Upload artefact
