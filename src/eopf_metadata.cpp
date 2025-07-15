@@ -225,7 +225,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
     // -----------------------------------
     // STEP 3: For UTM Zone 32N (EPSG:32632), use proj:bbox if available or set defaults
     // -----------------------------------
-    if (nEPSG == 32632) { // Assuming this is the target EPSG for proj:bbox
+    if (isUTM) { // Assuming this is the target EPSG for proj:bbox
         bool foundProjBbox = false;
         double bboxMinX = 0.0, bboxMinY = 0.0, bboxMaxX = 0.0, bboxMaxY = 0.0;
 
