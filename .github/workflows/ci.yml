@@ -56,7 +56,7 @@ jobs:
   #  Build & test matrix  (Linux, macOS, Windows  ×  GDAL 3.10 / 3.11)
   ###############################################################################
   build-test:
-    name: Build & Test ${{ matrix.os }} / GDAL ${{ matrix.gdal }}
+    name: Build & Test ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
 
@@ -156,7 +156,7 @@ jobs:
 
       - name: Check Architecture (macOS)
         if: runner.os == 'macOS'
-        run: file build/Release/gdal_EOPFZarr*.dylib
+        run: file build/Release/gdal_EOPFZarr.dylib
       
       - name: Smoke test (macOS)
         if: runner.os == 'macOS'
@@ -174,7 +174,7 @@ jobs:
       #################################################
       - uses: actions/upload-artifact@v4
         with:
-          name: gdal_EOPFZarr-${{ runner.os }}-gdal${{ matrix.gdal }}
+          name: gdal_EOPFZarr-${{ runner.os }}
           path: |
             build/Release/gdal_EOPFZarr*.so
             build/Release/gdal_EOPFZarr*.dll
