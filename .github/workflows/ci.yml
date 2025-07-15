@@ -131,7 +131,7 @@ jobs:
                 -DCMAKE_OSX_ARCHITECTURES=arm64
       
       - name: Build (Linux/macOS)
-        if: runner.os == 'Linux'
+        if: runner.os != 'Windows'
         run: cmake --build build/${{ matrix.cfg }} --parallel
 
       - name: Configure (Windows • Ninja+MSVC)
