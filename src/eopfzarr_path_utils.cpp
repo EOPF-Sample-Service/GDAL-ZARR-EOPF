@@ -36,35 +36,24 @@ namespace EOPFPathUtils
 
         if (result.isUrl || result.isVirtualPath)
         {
-            result.mainPath = mainPathForChecking;  // Use unquoted path
-            result.subdatasetPath = "";
-            
-            // For quoted URLs with subdatasets, combine the paths
+            // For URLs, treat the entire quoted path as the main path
             if (startQuote != std::string::npos)
             {
                 size_t endQuote = pathWithoutPrefix.find('\"', startQuote + 1);
-                if (endQuote != std::string::npos && endQuote + 1 < pathWithoutPrefix.length() && pathWithoutPrefix[endQuote + 1] == ':')
+                if (endQuote != std::string::npos && endQuote > startQuote + 1)
                 {
-                    std::string subdatasetPart = pathWithoutPrefix.substr(endQuote + 2);
-                    
-                    // For URLs, combine main path and subdataset path directly
-                    // Remove leading slash from subdataset part if present
-                    if (!subdatasetPart.empty() && subdatasetPart[0] == '/')
-                    {
-                        subdatasetPart = subdatasetPart.substr(1);
-                    }
-                    
-                    // Ensure main path ends with slash
-                    if (!result.mainPath.empty() && result.mainPath.back() != '/')
-                    {
-                        result.mainPath += '/';
-                    }
-                    
-                    // Combine the paths
-                    result.mainPath += subdatasetPart;
-                    result.isSubdataset = false;  // Treat as single main path for URLs
+                    // Use the entire quoted path as the main path (includes any subdataset components)
+                    result.mainPath = pathWithoutPrefix.substr(startQuote + 1, endQuote - startQuote - 1);
+                    result.subdatasetPath = "";
+                    result.isSubdataset = false;  // URLs with subdatasets are treated as single main paths
+                    return result;
                 }
             }
+            
+            // Fallback for unquoted URLs
+            result.mainPath = mainPathForChecking;
+            result.subdatasetPath = "";
+            result.isSubdataset = false;
             return result;
         }
 
