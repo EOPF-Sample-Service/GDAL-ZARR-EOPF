@@ -302,6 +302,25 @@ We welcome contributions! Here's how to get involved:
 
 ---
 
+## 📁 Project Structure
+
+The project is organized with clear separation of concerns:
+
+```
+GDAL-ZARR-EOPF/
+├── src/                    # Core driver implementation  
+├── include/                # Header files
+├── tests/                  # Comprehensive unit test suite
+├── docs/                   # Complete documentation
+├── notebooks/              # Usage examples
+├── cmake/                  # Build system modules
+└── .github/               # CI/CD workflows
+```
+
+For detailed structure information, see [Project Structure Guide](docs/project-structure.md).
+
+---
+
 ## Support & Community
 
 - **📚 Documentation**: [User Guide](docs/user-guide.md) | [API Docs](docs/api.md) | [FAQ](docs/faq.md)

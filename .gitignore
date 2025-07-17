@@ -1,85 +1,78 @@
-cdse-venv/
-/.vs
-/out/build/x64-Debug
-/out/build/Linux-GCC-Debug
-/CMakeSettings.json
-/out/build
-/build
-/src/zarrdriver_original.cpp
-/venv
-venv/bin/adig
-/qgis_eopfzarr_plugin.py
-/build-and-install.ps1
-/watch.ps1
-/.idea
-/comprehensive_url_test.py
-/FINAL_STATUS_REPORT.py
-/gdal_test_output.txt
-/GITHUB_ISSUE.md
-/status_report.py
-/test_http.txt
-/test_output.txt
-/test_real_url.txt
-/test_url_fix.py
-/test_virtual_fs_fix.py
-/test_vsicurl.txt
-/build_static/
-build_test/
+# Build directories
+build/
+build-*/
+*-build/
+out/
+Release/
+Debug/
 
-# Test workspace - contains validation scripts and temporary documentation
-test_workspace/
+# IDE directories
+.vs/
+.vscode/
+.idea/
 
-# HTTPS URL testing files
-test_https_url.py
-test_url_parsing_fix.py
-test_working_https.py
-test_working_url.py
-final_validation.py
-https_url_success_demo.py
-release-build/
-test-build/
-test-build2/
-test-build2/
+# OS directories
+.DS_Store
+Thumbs.db
 
-test-build3/
-build_github_actions/
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
 
-# DLL analysis and diagnostic files (temporary)
-analyze_dll_dependencies.py
-*dll_analysis*.py
-*dll_analysis*.json
-advanced_dll_analysis.*
-three_dll_analysis.*
-test_dll_loading.*
-test_all_three_dlls.*
-test_github_actions_dll.*
-replicate_github_actions_build.*
-github_actions_dll_test.txt
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
+install_manifest.txt
 
-# Build helper scripts (local only)
-build-linux.sh
-build-local.ps1
-build-windows.bat
-build-windows.ps1
+# GDAL driver artifacts
+*.dll
+*.so
+*.dylib
+*.def
 
-# Internal documentation (not for repository)
-BRANCH_SUMMARY.md
-GITHUB_ACTIONS_ARTIFACTS_STATUS.md
-MACOS_ARM64_IMPLEMENTATION.md
+# Test artifacts
+test_*.bat
+watch.ps1
 
-# Recent test and diagnostic files
-check_gdal_version.bat
-test_latest_dll.ps1
-test_latest_dll.py
-test_latest_simple.bat
-test_latest_simple.ps1
-update_gdal_guide.bat
-debug-install.bat
-test-install-full.bat
-test-plugin-detection.bat
-simple-test.bat
+# Temporary files
+*.tmp
+*.temp
+*~
 
-# Draft publication materials (review before commit)
-CAPABILITIES.md
-PUBLICATION_CHECKLIST.md
-README_NEW.md
+# Log files
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Package management
+node_modules/
+.npm/
+
+# Backup files
+*.bak
+*.backup
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+ENV/

@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\yadagale\source\repos\GDAL-ZARR-EOPF\src\eopfzarr_driver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\yadagale\source\repos\GDAL-ZARR-EOPF\src\eopfzarr_dataset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\yadagale\source\repos\GDAL-ZARR-EOPF\src\eopf_metadata.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\yadagale\source\repos\GDAL-ZARR-EOPF\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{0DC05E64-9FF5-33FF-BC3B-CBF572C47F59}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

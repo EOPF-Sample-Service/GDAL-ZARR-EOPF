@@ -135,7 +135,7 @@ endif()
 
 if(WIN32)
     add_test(NAME driver_registration
-             COMMAND cmd.exe /C "set GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} && gdalinfo --formats | findstr EOPFZARR")
+             COMMAND powershell.exe -Command "$env:GDAL_DRIVER_PATH='${CMAKE_BINARY_DIR}'; gdalinfo --formats | Select-String EOPFZARR")
 elseif(APPLE)
     add_test(NAME driver_registration 
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
@@ -188,3 +188,83 @@ endif()
 # Reset CMAKE_REQUIRED variables
 unset(CMAKE_REQUIRED_INCLUDES)
 unset(CMAKE_REQUIRED_LIBRARIES)
+
+# ========================================================================
+# Unit Testing Framework
+# ========================================================================
+
+# Only build tests if this is the main project or explicitly requested
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
+    
+    message(STATUS "Configuring unit tests...")
+    
+    # Test library with shared test utilities
+    add_library(eopfzarr_test_utils STATIC
+        tests/test_implementation.cpp
+    )
+    
+    target_include_directories(eopfzarr_test_utils PUBLIC
+        tests
+        src
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
+    target_link_libraries(eopfzarr_test_utils PUBLIC GDAL::GDAL)
+    
+    # Unit test executable for path parsing
+    add_executable(test_path_parsing
+        tests/test_path_parsing.cpp
+    )
+    
+    target_link_libraries(test_path_parsing PRIVATE 
+        eopfzarr_test_utils
+        GDAL::GDAL
+    )
+    
+    # Integration test executable
+    add_executable(test_driver_integration
+        tests/test_driver_integration.cpp
+    )
+    
+    target_link_libraries(test_driver_integration PRIVATE 
+        GDAL::GDAL
+    )
+    
+    # Compatibility test executable
+    add_executable(test_compatibility
+        tests/test_compatibility.cpp
+    )
+    
+    target_link_libraries(test_compatibility PRIVATE 
+        GDAL::GDAL
+    )
+    
+    # Add tests to CTest
+    add_test(NAME unit_path_parsing 
+             COMMAND test_path_parsing)
+    
+    add_test(NAME integration_driver
+             COMMAND test_driver_integration)
+             
+    add_test(NAME compatibility_urls
+             COMMAND test_compatibility)
+    
+    # Set test environment to find the driver
+    set_tests_properties(integration_driver compatibility_urls PROPERTIES
+        ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}")
+    
+    # Add a comprehensive test that runs all test suites
+    add_test(NAME comprehensive_test_suite
+             COMMAND ${CMAKE_COMMAND} 
+             -E echo "Running comprehensive test suite...")
+    
+    set_tests_properties(comprehensive_test_suite PROPERTIES
+        DEPENDS "unit_path_parsing;integration_driver;compatibility_urls")
+    
+    message(STATUS "✅ Unit tests configured successfully")
+    message(STATUS "   - Path parsing tests: test_path_parsing")
+    message(STATUS "   - Driver integration tests: test_driver_integration") 
+    message(STATUS "   - Compatibility tests: test_compatibility")
+    message(STATUS "   Run with: cmake --build . && ctest")
+    
+endif()
