@@ -1,154 +1,67 @@
-# GDAL EOPF-Zarr Plugin Documentation
+# EOPF-Zarr GDAL Driver Documentation
 
-Welcome to the comprehensive documentation for the GDAL EOPF-Zarr plugin! This plugin enables seamless integration of Earth Observation Processing Framework (EOPF) datasets with GDAL-based workflows.
-
-## 🚀 Quick Start
-
-**New to the plugin?** Start here:
-
-1. **[Getting Started Guide](../GETTING_STARTED.md)** - Installation and first steps
-2. **[Usage Examples](../USAGE_EXAMPLES.md)** - Command-line and Python examples  
-3. **[Installation Guide](installation.md)** - Detailed installation instructions
+Welcome to the comprehensive documentation for the EOPF-Zarr GDAL Plugin. This driver enables GDAL to read Zarr datasets with EOPF (Earth Observation Processing Framework) metadata.
 
 ## 📚 Documentation Index
 
-### User Documentation
+### Getting Started
 
-| Document | Description | Best For |
-|----------|-------------|----------|
-| **[Getting Started](../GETTING_STARTED.md)** | Quick setup and basic usage | New users |
-| **[User Guide](user-guide.md)** | Comprehensive usage examples | All users |
-| **[Installation Guide](installation.md)** | Detailed installation instructions | System administrators |
-| **[Usage Examples](../USAGE_EXAMPLES.md)** | Command-line and Python recipes | Developers |
-| **[FAQ](faq.md)** | Frequently asked questions | Troubleshooting |
-| **[Troubleshooting](troubleshooting.md)** | Common issues and solutions | Problem-solving |
+- **[Installation Guide](installation.md)** - How to install and configure the plugin
+- **[User Guide](user-guide.md)** - Basic usage and examples
+- **[Getting Started](../GETTING_STARTED.md)** - Quick start tutorial
 
 ### Technical Documentation
 
-| Document | Description | Best For |
-|----------|-------------|----------|
-| **[API Documentation](api.md)** | Developer API reference | Plugin developers |
-| **[Architecture](architecture.md)** | Technical architecture overview | Contributors |
-| **[Development Guide](development.md)** | Building and contributing | Developers |
-| **[Benchmarks](benchmarks.md)** | Performance metrics | Performance analysis |
+- **[Architecture](architecture.md)** - Technical architecture and design
+- **[API Reference](api.md)** - Complete API documentation
+- **[Development Guide](development.md)** - Contributing and development setup
 
-## 🎯 Use Case Guides
+### Advanced Topics
 
-### By Application
+- **[Zarr Specifications](zarr_v3_spec.md)** - Zarr v3 specification details
+- **[GDAL Driver Development](zarr%20driver%20development%20in%20gdal.md)** - GDAL driver development insights
+- **[Roadmap](zarr_gdal_roadmap.md)** - Development roadmap and future plans
+- **[Current Capabilities](__Current%20Capabilities%20of%20the%20GDAL%20Zarr%20Driver__.md)** - Feature overview
 
-- **QGIS Users**: See [User Guide § QGIS Integration](user-guide.md#qgis-integration)
-- **Python Developers**: See [Usage Examples § Python Usage](../USAGE_EXAMPLES.md#python-usage)
-- **Command Line**: See [Usage Examples § Command Line](../USAGE_EXAMPLES.md#command-line-examples)
-- **Remote Data**: See [Usage Examples § Remote Data Access](../USAGE_EXAMPLES.md#remote-data-access)
+### Support & Troubleshooting
 
-### By Data Type
+- **[FAQ](faq.md)** - Frequently asked questions
+- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
+- **[Benchmarks](benchmarks.md)** - Performance benchmarks and optimization
 
-- **Sentinel Data**: See [User Guide § Sentinel Examples](user-guide.md#sentinel-data-examples)
-- **STAC Catalogs**: See [User Guide § STAC Integration](user-guide.md#stac-integration)
-- **Cloud Data**: See [User Guide § Cloud Access](user-guide.md#cloud-data-access)
+## 🚀 Quick Links
 
-## 🔧 Getting the Plugin
+### For Users
 
-Since official releases are pending stakeholder approval, here are your current options:
+1. [Install the plugin](installation.md)
+2. [Read the user guide](user-guide.md)
+3. [Check usage examples](../USAGE_EXAMPLES.md)
 
-### Option 1: Build from Source (Recommended)
-```bash
-git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
-cd GDAL-ZARR-EOPF
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . -j$(nproc)
-```
+### For Developers
 
-### Option 2: GitHub Actions Artifacts
-1. Go to [GitHub Actions](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions)
-2. Download the latest successful build for your platform
-3. Extract and use installation scripts
+1. [Development setup](development.md)
+2. [Architecture overview](architecture.md)
+3. [Contributing guidelines](../CONTRIBUTING.md)
 
-### Option 3: Request Access
-Contact maintainers via [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues) for testing builds.
+## 📖 Additional Resources
 
-## ⚡ Quick Verification
+- **[Main README](../README.md)** - Project overview
+- **[Changelog](../CHANGELOG.md)** - Version history
+- **[Contributing](../CONTRIBUTING.md)** - How to contribute
+- **[Security](../SECURITY.md)** - Security policies
+- **[License](../LICENSE)** - Project license
 
-After installation, verify the plugin works:
+## 🔧 Testing
 
-```bash
-# Check plugin is loaded
-gdalinfo --formats | grep EOPFZARR
+The project includes comprehensive unit tests:
 
-# Test with a dataset
-gdalinfo EOPFZARR:/path/to/your/dataset.zarr
-```
+- Path parsing validation
+- Driver integration tests  
+- Backward compatibility verification
+- Live cloud data testing
 
-## 🎓 Learning Path
-
-**Recommended learning progression:**
-
-1. **Start**: [Getting Started Guide](../GETTING_STARTED.md)
-2. **Practice**: [Usage Examples](../USAGE_EXAMPLES.md)
-3. **Deep Dive**: [User Guide](user-guide.md)
-4. **Troubleshoot**: [FAQ](faq.md) & [Troubleshooting](troubleshooting.md)
-5. **Contribute**: [Development Guide](development.md)
-
-## 🆘 Getting Help
-
-- **Issues & Bugs**: [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
-- **Questions**: [GitHub Discussions](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/discussions)
-- **Community**: [Contributing Guide](../CONTRIBUTING.md)
-
-## 📋 System Requirements
-
-- **GDAL**: 3.10+ (3.11+ recommended)
-- **Platforms**: Windows, macOS, Linux
-- **Languages**: C++17, Python 3.8+ (optional)
-
-## 🎯 What Makes This Plugin Special
-
-✅ **Zero Configuration** - Works immediately with QGIS and all GDAL tools  
-✅ **Smart Geospatial** - Automatic CRS detection and geotransform calculation  
-✅ **Production Ready** - Thread-safe, memory-efficient, cross-platform  
-✅ **Python Friendly** - NumPy integration and standard GDAL API  
-✅ **Cloud Native** - HTTP/HTTPS access and STAC metadata support
+Run tests with: `cmake --build . && ctest`
 
 ---
 
-**Ready to start?** Head to the [Getting Started Guide](../GETTING_STARTED.md) or jump straight to [Usage Examples](../USAGE_EXAMPLES.md)!
-- **[Zarr Specification](https://zarr.readthedocs.io/)** - Zarr format specification
-- **[EOPF Documentation](https://eopf-cpm.eumetsat.int/)** - Earth Observation Processing Framework
-
-### Community
-- **[GitHub Repository](https://github.com/Yuvraj198920/GDAL-ZARR-EOPF)** - Source code and issues
-- **[GitHub Discussions](https://github.com/Yuvraj198920/GDAL-ZARR-EOPF/discussions)** - Community discussions
-
-## Documentation Structure
-
-```
-docs/
-├── README.md           # This file - documentation overview
-├── installation.md     # Installation and setup guide
-├── user-guide.md       # User guide with examples
-├── api.md             # API reference documentation
-├── architecture.md     # Technical architecture
-├── faq.md             # Frequently asked questions
-└── development.md      # Development guide
-```
-
-## Contributing to Documentation
-
-We welcome improvements to our documentation! Please see the [Contributing Guide](../CONTRIBUTING.md) for details on how to contribute.
-
-### Documentation Standards
-- Use clear, concise language
-- Include code examples where helpful
-- Keep information up to date
-- Follow Markdown best practices
-- Test all code examples
-
-## Getting Help
-
-If you can't find what you're looking for in the documentation:
-
-1. Check the [FAQ](faq.md) for common questions
-2. Search [GitHub Issues](https://github.com/Yuvraj198920/GDAL-ZARR-EOPF/issues)
-3. Create a new issue if your question isn't answered
-4. Join the discussion in [GitHub Discussions](https://github.com/Yuvraj198920/GDAL-ZARR-EOPF/discussions)
+*For questions or support, please check the [FAQ](faq.md) or open an issue on GitHub.*
