@@ -194,8 +194,17 @@ int main()
     std::cout << "====================================" << std::endl;
     
     try {
-        // Register GDAL drivers
+        // Register GDAL drivers with error checking
         GDALAllRegister();
+        
+        // Check if GDAL is properly initialized
+        int driverCount = GDALGetDriverCount();
+        if (driverCount == 0) {
+            std::cerr << "❌ GDAL initialization failed - no drivers found" << std::endl;
+            return 1;
+        }
+        
+        std::cout << "✅ GDAL initialized successfully with " << driverCount << " drivers" << std::endl;
         
         // Run individual tests
         assert(testPerformanceCache());

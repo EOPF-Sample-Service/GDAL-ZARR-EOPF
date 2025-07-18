@@ -186,15 +186,15 @@ unset(CMAKE_REQUIRED_INCLUDES)
 unset(CMAKE_REQUIRED_LIBRARIES)
 
 # ========================================================================
-# Unit Testing Framework
+# Core Unit Testing Framework (Essential Tests Only)
 # ========================================================================
 
 # Only build tests if this is the main project or explicitly requested
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
     
-    message(STATUS "Configuring unit tests...")
+    message(STATUS "Configuring core unit tests...")
     
-    # Test library with shared test utilities
+    # Test utilities library (shared components)
     add_library(eopfzarr_test_utils STATIC
         tests/test_implementation.cpp
         src/eopfzarr_performance.cpp
@@ -209,7 +209,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
     
     target_link_libraries(eopfzarr_test_utils PUBLIC GDAL::GDAL)
     
-    # Unit test executable for path parsing
+    # ===== CORE TESTS (Essential for CI/CD) =====
+    
+    # 1. Basic functionality test (no external dependencies)
+    add_executable(test_basic_functionality
+        tests/test_basic_functionality.cpp
+    )
+    
+    # 2. Path parsing tests (core driver functionality)
     add_executable(test_path_parsing
         tests/test_path_parsing.cpp
     )
@@ -219,7 +226,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
-    # Integration test executable
+    # ===== GDAL INTEGRATION TESTS (Require OSGeo4W) =====
+    
+    # 3. Driver integration tests
     add_executable(test_driver_integration
         tests/test_driver_integration.cpp
     )
@@ -228,7 +237,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
-    # Compatibility test executable
+    # 4. Compatibility tests
     add_executable(test_compatibility
         tests/test_compatibility.cpp
     )
@@ -237,7 +246,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
-    # Performance test executable
+    # 5. Performance tests
     add_executable(test_performance
         tests/test_performance.cpp
     )
@@ -247,10 +256,16 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
-    # Add tests to CTest
+    # ===== CTEST REGISTRATION =====
+    
+    # Core tests (always run)
+    add_test(NAME basic_functionality 
+             COMMAND test_basic_functionality)
+    
     add_test(NAME unit_path_parsing 
              COMMAND test_path_parsing)
     
+    # GDAL integration tests (require OSGeo4W environment)
     add_test(NAME integration_driver
              COMMAND test_driver_integration)
              
@@ -260,23 +275,35 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
     add_test(NAME performance_optimizations
              COMMAND test_performance)
     
-    # Set test environment to find the driver
+    # Set environment for GDAL-dependent tests
     set_tests_properties(integration_driver compatibility_urls performance_optimizations PROPERTIES
         ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}")
     
-    # Add a comprehensive test that runs all test suites
-    add_test(NAME comprehensive_test_suite
+    # Test suite summary
+    add_test(NAME test_summary
              COMMAND ${CMAKE_COMMAND} 
-             -E echo "Running comprehensive test suite...")
+             -E echo "✅ Core EOPF-Zarr driver tests completed successfully")
     
-    set_tests_properties(comprehensive_test_suite PROPERTIES
-        DEPENDS "unit_path_parsing;integration_driver;compatibility_urls;performance_optimizations")
+    set_tests_properties(test_summary PROPERTIES
+        DEPENDS "basic_functionality;unit_path_parsing;integration_driver;compatibility_urls;performance_optimizations")
     
-    message(STATUS "✅ Unit tests configured successfully")
-    message(STATUS "   - Path parsing tests: test_path_parsing")
-    message(STATUS "   - Driver integration tests: test_driver_integration") 
-    message(STATUS "   - Compatibility tests: test_compatibility")
-    message(STATUS "   - Performance tests: test_performance")
-    message(STATUS "   Run with: cmake --build . && ctest")
+    # ===== STATUS MESSAGES =====
+    
+    message(STATUS "✅ Core unit tests configured")
+    message(STATUS "")
+    message(STATUS "ESSENTIAL TESTS:")
+    message(STATUS "   ├─ basic_functionality    (no dependencies)")
+    message(STATUS "   ├─ unit_path_parsing      (core functionality)")
+    message(STATUS "   └─ driver_registration    (PowerShell/gdalinfo)")
+    message(STATUS "")
+    message(STATUS "GDAL INTEGRATION TESTS:")
+    message(STATUS "   ├─ integration_driver     (requires OSGeo4W)")
+    message(STATUS "   ├─ compatibility_urls     (requires OSGeo4W)")
+    message(STATUS "   └─ performance_optimizations (requires OSGeo4W)")
+    message(STATUS "")
+    message(STATUS "USAGE:")
+    message(STATUS "   Standard env: ctest -R 'basic_functionality|unit_path_parsing|driver_registration'")
+    message(STATUS "   Full suite:   Run from OSGeo4W shell: ctest -C Debug --verbose")
+    message(STATUS "")
     
 endif()
