@@ -701,7 +701,7 @@ bool EOPFZarrRasterBandPerf::ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nB
     return recentAccesses >= 3;
 }
 
-void EOPFZarrRasterBandPerf::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const
+void EOPFZarrRasterBandPerf::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff)
 {
     // Prefetch right and down blocks (common access patterns)
     int nBlocksPerRow, nBlocksPerCol;
@@ -725,8 +725,10 @@ void EOPFZarrRasterBandPerf::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYO
             // Prefetch by reading into a dummy buffer (GDAL will cache it)
             int blockSizeBytes = GDALGetDataTypeSizeBytes(eDataType) * nBlocksPerRow * nBlocksPerCol;
             void* dummyBuffer = CPLMalloc(blockSizeBytes);
-            m_poUnderlyingBand->ReadBlock(block.first, block.second, dummyBuffer);
+            CPLErr err = m_poUnderlyingBand->ReadBlock(block.first, block.second, dummyBuffer);
             CPLFree(dummyBuffer);
+            // Ignore errors in prefetching as it's just an optimization
+            (void)err;
         }
     }
 }

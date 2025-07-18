@@ -118,3 +118,11 @@ ctest -C Release --verbose
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## Documentation
+
+- **[Installation Guide](INSTALLATION.md)** - Detailed setup instructions
+- **[Usage Guide](USAGE.md)** - Examples and best practices  
+- **[Contributing](CONTRIBUTING.md)** - Developer guidelines
+- **[Troubleshooting](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Changelog](CHANGELOG.md)** - Version history and changes

@@ -65,14 +65,7 @@ endif()
 message(STATUS "GDAL include directories: ${GDAL_INCLUDE_DIRS}")
 message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
 
-# Add version compatibility defines
-if(GDAL_VERSION)
-    # Define GDAL version for compatibility checks in code
-    string(REPLACE "." "" GDAL_VERSION_NUM "${GDAL_VERSION}")
-    string(SUBSTRING "${GDAL_VERSION_NUM}" 0 3 GDAL_VERSION_NUM)
-    add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUM})
-    message(STATUS "GDAL version define: GDAL_VERSION_NUM=${GDAL_VERSION_NUM}")
-endif()
+# Version already defined above - no need for duplicate
 
 # Main driver library (MODULE)
 add_library(gdal_EOPFZarr MODULE

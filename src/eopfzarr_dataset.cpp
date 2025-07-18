@@ -756,7 +756,7 @@ bool EOPFZarrRasterBand::ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nBlock
     return adjacentCount >= 2;
 }
 
-void EOPFZarrRasterBand::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const
+void EOPFZarrRasterBand::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff)
 {
     // This is a placeholder for prefetching logic
     // In a full implementation, you might:

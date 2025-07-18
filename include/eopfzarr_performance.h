@@ -189,7 +189,7 @@ private:
     // Performance optimization methods
     void TrackBlockAccess(int nBlockXOff, int nBlockYOff) const;
     bool ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const;
-    void PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const;
+    void PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff);
 };
 
 // Performance helper functions
