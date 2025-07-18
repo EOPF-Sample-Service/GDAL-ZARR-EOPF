@@ -76,3 +76,17 @@ coverage.xml
 venv/
 env/
 ENV/
+
+# Test artifacts and temporary files
+tests/experimental/
+tests/temp/
+tests/output/
+tests/*.tmp
+tests/*.log
+*.test
+test_output_*
+
+# CTest generated files
+Testing/
+DartConfiguration.tcl
+CTestTestfile.cmake

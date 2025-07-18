@@ -3,6 +3,7 @@
 #include "gdal_pam.h"
 #include "gdal_version.h"
 #include "gdal_proxy.h"
+#include "eopfzarr_performance.h"
 #include <memory>
 
 namespace EOPF
@@ -14,10 +15,17 @@ class EOPFZarrDataset : public GDALPamDataset
 {
   private:
     std::unique_ptr<GDALDataset> mInner;
+    mutable EOPFPerformanceCache mCache;
+    
+    // Legacy members for compatibility
     char **mSubdatasets;
     mutable OGRSpatialReference *mCachedSpatialRef = nullptr;
-    char **m_papszDefaultDomainFilteredMetadata = nullptr;
+    mutable char **m_papszDefaultDomainFilteredMetadata = nullptr;
     bool m_bPamInitialized;
+    
+    // Performance optimization flags
+    mutable bool mMetadataLoaded;
+    mutable bool mGeospatialInfoProcessed;
 
   public:
     EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver *selfDrv);
@@ -26,8 +34,10 @@ class EOPFZarrDataset : public GDALPamDataset
     // Factory method
     static EOPFZarrDataset *Create(GDALDataset *inner, GDALDriver *drv);
 
-    // Load metadata from Zarr file
+    // Optimized metadata loading
     void LoadEOPFMetadata();
+    void LoadGeospatialInfo() const;
+    void ProcessCornerCoordinates() const;
 
     char **GetFileList() override;
 
@@ -62,6 +72,12 @@ class EOPFZarrDataset : public GDALPamDataset
 #endif
 
     CPLXMLNode *SerializeToXML(const char *pszUnused) override;
+    
+  private:
+    // Performance helper methods
+    void OptimizedMetadataMerge() const;
+    void CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY);
+    bool TryFastPathMetadata(const char* key, const char** outValue) const;
 };
 
 class EOPFZarrRasterBand : public GDALProxyRasterBand
@@ -69,6 +85,17 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
   private:
     GDALRasterBand *m_poUnderlyingBand;
     EOPFZarrDataset *m_poDS;
+    
+    // Performance optimization members
+    struct PairHash {
+        size_t operator()(const std::pair<int,int>& p) const {
+            return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
+        }
+    };
+    
+    mutable std::unordered_map<std::pair<int,int>, std::chrono::time_point<std::chrono::steady_clock>, 
+                              PairHash> mBlockAccessTimes;
+    static constexpr size_t MAX_BLOCK_CACHE_SIZE = 64;
 
   public:
     EOPFZarrRasterBand(EOPFZarrDataset *poDS, GDALRasterBand *poUnderlyingBand,
@@ -83,4 +110,10 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
 #endif
     // Add the IReadBlock method
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void *pImage) override;
+    
+  private:
+    // Performance optimization methods
+    void TrackBlockAccess(int nBlockXOff, int nBlockYOff) const;
+    bool ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const;
+    void PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff);
 };

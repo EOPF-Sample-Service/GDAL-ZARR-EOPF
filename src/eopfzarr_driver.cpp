@@ -107,7 +107,16 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
         CPLDebug("EOPFZARR", "ParseSubdatasetPath: Removed prefix, now: %s", pathWithoutPrefix.c_str());
     }
 
-    // Check for quoted path format first: "path" or "path":subds
+    // Check if this is a URL or virtual path - if so, don't parse for subdatasets
+    if (IsUrlOrVirtualPath(pathWithoutPrefix))
+    {
+        mainPath = pathWithoutPrefix;
+        subdatasetPath = "";
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: URL/Virtual path detected early, no subdataset parsing - Main: %s", mainPath.c_str());
+        return false;
+    }
+
+    // Check for quoted path format: "path":subds
     size_t startQuote = pathWithoutPrefix.find('\"');
     if (startQuote != std::string::npos)
     {
@@ -115,19 +124,7 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
         if (endQuote != std::string::npos && endQuote > startQuote + 1)
         {
             // We have a quoted path - extract it
-            std::string quotedPath = pathWithoutPrefix.substr(startQuote + 1, endQuote - startQuote - 1);
-            
-            // For URLs in quotes, treat the entire quoted content as the main path
-            if (IsUrlOrVirtualPath(quotedPath))
-            {
-                mainPath = quotedPath;
-                subdatasetPath = "";
-                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Quoted URL/Virtual path detected - Main: %s", mainPath.c_str());
-                return false;  // Not a subdataset, it's a complete URL path
-            }
-            
-            // For local files, check if there's a subdataset part after the quoted path
-            mainPath = quotedPath;
+            mainPath = pathWithoutPrefix.substr(startQuote + 1, endQuote - startQuote - 1);
 
             // Now check if there's a subdataset part after the quoted path
             if (endQuote + 1 < pathWithoutPrefix.length() && pathWithoutPrefix[endQuote + 1] == ':')
@@ -192,15 +189,6 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
                 return false;
             }
         }
-    }
-
-    // Check if this is an unquoted URL or virtual path (backward compatibility)
-    if (IsUrlOrVirtualPath(pathWithoutPrefix))
-    {
-        mainPath = pathWithoutPrefix;
-        subdatasetPath = "";
-        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Unquoted URL/Virtual path detected - Main: %s", mainPath.c_str());
-        return false;
     }
 
     // Check for simple path with subdataset separator (e.g., EOPFZARR:path:subds)
@@ -330,28 +318,18 @@ static int EOPFIdentify(GDALOpenInfo *poOpenInfo)
         return FALSE;
 
     const char *pszFilename = poOpenInfo->pszFilename;
-    
-    // Add debug logging to see what QGIS is sending
-    CPLDebug("EOPFZARR", "EOPFIdentify called with: %s", pszFilename);
 
     // Only identify with explicit prefixes or options
     if (STARTS_WITH_CI(pszFilename, "EOPFZARR:"))
-    {
-        CPLDebug("EOPFZARR", "Identified EOPFZARR prefix - returning TRUE");
         return TRUE;
-    }
 
     // Check EOPF_PROCESS option
     const char *pszEOPFProcess = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
     if (pszEOPFProcess &&
         (EQUAL(pszEOPFProcess, "YES") || EQUAL(pszEOPFProcess, "TRUE") || EQUAL(pszEOPFProcess, "1")))
-    {
-        CPLDebug("EOPFZARR", "Found EOPF_PROCESS option - returning TRUE");
         return TRUE;
-    }
 
     // Decline all other files
-    CPLDebug("EOPFZARR", "No EOPFZARR prefix or option found - returning FALSE");
     return FALSE;
 }
 
