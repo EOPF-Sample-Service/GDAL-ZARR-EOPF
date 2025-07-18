@@ -79,10 +79,13 @@ add_library(gdal_EOPFZarr MODULE
     src/eopfzarr_driver.cpp
     src/eopfzarr_dataset.cpp
     src/eopf_metadata.cpp
+    src/eopfzarr_performance.cpp
 )
 
 target_include_directories(gdal_EOPFZarr PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/include
+    include
+    src
 )
 
 target_link_libraries(gdal_EOPFZarr PRIVATE GDAL::GDAL)
@@ -201,11 +204,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
     # Test library with shared test utilities
     add_library(eopfzarr_test_utils STATIC
         tests/test_implementation.cpp
+        src/eopfzarr_performance.cpp
     )
     
     target_include_directories(eopfzarr_test_utils PUBLIC
         tests
         src
+        include
         ${CMAKE_CURRENT_BINARY_DIR}/include
     )
     
@@ -239,6 +244,16 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
+    # Performance test executable
+    add_executable(test_performance
+        tests/test_performance.cpp
+    )
+    
+    target_link_libraries(test_performance PRIVATE 
+        eopfzarr_test_utils
+        GDAL::GDAL
+    )
+    
     # Add tests to CTest
     add_test(NAME unit_path_parsing 
              COMMAND test_path_parsing)
@@ -248,9 +263,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
              
     add_test(NAME compatibility_urls
              COMMAND test_compatibility)
+             
+    add_test(NAME performance_optimizations
+             COMMAND test_performance)
     
     # Set test environment to find the driver
-    set_tests_properties(integration_driver compatibility_urls PROPERTIES
+    set_tests_properties(integration_driver compatibility_urls performance_optimizations PROPERTIES
         ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}")
     
     # Add a comprehensive test that runs all test suites
@@ -259,12 +277,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
              -E echo "Running comprehensive test suite...")
     
     set_tests_properties(comprehensive_test_suite PROPERTIES
-        DEPENDS "unit_path_parsing;integration_driver;compatibility_urls")
+        DEPENDS "unit_path_parsing;integration_driver;compatibility_urls;performance_optimizations")
     
     message(STATUS "✅ Unit tests configured successfully")
     message(STATUS "   - Path parsing tests: test_path_parsing")
     message(STATUS "   - Driver integration tests: test_driver_integration") 
     message(STATUS "   - Compatibility tests: test_compatibility")
+    message(STATUS "   - Performance tests: test_performance")
     message(STATUS "   Run with: cmake --build . && ctest")
     
 endif()
