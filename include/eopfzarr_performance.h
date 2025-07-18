@@ -154,7 +154,7 @@ public:
 private:
     // Performance helper methods
     void OptimizedMetadataMerge() const;
-    void CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY) const;
+    void CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY);
     bool TryFastPathMetadata(const char* key, const char** outValue) const;
 };
 

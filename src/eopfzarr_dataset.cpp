@@ -326,7 +326,7 @@ void EOPFZarrDataset::ProcessCornerCoordinates() const
     if (const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::GetGeoTransform(existingTransform) != CE_None && 
         (hasUtmCorners || hasGeographicCorners))
     {
-        CacheGeotransformFromCorners(
+        const_cast<EOPFZarrDataset*>(this)->CacheGeotransformFromCorners(
             hasUtmCorners ? utmMinX : lonMin,
             hasUtmCorners ? utmMaxX : lonMax,
             hasUtmCorners ? utmMinY : latMin,
@@ -678,7 +678,7 @@ void EOPFZarrDataset::OptimizedMetadataMerge() const
     mCache.SetCachedMetadata(m_papszDefaultDomainFilteredMetadata);
 }
 
-void EOPFZarrDataset::CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY) const
+void EOPFZarrDataset::CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY)
 {
     double adfGeoTransform[6] = {0};
 
@@ -694,7 +694,7 @@ void EOPFZarrDataset::CacheGeotransformFromCorners(double minX, double maxX, dou
         adfGeoTransform[4] = 0.0;                                // rotation, 0 if image is "north up"
         adfGeoTransform[5] = -std::fabs((maxY - minY) / height); // n-s pixel resolution (negative value)
 
-        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(adfGeoTransform);
+        GDALPamDataset::SetGeoTransform(adfGeoTransform);
         mCache.SetCachedGeoTransform(adfGeoTransform);
         
         CPLDebug("EOPFZARR", "Created geotransform from corner coordinates: [%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]",

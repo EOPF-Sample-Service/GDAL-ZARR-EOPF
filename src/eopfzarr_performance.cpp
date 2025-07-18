@@ -588,7 +588,7 @@ void EOPFZarrDatasetPerf::OptimizedMetadataMerge() const
     }
 }
 
-void EOPFZarrDatasetPerf::CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY) const
+void EOPFZarrDatasetPerf::CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY)
 {
     double gt[6];
     gt[0] = minX;           // Top-left X
