@@ -1,0 +1,61 @@
+# Build artifacts
+build/
+Release/
+Debug/
+*.dll
+*.so
+*.dylib
+
+# IDE and editor files
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+CHANGELOG.md
+README.md
+
+# Test files
+tests/experimental/
+tests/temp/
+tests/output/
+tests/*.tmp
+tests/*.log
+
+# Virtual environments
+venv/
+venv_eopf/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large sample data (if any)
+*.zarr/
+sample_data/
