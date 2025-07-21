@@ -8,7 +8,7 @@ LABEL version="1.0.0"
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages:/opt/conda/lib/python3.11/site-packages
+ENV PYTHONPATH=/usr/local/lib/python3.13/site-packages
 ENV GDAL_DRIVER_PATH=/opt/eopf-zarr/drivers
 ENV GDAL_DATA=/usr/share/gdal
 ENV PROJ_LIB=/usr/share/proj
@@ -28,8 +28,8 @@ RUN apt-get update && apt-get install -y \
     libproj-dev \
     libgeos-dev \
     # Python development
-    python3.11 \
-    python3.11-dev \
+    python3 \
+    python3-dev \
     python3-pip \
     # Additional utilities
     vim \
@@ -39,23 +39,29 @@ RUN apt-get update && apt-get install -y \
 # Verify GDAL version (should be 3.10.x on Ubuntu 25)
 RUN gdalinfo --version
 
-# Install Miniconda for better Python environment management
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh \
-    && bash /tmp/miniconda.sh -b -p /opt/conda \
-    && rm /tmp/miniconda.sh \
-    && /opt/conda/bin/conda clean -ay
+# Install Python packages using system pip to ensure compatibility with system GDAL
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+    GDAL==$(gdal-config --version) \
+    xarray \
+    zarr==2.18.* \
+    dask \
+    geopandas \
+    rasterio \
+    fiona \
+    shapely \
+    pyproj \
+    netcdf4 \
+    h5py \
+    scipy \
+    matplotlib \
+    cartopy \
+    ipykernel \
+    ipywidgets \
+    jupyterlab \
+    notebook
 
-# Add conda to PATH
-ENV PATH="/opt/conda/bin:$PATH"
-
-# Create conda environment with EOPF requirements
-COPY environment.yml /tmp/environment.yml
-RUN conda env create -f /tmp/environment.yml \
-    && conda clean -ay
-
-# Activate the eopf-zarr environment by default
-ENV CONDA_DEFAULT_ENV=eopf-zarr
-ENV PATH="/opt/conda/envs/eopf-zarr/bin:$PATH"
+# Update PYTHONPATH to use system Python site-packages
+ENV PYTHONPATH=/usr/local/lib/python3.13/site-packages
 
 # Create directories for EOPF-Zarr driver
 RUN mkdir -p /opt/eopf-zarr/drivers \
@@ -79,8 +85,8 @@ RUN mkdir -p build && cd build \
 RUN ls -la /opt/eopf-zarr/drivers/ \
     && echo "GDAL_DRIVER_PATH=/opt/eopf-zarr/drivers" >> /etc/environment
 
-# Install JupyterLab and additional packages for JupyterHub compatibility
-RUN /opt/conda/envs/eopf-zarr/bin/pip install \
+# Install additional JupyterHub packages for compatibility
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
     jupyterhub \
     notebook \
     jupyterlab \

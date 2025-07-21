@@ -1,7 +1,25 @@
-name: gdal-env
+name: eopf-zarr
 channels:
   - conda-forge
 dependencies:
-  - gdal=3.10.3
+  - python=3.13
+  - gdal=3.10.*
   - cmake
   - ninja
+  - zarr<3
+  - dask
+  - geopandas
+  - rasterio
+  - fiona
+  - shapely
+  - pyproj
+  - netcdf4
+  - h5py
+  - scipy
+  - matplotlib
+  - cartopy
+  - ipykernel
+  - ipywidgets
+  - jupyterlab
+  - notebook
+  - xarray
