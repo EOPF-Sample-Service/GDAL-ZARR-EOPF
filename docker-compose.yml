@@ -1,51 +1,21 @@
 version: '3.8'
 
 services:
-  eopf-zarr:
+  eopf-zarr-driver:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: eopf-zarr-driver
     ports:
       - "8888:8888"
     volumes:
-      # Mount notebooks for development
-      - ./notebooks:/home/eopfuser/notebooks
-      # Mount sample data (if available)
-      - ./sample_data:/home/eopfuser/data:ro
+      - ./data:/home/jupyter/work/data:ro
     environment:
+      - JUPYTER_ENABLE_LAB=yes
       - GDAL_DRIVER_PATH=/opt/eopf-zarr/drivers
-      - GDAL_DATA=/usr/share/gdal
-      - PROJ_LIB=/usr/share/proj
-      # JupyterHub compatibility
-      - JUPYTERHUB_USER=eopfuser
-      - JUPYTERHUB_SERVICE_PREFIX=/
-    networks:
-      - eopf-network
     restart: unless-stopped
-    
-  # Optional: Add a service for testing remote Zarr access
-  zarr-test:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: eopf-zarr-test
-    command: |
-      bash -c "
-        source /opt/conda/etc/profile.d/conda.sh &&
-        conda activate eopf-zarr &&
-        python -c 'from osgeo import gdal; gdal.AllRegister(); print(f\"Drivers: {gdal.GetDriverCount()}\"); driver = gdal.GetDriverByName(\"EOPFZARR\"); print(f\"EOPF-Zarr: {driver.GetDescription() if driver else \"Not found\"}\")' &&
-        tail -f /dev/null
-      "
-    volumes:
-      - ./notebooks:/home/eopfuser/notebooks
-    environment:
-      - GDAL_DRIVER_PATH=/opt/eopf-zarr/drivers
-    networks:
-      - eopf-network
-    profiles:
-      - test
-
-networks:
-  eopf-network:
-    driver: bridge
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/lab"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

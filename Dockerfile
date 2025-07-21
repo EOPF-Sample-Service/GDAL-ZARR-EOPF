@@ -67,19 +67,29 @@ ENV PYTHONPATH=/usr/local/lib/python3.13/site-packages
 RUN mkdir -p /opt/eopf-zarr/drivers \
     && mkdir -p /opt/eopf-zarr/src
 
-# Copy EOPF-Zarr source code
-WORKDIR /opt/eopf-zarr
-COPY . .
+# Create build and driver directories
+RUN mkdir -p /opt/eopf-zarr/drivers /opt/eopf-zarr/build
 
-# Build EOPF-Zarr driver
-RUN mkdir -p build && cd build \
-    && cmake .. \
+# Clone and build EOPF-Zarr driver from source
+WORKDIR /opt/eopf-zarr
+RUN git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git source \
+    && cd source \
+    && git checkout main
+
+# Build EOPF-Zarr driver  
+WORKDIR /opt/eopf-zarr/build
+RUN cmake ../source \
         -DCMAKE_BUILD_TYPE=Release \
         -DGDAL_ROOT=/usr \
         -DGDAL_INCLUDE_DIR=/usr/include/gdal \
         -DGDAL_LIBRARY=/usr/lib/x86_64-linux-gnu/libgdal.so \
     && make -j$(nproc) \
-    && cp gdal_EOPFZarr.so /opt/eopf-zarr/drivers/
+    && echo "Build completed. Files in build directory:" \
+    && ls -la \
+    && echo "Copying driver to drivers directory:" \
+    && cp gdal_EOPFZarr.so /opt/eopf-zarr/drivers/ \
+    && echo "Driver installed successfully:" \
+    && ls -la /opt/eopf-zarr/drivers/
 
 # Verify driver installation
 RUN ls -la /opt/eopf-zarr/drivers/ \
@@ -93,27 +103,32 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
     ipywidgets
 
 # Create a non-root user for JupyterHub
-RUN useradd -m -s /bin/bash eopfuser \
-    && chown -R eopfuser:eopfuser /opt/eopf-zarr
+RUN useradd -m -s /bin/bash jupyter \
+    && echo "jupyter:jupyter" | chpasswd
+
+# Create jupyter workspace directory
+RUN mkdir -p /home/jupyter/work \
+    && chown -R jupyter:jupyter /home/jupyter
+
+# Copy docker entrypoint and test scripts
+COPY docker-entrypoint.sh /usr/local/bin/
+COPY test-environment.py /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/test-environment.py
 
 # Switch to non-root user
-USER eopfuser
-WORKDIR /home/eopfuser
+USER jupyter
+WORKDIR /home/jupyter
 
 # Create test notebooks directory
-RUN mkdir -p /home/eopfuser/notebooks
+RUN mkdir -p /home/jupyter/work/notebooks
 
-# Copy test notebooks
-COPY --chown=eopfuser:eopfuser notebooks/ /home/eopfuser/notebooks/
+# Copy test notebooks (if they exist) 
+COPY notebooks/ /home/jupyter/work/notebooks/
+RUN chown -R jupyter:jupyter /home/jupyter/work/notebooks/ 2>/dev/null || true
 
 # Expose JupyterLab port
 EXPOSE 8888
-
-# Set up entry point script
-COPY --chown=eopfuser:eopfuser docker-entrypoint.sh /usr/local/bin/
-USER root
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-USER eopfuser
 
 # Default command
 CMD ["/usr/local/bin/docker-entrypoint.sh"]
