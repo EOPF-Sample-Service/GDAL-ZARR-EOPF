@@ -1,11 +1,17 @@
-name: eopf-zarr
+name: eopf-zarr-driver
 channels:
   - conda-forge
+  - defaults
 dependencies:
-  - python=3.13
-  - gdal=3.10.*
-  - cmake
-  - ninja
+  # Core scientific computing
+  - numpy
+  - scipy  
+  - pandas
+  - matplotlib
+  
+  # Geospatial and Earth Observation
+  - gdal>=3.10
+  - xarray
   - zarr<3
   - dask
   - geopandas
@@ -13,13 +19,25 @@ dependencies:
   - fiona
   - shapely
   - pyproj
+  - cartopy
+  
+  # Data formats
   - netcdf4
   - h5py
-  - scipy
-  - matplotlib
-  - cartopy
-  - ipykernel
-  - ipywidgets
+  
+  # Jupyter ecosystem
+  - jupyter
   - jupyterlab
+  - jupyterhub
+  - ipywidgets
+  - ipykernel
   - notebook
-  - xarray
+  - nbclassic
+  
+  # Development and testing
+  - pytest
+  - pytest-cov
+  
+  # Additional utilities
+  - pip
+  - git
