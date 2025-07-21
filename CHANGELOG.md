@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the EOPF-Zarr GDAL plugin will be documented in this file.
+All notable changes to the GDAL EOPF-Zarr Plugin will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -8,143 +8,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial development of EOPF-Zarr GDAL driver
-- Basic Zarr format reading support
-- CMake build system
-- GitHub Actions workflows for CI/CD
-- Comprehensive documentation structure
-- CODEOWNERS file for code review process
-- Pull request templates
+- Comprehensive performance optimization framework
+- TTL-based metadata caching (5-minute metadata, 2-minute network)
+- Lazy loading for geospatial information processing
+- Block access pattern tracking for intelligent prefetching
+- Performance profiling with ScopedTimer and EOPF_PERF_TIMER macros
+- Optimized string operations (FastTokenize, OptimizedCSL functions)
+- Memory-efficient metadata merging with const-correctness
+- Comprehensive unit testing framework
+- Cross-platform build system with CMake
 
 ### Changed
-- Improved branch protection workflows
-- Enhanced CODEOWNERS patterns
-
-### Deprecated
-- None
-
-### Removed
-- None
+- Improved const-correctness for Linux compiler compatibility
+- Enhanced geospatial coordinate detection from corner coordinates
+- Optimized metadata loading with smart caching strategies
+- Streamlined documentation for production focus
 
 ### Fixed
-- None
+- Linux build compilation errors with const-correctness
+- Memory management in metadata operations
+- Performance issues with repeated metadata access
+- Subdataset path handling for URL-based datasets
 
-### Security
-- Added signed commit requirements
-- Implemented branch protection rules
-
-## [0.1.0] - 2024-XX-XX (Planned)
-
-### Added
-- Basic Zarr v2 format support
-- Read-only access to EOPF datasets
-- Multi-band raster support
-- GDAL dataset and raster band implementations
-- Basic metadata extraction
-- CMake build configuration
-- Unit tests framework
-- Documentation structure
-
-### Technical Details
-- Implemented `EOPFDataset` class extending `GDALDataset`
-- Implemented `EOPFRasterBand` class extending `GDALRasterBand`
-- Added driver registration and identification
-- Basic error handling and logging
-- Memory management following GDAL conventions
-
-## [0.2.0] - 2024-XX-XX (Planned)
+## [1.0.0] - Initial Release
 
 ### Added
-- Improved metadata handling
-- Georeferencing support
-- Coordinate system detection
-- Enhanced error reporting
-- Performance optimizations for chunked data access
+- GDAL driver for EOPF Zarr datasets
+- QGIS integration with "Add Raster Layer" support
+- Automatic CRS and geotransform detection
+- Subdataset support for hierarchical data
+- Cloud-native access via HTTP/HTTPS and VSI
+- Cross-platform support (Windows, macOS, Linux)
+- Basic metadata attachment from EOPF specifications
 
-### Changed
-- Optimized memory usage for large datasets
-- Improved chunk alignment for better performance
+### Features
+- **Dataset Access**: Multiple access patterns with EOPFZARR: prefix
+- **Geospatial Intelligence**: Automatic CRS detection from EPSG and STAC metadata
+- **Performance**: Chunked data optimization for large datasets
+- **Integration**: Seamless QGIS and Python API compatibility
 
-### Fixed
-- Memory leaks in dataset opening
-- Thread safety issues
-- Metadata parsing edge cases
+## Development History
 
-## [0.3.0] - 2024-XX-XX (Planned)
+### Performance Optimization Phase
+- Implemented comprehensive caching framework
+- Added performance monitoring and profiling tools
+- Optimized network operations and metadata access
+- Enhanced block-level data access patterns
 
-### Added
-- Cloud storage support (S3, Azure, GCS)
-- Compression format support (gzip, lz4, blosc)
-- Multi-dimensional array support (3D, 4D)
-- Time series data handling
-- Advanced metadata attributes
+### Cleanup and Documentation Phase  
+- Removed excessive verbose documentation
+- Streamlined to essential user and developer guides
+- Focused on production-ready documentation
+- Maintained practical examples and troubleshooting
 
-### Changed
-- Enhanced EOPF-specific metadata parsing
-- Improved virtual file system integration
+### Build System Improvements
+- Cross-platform CMake configuration
+- Automated installation scripts for Windows, macOS, Linux
+- CI/CD integration with GitHub Actions
+- Comprehensive testing framework
 
-## [1.0.0] - 2024-XX-XX (Planned)
+---
 
-### Added
-- Full EOPF specification compliance
-- Write support for Zarr format
-- Complete test coverage
-- Performance benchmarks
-- User documentation
-- QGIS integration validation
+## Contributing
 
-### Changed
-- Stable API with backward compatibility guarantees
-- Production-ready error handling
-- Comprehensive logging system
+See [CONTRIBUTING.md](CONTRIBUTING.md) for information on how to contribute to this project.
 
-### Performance
-- Optimized for large-scale Earth Observation datasets
-- Efficient memory usage patterns
-- Parallel processing support where applicable
+## Support
 
-## Version Numbering
-
-This project uses semantic versioning:
-- **MAJOR** version for incompatible API changes
-- **MINOR** version for backward-compatible functionality additions  
-- **PATCH** version for backward-compatible bug fixes
-
-## Release Process
-
-1. All changes are developed in feature branches
-2. Pull requests required for all changes to main branch
-3. Automated testing must pass before merging
-4. Version numbers updated in CMakeLists.txt
-5. Changelog updated with release notes
-6. Git tags created for each release
-7. Release artifacts built and published
-
-## Development Milestones
-
-- **Alpha**: Basic functionality, development testing
-- **Beta**: Feature complete, user testing
-- **Release Candidate**: Production testing, bug fixes only
-- **General Availability**: Production ready, full support
-
-## Breaking Changes Policy
-
-Breaking changes will be:
-- Documented in this changelog under "Changed" or "Removed"
-- Announced in advance through GitHub issues
-- Accompanied by migration guides where applicable
-- Only introduced in major version releases (after 1.0.0)
-
-## Support Policy
-
-- **Latest major version**: Full support including new features
-- **Previous major version**: Security and critical bug fixes only
-- **Older versions**: Community support only
-
-## Contributing to Releases
-
-- Feature requests via GitHub issues
-- Bug reports with reproduction steps
-- Pull requests with comprehensive testing
-- Documentation improvements welcome
-- Performance optimizations and benchmarks valued
+- **Issues**: [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
+- **Documentation**: [Installation](INSTALLATION.md) | [Usage](USAGE.md) | [Troubleshooting](TROUBLESHOOTING.md)
