@@ -561,18 +561,11 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 
 // Update the implementation:
 
-// XMLInit implementation varies by GDAL version
-#ifdef GDAL_HAS_CONST_XML_NODE
+// XMLInit - using modern GDAL signature (const CPLXMLNode *)
 CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode *psTree, const char *pszUnused)
 {
     return GDALPamDataset::XMLInit(psTree, pszUnused);
 }
-#else
-CPLErr EOPFZarrDataset::XMLInit(CPLXMLNode *psTree, const char *pszUnused)
-{
-    return GDALPamDataset::XMLInit(psTree, pszUnused);
-}
-#endif
 
 CPLXMLNode *EOPFZarrDataset::SerializeToXML(const char *pszUnused)
 {
@@ -600,18 +593,11 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
     // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
 }
 
-// RefUnderlyingRasterBand implementation varies by GDAL version
-#ifdef GDAL_HAS_CONST_REF_UNDERLYING
+// RefUnderlyingRasterBand - signature is consistent in modern GDAL
 GDALRasterBand *EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
 {
     return m_poUnderlyingBand;
 }
-#else
-GDALRasterBand *EOPFZarrRasterBand::RefUnderlyingRasterBand()
-{
-    return m_poUnderlyingBand;
-}
-#endif
 CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void *pImage)
 {
     EOPF_PERF_TIMER("EOPFZarrRasterBand::IReadBlock");
