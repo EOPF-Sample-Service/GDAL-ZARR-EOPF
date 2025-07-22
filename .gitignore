@@ -90,3 +90,6 @@ test_output_*
 Testing/
 DartConfiguration.tcl
 CTestTestfile.cmake
+
+# Version test files (temporary)
+version_test*
