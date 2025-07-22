@@ -1,9 +1,9 @@
 # EOPF-Zarr GDAL Driver - Docker Image
-# Based on Ubuntu 25 with GDAL 3.10 and EOPF Python environment
+# Based on Ubuntu 25.04 with GDAL and EOPF Python environment
 FROM ubuntu:25.04
 
 LABEL maintainer="EOPF Sample Service"
-LABEL description="EOPF-Zarr GDAL Driver with Ubuntu 25, GDAL 3.10, and EOPF Python environment"
+LABEL description="EOPF-Zarr GDAL Driver with Ubuntu 25.04, GDAL, and EOPF Python environment"
 LABEL version="1.0.0"
 
 # Set environment variables
@@ -36,8 +36,16 @@ RUN apt-get update && apt-get install -y \
     htop \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify GDAL version (should be 3.10.x on Ubuntu 25)
+# Verify GDAL version (should be 3.9.x on Ubuntu 24.04)
 RUN gdalinfo --version
+
+# Debug GDAL installation
+RUN echo "=== GDAL Debug Information ===" && \
+    dpkg -l | grep gdal && \
+    echo "GDAL config:" && \
+    gdal-config --version && gdal-config --libs && \
+    echo "GDAL library files:" && \
+    find /usr -name "*gdal*" -type f 2>/dev/null | grep -E "(\.so|\.a)$" | head -10
 
 # Install Python packages using system pip to ensure compatibility with system GDAL
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
@@ -83,9 +91,6 @@ COPY CMakeLists.txt source/CMakeLists.txt
 WORKDIR /opt/eopf-zarr/build
 RUN cmake ../source \
         -DCMAKE_BUILD_TYPE=Release \
-        -DGDAL_ROOT=/usr \
-        -DGDAL_INCLUDE_DIR=/usr/include/gdal \
-        -DGDAL_LIBRARY=/usr/lib/x86_64-linux-gnu/libgdal.so \
     && make -j$(nproc) gdal_EOPFZarr \
     && echo "Build completed. Files in build directory:" \
     && ls -la \
