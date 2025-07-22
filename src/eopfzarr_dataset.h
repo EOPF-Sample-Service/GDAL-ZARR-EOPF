@@ -64,7 +64,7 @@ class EOPFZarrDataset : public GDALPamDataset
     // In your header file:
     CPLErr TryLoadXML(char **papszSiblingFiles = nullptr);
     
-    // XMLInit signature varies by GDAL version
+    // XMLInit signature varies by GDAL version - use CMake feature detection
 #ifdef GDAL_HAS_CONST_XML_NODE
     CPLErr XMLInit(const CPLXMLNode *psTree, const char *pszUnused) override;
 #else
@@ -102,7 +102,7 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
                        int nBand);
     ~EOPFZarrRasterBand();
 
-    // RefUnderlyingRasterBand signature varies by GDAL version
+    // RefUnderlyingRasterBand signature varies by GDAL version - use CMake feature detection
 #ifdef GDAL_HAS_CONST_REF_UNDERLYING
     GDALRasterBand *RefUnderlyingRasterBand(bool bForceOpen = true) const override;
 #else

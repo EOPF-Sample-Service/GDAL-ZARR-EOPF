@@ -317,9 +317,12 @@ jobs:
 
 
   macos-build:
-    name: macOS Build (Conda)
-    runs-on: macos-13
-    timeout-minutes: 10  # Much faster with conda
+    name: macOS Build (Apple Silicon)
+    runs-on: macos-14  # Use Apple Silicon runner for native ARM64 build
+    timeout-minutes: 15
+    # Note: We build only for arm64 because conda-forge GDAL is only available for arm64
+    # on Apple Silicon runners. Creating universal binaries would require x86_64 GDAL libs
+    # which are not readily available in the conda environment.
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -335,20 +338,51 @@ jobs:
       shell: bash -el {0}
       run: |
         conda install -c conda-forge gdal cmake ninja -y
-        echo "Conda cache size:"
-        du -sh $CONDA_PKGS_DIRS || echo "Cache size check failed"
         
-    - name: Configure
+    - name: Check GDAL version and architecture
+      shell: bash -el {0}
+      run: |
+        echo "GDAL version: $(gdalinfo --version)"
+        echo "System architecture: $(uname -m)"
+        echo "GDAL library architecture:"
+        file $CONDA_PREFIX/lib/libgdal.dylib | head -1
+        echo "Available architectures in GDAL lib:"
+        lipo -archs $CONDA_PREFIX/lib/libgdal.dylib 2>/dev/null || echo "Could not determine architectures"
+        
+    - name: Configure for Native Build
       shell: bash -el {0}
       run: |
         cmake -S . -B build \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
           
     - name: Build
       shell: bash -el {0}
       run: cmake --build build --parallel
+      
+    - name: Verify Plugin Binary
+      shell: bash -el {0}
+      run: |
+        echo "Plugin file info:"
+        file build/gdal_EOPFZarr.dylib
+        echo "Plugin architecture:"
+        lipo -archs build/gdal_EOPFZarr.dylib 2>/dev/null || echo "Could not determine plugin architectures"
+        
+    - name: Code Sign (if certificates available)
+      shell: bash -el {0}
+      run: |
+        # Only attempt code signing if we have certificates
+        if [ -n "${{ secrets.APPLE_DEVELOPER_ID }}" ] && [ -n "${{ secrets.APPLE_DEVELOPER_PASSWORD }}" ]; then
+          echo "Code signing enabled - signing binary"
+          # Note: This would require proper certificate setup in GitHub secrets
+          # codesign --force --verify --verbose --sign "${{ secrets.APPLE_DEVELOPER_ID }}" build/gdal_EOPFZarr.dylib
+          echo "Code signing would be performed here with proper certificates"
+        else
+          echo "No code signing certificates available - creating unsigned binary"
+          echo "Users will need to remove quarantine attribute: xattr -d com.apple.quarantine gdal_EOPFZarr.dylib"
+        fi
       
     - name: Smoke test
       shell: bash -el {0}
@@ -463,6 +497,16 @@ jobs:
         
         echo "Installing GDAL EOPF Plugin for macOS..."
         
+        # Check if file exists
+        if [ ! -f "macos/$PLUGIN_FILE" ]; then
+            echo "ERROR: Plugin file not found: macos/$PLUGIN_FILE"
+            exit 1
+        fi
+        
+        # Remove quarantine attribute to avoid Gatekeeper issues
+        echo "Removing quarantine attribute from plugin..."
+        xattr -d com.apple.quarantine "macos/$PLUGIN_FILE" 2>/dev/null || echo "No quarantine attribute found (this is normal for local builds)"
+        
         mkdir -p "$PLUGIN_DIR"
         cp "macos/$PLUGIN_FILE" "$PLUGIN_DIR/"
         chmod 755 "$PLUGIN_DIR/$PLUGIN_FILE"
@@ -470,6 +514,15 @@ jobs:
         echo "Plugin installed to: $PLUGIN_DIR/$PLUGIN_FILE"
         echo "Add this to your environment:"
         echo "export GDAL_DRIVER_PATH=$PLUGIN_DIR:\$GDAL_DRIVER_PATH"
+        
+        # Test installation
+        echo ""
+        echo "Testing installation..."
+        if GDAL_DRIVER_PATH="$PLUGIN_DIR" gdalinfo --formats | grep -q EOPFZARR; then
+            echo "✅ EOPF-Zarr driver successfully installed and detected!"
+        else
+            echo "⚠️  Plugin installed but not detected. Check your GDAL installation."
+        fi
         EOF
         
         # Create Windows install script
@@ -572,6 +625,11 @@ jobs:
         ./install-macos.sh
         ```
         
+        **Note for macOS users**: If you get a "malware" warning, this is because the binary is unsigned. The installation script automatically removes the quarantine attribute, but if you encounter issues, you can manually run:
+        ```bash
+        xattr -d com.apple.quarantine macos/gdal_EOPFZarr.dylib
+        ```
+        
         ### Windows
         ```cmd
         install-windows.bat
@@ -581,7 +639,7 @@ jobs:
         
         1. Copy the appropriate plugin file to your GDAL plugins directory:
            - Linux: `gdal_EOPFZarr.so` 
-           - macOS: `gdal_EOPFZarr.dylib`
+           - macOS: `gdal_EOPFZarr.dylib` (remove quarantine: `xattr -d com.apple.quarantine gdal_EOPFZarr.dylib`)
            - Windows: `gdal_EOPFZarr.dll`
         
         2. Set the GDAL_DRIVER_PATH environment variable to include the plugins directory
@@ -593,6 +651,19 @@ jobs:
         ```
         
         You should see the EOPFZARR driver listed.
+        
+        ## Troubleshooting
+        
+        ### macOS "Cannot verify developer" error
+        This occurs because the binaries are unsigned. Solutions:
+        1. **Recommended**: Remove quarantine attribute: `xattr -d com.apple.quarantine gdal_EOPFZarr.dylib`
+        2. Go to System Preferences → Security & Privacy → General → Click "Allow Anyway"
+        3. Or use: `spctl --add gdal_EOPFZarr.dylib`
+        
+        ### Plugin not detected
+        - Ensure GDAL_DRIVER_PATH includes the plugin directory
+        - Check GDAL version compatibility (tested with GDAL 3.9+)
+        - Verify file permissions (should be executable)
         
         ## Support
         

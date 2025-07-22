@@ -561,7 +561,7 @@ CPLErr EOPFZarrDataset::TryLoadXML(char **papszSiblingFiles)
 
 // Update the implementation:
 
-// XMLInit implementation varies by GDAL version
+// XMLInit signature varies by GDAL version - use CMake feature detection
 #ifdef GDAL_HAS_CONST_XML_NODE
 CPLErr EOPFZarrDataset::XMLInit(const CPLXMLNode *psTree, const char *pszUnused)
 {
@@ -600,7 +600,7 @@ EOPFZarrRasterBand::~EOPFZarrRasterBand()
     // No need to delete m_poUnderlyingBand as it's owned by the inner dataset
 }
 
-// RefUnderlyingRasterBand implementation varies by GDAL version
+// RefUnderlyingRasterBand signature varies by GDAL version - use CMake feature detection
 #ifdef GDAL_HAS_CONST_REF_UNDERLYING
 GDALRasterBand *EOPFZarrRasterBand::RefUnderlyingRasterBand(bool /*bForceOpen*/) const
 {
