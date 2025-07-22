@@ -317,9 +317,12 @@ jobs:
 
 
   macos-build:
-    name: macOS Build (Universal)
+    name: macOS Build (Apple Silicon)
     runs-on: macos-14  # Use Apple Silicon runner for native ARM64 build
-    timeout-minutes: 15  # Increased slightly for universal builds
+    timeout-minutes: 15
+    # Note: We build only for arm64 because conda-forge GDAL is only available for arm64
+    # on Apple Silicon runners. Creating universal binaries would require x86_64 GDAL libs
+    # which are not readily available in the conda environment.
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -336,33 +339,36 @@ jobs:
       run: |
         conda install -c conda-forge gdal cmake ninja -y
         
-    - name: Check GDAL version
+    - name: Check GDAL version and architecture
       shell: bash -el {0}
       run: |
         echo "GDAL version: $(gdalinfo --version)"
         echo "System architecture: $(uname -m)"
+        echo "GDAL library architecture:"
+        file $CONDA_PREFIX/lib/libgdal.dylib | head -1
+        echo "Available architectures in GDAL lib:"
+        lipo -archs $CONDA_PREFIX/lib/libgdal.dylib 2>/dev/null || echo "Could not determine architectures"
         
-    - name: Configure for Universal Build
+    - name: Configure for Native Build
       shell: bash -el {0}
       run: |
         cmake -S . -B build \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
-          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
           -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
           
     - name: Build
       shell: bash -el {0}
       run: cmake --build build --parallel
       
-    - name: Verify Universal Binary
+    - name: Verify Plugin Binary
       shell: bash -el {0}
       run: |
         echo "Plugin file info:"
         file build/gdal_EOPFZarr.dylib
-        echo "Supported architectures:"
-        lipo -archs build/gdal_EOPFZarr.dylib
+        echo "Plugin architecture:"
+        lipo -archs build/gdal_EOPFZarr.dylib 2>/dev/null || echo "Could not determine plugin architectures"
       
     - name: Smoke test
       shell: bash -el {0}
