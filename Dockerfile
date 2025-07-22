@@ -72,9 +72,12 @@ RUN mkdir -p /opt/eopf-zarr/drivers /opt/eopf-zarr/build
 
 # Clone and build EOPF-Zarr driver from source
 WORKDIR /opt/eopf-zarr
-RUN git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git source \
-    && cd source \
-    && git checkout main
+
+# Copy only the essential source files for building
+COPY src/ source/src/
+COPY include/ source/include/
+COPY tests/ source/tests/
+COPY CMakeLists.txt source/CMakeLists.txt
 
 # Build EOPF-Zarr driver  
 WORKDIR /opt/eopf-zarr/build
@@ -83,7 +86,7 @@ RUN cmake ../source \
         -DGDAL_ROOT=/usr \
         -DGDAL_INCLUDE_DIR=/usr/include/gdal \
         -DGDAL_LIBRARY=/usr/lib/x86_64-linux-gnu/libgdal.so \
-    && make -j$(nproc) \
+    && make -j$(nproc) gdal_EOPFZarr \
     && echo "Build completed. Files in build directory:" \
     && ls -la \
     && echo "Copying driver to drivers directory:" \
