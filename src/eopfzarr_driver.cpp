@@ -107,20 +107,29 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
         CPLDebug("EOPFZARR", "ParseSubdatasetPath: Removed prefix, now: %s", pathWithoutPrefix.c_str());
     }
 
-    // Check if this is a URL or virtual path - if so, don't parse for subdatasets
-    if (IsUrlOrVirtualPath(pathWithoutPrefix))
+    // Check for quoted content first to handle quoted URLs properly
+    char quoteChar = '\0';
+    size_t startQuote = std::string::npos;
+    
+    // Look for either double quotes or single quotes
+    size_t doubleQuotePos = pathWithoutPrefix.find('\"');
+    size_t singleQuotePos = pathWithoutPrefix.find('\'');
+    
+    if (doubleQuotePos != std::string::npos && 
+        (singleQuotePos == std::string::npos || doubleQuotePos < singleQuotePos))
     {
-        mainPath = pathWithoutPrefix;
-        subdatasetPath = "";
-        CPLDebug("EOPFZARR", "ParseSubdatasetPath: URL/Virtual path detected early, no subdataset parsing - Main: %s", mainPath.c_str());
-        return false;
+        startQuote = doubleQuotePos;
+        quoteChar = '\"';
     }
-
-    // Check for quoted path format: "path":subds
-    size_t startQuote = pathWithoutPrefix.find('\"');
+    else if (singleQuotePos != std::string::npos)
+    {
+        startQuote = singleQuotePos;
+        quoteChar = '\'';
+    }
+    
     if (startQuote != std::string::npos)
     {
-        size_t endQuote = pathWithoutPrefix.find('\"', startQuote + 1);
+        size_t endQuote = pathWithoutPrefix.find(quoteChar, startQuote + 1);
         if (endQuote != std::string::npos && endQuote > startQuote + 1)
         {
             // We have a quoted path - extract it
@@ -134,30 +143,36 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
                 CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path with subdataset - Main: %s, Subds: %s",
                          mainPath.c_str(), subdatasetPath.c_str());
 
-                // Fix Windows paths - replace forward slashes with backward slashes
+                // Only apply Windows path transformations to local paths, not URLs
+                bool isUrl = IsUrlOrVirtualPath(mainPath);
+                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Path is URL/Virtual: %s", isUrl ? "YES" : "NO");
+                
+                if (!isUrl) {
+                    // Fix Windows paths - replace forward slashes with backward slashes
 #ifdef _WIN32
-                // Replace forward slashes with backslashes
-                for (size_t i = 0; i < mainPath.length(); ++i)
-                {
-                    if (mainPath[i] == '/')
+                    // Replace forward slashes with backslashes
+                    for (size_t i = 0; i < mainPath.length(); ++i)
                     {
-                        mainPath[i] = '\\';
+                        if (mainPath[i] == '/')
+                        {
+                            mainPath[i] = '\\';
+                        }
                     }
-                }
 
-                // Remove leading slash if present in Windows paths (e.g., /C:/...)
-                if (!mainPath.empty() && mainPath[0] == '\\' &&
-                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-                {
-                    mainPath = mainPath.substr(1);
-                }
+                    // Remove leading slash if present in Windows paths (e.g., /C:/...)
+                    if (!mainPath.empty() && mainPath[0] == '\\' &&
+                        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
+                    {
+                        mainPath = mainPath.substr(1);
+                    }
 
-                // Remove trailing slash if present
-                if (!mainPath.empty() && mainPath.back() == '\\')
-                {
-                    mainPath.pop_back();
-                }
+                    // Remove trailing slash if present
+                    if (!mainPath.empty() && mainPath.back() == '\\')
+                    {
+                        mainPath.pop_back();
+                    }
 #endif
+                }
                 return true;
             }
             // No subdataset part, just a quoted path
@@ -165,27 +180,34 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
             {
                 CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found quoted path without subdataset - Main: %s", mainPath.c_str());
                 subdatasetPath = "";
+                
+                // Only apply Windows path transformations to local paths, not URLs
+                bool isUrl = IsUrlOrVirtualPath(mainPath);
+                CPLDebug("EOPFZARR", "ParseSubdatasetPath: Path is URL/Virtual: %s", isUrl ? "YES" : "NO");
+                
+                if (!isUrl) {
 #ifdef _WIN32
-                // Fix Windows paths - same as above
-                for (size_t i = 0; i < mainPath.length(); ++i)
-                {
-                    if (mainPath[i] == '/')
+                    // Fix Windows paths - same as above
+                    for (size_t i = 0; i < mainPath.length(); ++i)
                     {
-                        mainPath[i] = '\\';
+                        if (mainPath[i] == '/')
+                        {
+                            mainPath[i] = '\\';
+                        }
                     }
-                }
 
-                if (!mainPath.empty() && mainPath[0] == '\\' &&
-                    mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-                {
-                    mainPath = mainPath.substr(1);
-                }
+                    if (!mainPath.empty() && mainPath[0] == '\\' &&
+                        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
+                    {
+                        mainPath = mainPath.substr(1);
+                    }
 
-                if (!mainPath.empty() && mainPath.back() == '\\')
-                {
-                    mainPath.pop_back();
-                }
+                    if (!mainPath.empty() && mainPath.back() == '\\')
+                    {
+                        mainPath.pop_back();
+                    }
 #endif
+                }
                 return false;
             }
         }
@@ -212,6 +234,45 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
         CPLDebug("EOPFZARR", "ParseSubdatasetPath: Found simple path with subdataset - Main: %s, Subds: %s",
                  mainPath.c_str(), subdatasetPath.c_str());
 
+        // Only apply Windows path transformations to local paths, not URLs
+        bool isUrl = IsUrlOrVirtualPath(mainPath);
+        CPLDebug("EOPFZARR", "ParseSubdatasetPath: Path is URL/Virtual: %s", isUrl ? "YES" : "NO");
+        
+        if (!isUrl) {
+#ifdef _WIN32
+            // Fix Windows paths - same as above
+            for (size_t i = 0; i < mainPath.length(); ++i)
+            {
+                if (mainPath[i] == '/')
+                {
+                    mainPath[i] = '\\';
+                }
+            }
+
+            if (!mainPath.empty() && mainPath[0] == '\\' &&
+                mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
+            {
+                mainPath = mainPath.substr(1);
+            }
+
+            if (!mainPath.empty() && mainPath.back() == '\\')
+            {
+                mainPath.pop_back();
+            }
+#endif
+        }
+        return true;
+    }
+
+    // Not a subdataset path
+    mainPath = pathWithoutPrefix;
+    subdatasetPath = "";
+
+    // Only apply Windows path transformations to local paths, not URLs
+    bool isUrl = IsUrlOrVirtualPath(mainPath);
+    CPLDebug("EOPFZARR", "ParseSubdatasetPath: Path is URL/Virtual: %s", isUrl ? "YES" : "NO");
+    
+    if (!isUrl) {
 #ifdef _WIN32
         // Fix Windows paths - same as above
         for (size_t i = 0; i < mainPath.length(); ++i)
@@ -233,34 +294,7 @@ static bool ParseSubdatasetPath(const std::string &fullPath, std::string &mainPa
             mainPath.pop_back();
         }
 #endif
-        return true;
     }
-
-    // Not a subdataset path
-    mainPath = pathWithoutPrefix;
-    subdatasetPath = "";
-
-#ifdef _WIN32
-    // Fix Windows paths - same as above
-    for (size_t i = 0; i < mainPath.length(); ++i)
-    {
-        if (mainPath[i] == '/')
-        {
-            mainPath[i] = '\\';
-        }
-    }
-
-    if (!mainPath.empty() && mainPath[0] == '\\' &&
-        mainPath.length() > 2 && mainPath[1] != '\\' && mainPath[2] == ':')
-    {
-        mainPath = mainPath.substr(1);
-    }
-
-    if (!mainPath.empty() && mainPath.back() == '\\')
-    {
-        mainPath.pop_back();
-    }
-#endif
 
     CPLDebug("EOPFZARR", "ParseSubdatasetPath: No subdataset found - Main: %s", mainPath.c_str());
     return false;
@@ -322,6 +356,21 @@ static int EOPFIdentify(GDALOpenInfo *poOpenInfo)
     // Only identify with explicit prefixes or options
     if (STARTS_WITH_CI(pszFilename, "EOPFZARR:"))
         return TRUE;
+
+    // Handle quoted strings that contain EOPFZARR: prefix
+    // Check for patterns like 'EOPFZARR:...' or "EOPFZARR:..."
+    size_t len = strlen(pszFilename);
+    if (len > 10) // Minimum: 'EOPFZARR:'
+    {
+        if ((pszFilename[0] == '\'' && pszFilename[len-1] == '\'') ||
+            (pszFilename[0] == '"' && pszFilename[len-1] == '"'))
+        {
+            // Extract content between quotes
+            std::string quoted_content(pszFilename + 1, len - 2);
+            if (STARTS_WITH_CI(quoted_content.c_str(), "EOPFZARR:"))
+                return TRUE;
+        }
+    }
 
     // Check EOPF_PROCESS option
     const char *pszEOPFProcess = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
