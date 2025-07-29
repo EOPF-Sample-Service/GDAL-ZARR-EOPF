@@ -1,11 +1,5 @@
 ﻿name: Build, Test & Release EOPFZarr Plugin
 
-# Unified CI/CD workflow that handles:
-# - Code quality checks (cppcheck, clang-format)
-# - Multi-platform builds (Linux, macOS)
-# - Artifact consolidation and release
-# - Future: Integration tests when test data is available
-
 on:
   push:
     branches: [ main, develop ]
@@ -16,683 +10,156 @@ on:
     types: [published]
 
 jobs:
-  code-quality:
-    name: Code Quality Checks
+  lint:
+    name: Lint • cppcheck & clang-format
     runs-on: ubuntu-22.04
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Install dependencies
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \
-          cppcheck \
-          clang-format \
-          libgdal-dev
-          
-    - name: Run cppcheck
-      run: |
-        cppcheck --enable=all --inconclusive --xml --xml-version=2 \
-          src/ include/ 2> cppcheck-report.xml || true
-        
-    - name: Check code formatting
-      run: |
-        find src include -name "*.cpp" -o -name "*.h" | \
-          xargs clang-format --style=file --dry-run --Werror || \
-          echo "Code formatting check failed - run clang-format to fix"
-        
-    - name: Upload code quality reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: code-quality-reports
-        path: |
-          cppcheck-report.xml
-        retention-days: 30
+      - uses: actions/checkout@v4
 
-  linux-build:
-    name: Linux Build
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cppcheck clang-format
+
+      - name: cppcheck
+        run: |
+          cppcheck --enable=all --inconclusive --xml --xml-version=2 \
+            src/ include/ 2> cppcheck-report.xml || true
+
+      - name: Check code formatting
+        run: |
+          find src include -name "*.cpp" -o -name "*.h" | \
+            xargs clang-format --style=file --dry-run --Werror || \
+            (echo "Code formatting check failed. Please run 'clang-format -i <file>' on your changes." && exit 1)
+
+      - name: Upload cppcheck report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cppcheck-report
+          path: cppcheck-report.xml
+          retention-days: 7
+
+  build_and_test:
+    name: Build & Test • ${{ matrix.os }} / ${{ matrix.cfg }}
+    runs-on: ${{ matrix.os }}
+    needs: [lint]
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-22.04, windows-latest, macos-13]
         cfg: [Debug, Release]
+        # Exclude debug build on macOS for faster CI
+        exclude:
+          - os: macos-13
+            cfg: Debug
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Install GDAL dev packages
+    # Caching for Linux/macOS
+    - if: runner.os != 'Windows'
+      uses: hendrikmuhs/ccache-action@v1
+      with:
+        key: ${{ runner.os }}-${{ matrix.cfg }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+        restore-keys: ${{ runner.os }}-${{ matrix.cfg }}-
+
+    # Platform-specific dependencies
+    - name: Install deps (Linux)
+      if: runner.os == 'Linux'
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends \
-             gdal-bin libgdal-dev cmake ninja-build build-essential
+          gdal-bin libgdal-dev cmake ninja-build build-essential
 
-    - name: Debug GDAL version
-      run: |
-        echo "GDAL version information:"
-        gdal-config --version
-        echo "GDAL include path:"
-        gdal-config --cflags
-        echo "GDAL_VERSION_NUM from header:"
-        echo '#include "gdal_version.h"' | cpp -I$(gdal-config --cflags | sed 's/-I//g') - | grep 'define GDAL_VERSION_NUM' || echo "Could not find GDAL_VERSION_NUM"
+    - name: Install deps (macOS)
+      if: runner.os == 'macOS'
+      run: brew install gdal cmake ninja
 
-    - name: Configure
-      run: |
-        cmake -S . -B build/${{ matrix.cfg }} \
-          -G Ninja \
-          -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
-
-    - name: Build
-      run: cmake --build build/${{ matrix.cfg }} --parallel
-
-
-    - name: Smoke test
-      run: |
-          export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-          echo "Test 1- Checking for EOPFZARR driver in available formats:"
-          gdalinfo --formats | grep "EOPFZARR" || echo "EOPFZARR driver not found!"
-          # Create a more complete Zarr test dataset
-          echo "Testing with sample data from repository:"
-          ls -la $GITHUB_WORKSPACE/src/sample_data/
- 
-          echo "Test 2- Opening sample Zarr dataset with EOPF detection:"
-          # Use CPL_DEBUG for detailed driver selection info
-          export CPL_DEBUG=OFF
-          gdalinfo $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
-      
-          # Test with explicit EOPF_PROCESS=YES
-          echo "Test 3- Explicitly using EOPF_PROCESS=YES:"
-          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
-
-          # Test with EOPFZARR: prefix
-          echo "Test 4- Using EOPFZARR: prefix:"
-          gdalinfo EOPFZARR:$GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver" || echo "EOPFZARR prefix test failed"
-
-          # Verify dimensions or other expected properties of your sample data
-          echo "Test 5- Verifying dataset properties:"
-          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
-
-          # Optional: Show a sample of the full output
-          echo "Test 6- Sample of dataset info:"
-          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 70 || echo "Failed to retrieve dataset info"
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        # Get the system GDAL version first
-        GDAL_VERSION=$(gdal-config --version)
-        echo "System GDAL version: ${GDAL_VERSION}"
-        # Install the matching GDAL Python bindings
-        pip install gdal==${GDAL_VERSION}
-        # Install other requirements but exclude GDAL
-        grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin
-
-    - name: Run Python tests
-      run: |
-        # Set the driver path so Python tests can find the plugin
-        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-        # Run pytest
-        cd tests
-        pytest -xvs python/
-
-    - name: Debug info
-      if: failure()
-      run: |
-        echo "Listing available GDAL drivers:"
-        gdalinfo --formats
-        echo "Listing contents of the driver path:"
-        ls -la $GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-        echo "Listing contents of test Zarr dataset:"
-        ls -la /tmp/test.zarr/
-        echo "GDAL version information:"
-        gdalinfo --version
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: gdal_EOPFZarr-${{ matrix.cfg }}
-        path: build/${{ matrix.cfg }}/gdal_EOPFZarr.so
-
-  # Optional: Linux conda build (faster and more consistent)
-  # linux-build-conda:
-  #   name: Linux Build (Conda)
-  #   runs-on: ubuntu-22.04
-  #   timeout-minutes: 10
-  #   strategy:
-  #     matrix:
-  #       cfg: [Debug, Release]
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v4
-  #   - name: Setup Miniconda
-  #     uses: conda-incubator/setup-miniconda@v3
-  #     with:
-  #       auto-update-conda: true
-  #       python-version: '3.10'
-  #       miniforge-version: latest
-  #   - name: Install GDAL via conda-forge
-  #     shell: bash -el {0}
-  #     run: |
-  #       conda install -c conda-forge gdal cmake ninja pytest -y
-  #   - name: Configure
-  #     shell: bash -el {0}
-  #     run: |
-  #       cmake -S . -B build/${{ matrix.cfg }} \
-  #         -G Ninja \
-  #         -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} \
-  #         -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
-  #   - name: Build
-  #     shell: bash -el {0}
-  #     run: cmake --build build/${{ matrix.cfg }} --parallel
-  #   - name: Test
-  #     shell: bash -el {0}
-  #     run: |
-  #       export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build/${{ matrix.cfg }}
-  #       gdalinfo --formats | grep "EOPFZARR"
-  #       cd tests && pytest -xvs python/
-
-  windows-build:
-    runs-on: windows-latest
-    name: Windows Build
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Install OSGeo4W (GDAL + Dev Tools)
+    - name: Install deps (Windows)
+      if: runner.os == 'Windows'
       uses: echoix/setup-OSGeo4W@v0.2.0
       with:
         packages: gdal-devel cmake ninja
-        site: https://download.osgeo.org/osgeo4w/v2/
         root: C:\OSGeo4W
-        upgrade-also: false
-        
-    - name: Check GDAL version and document compatibility
-      run: |
-        $env:PATH = "C:\OSGeo4W\bin;$env:PATH"
-        $gdalVersion = & gdalinfo --version 2>&1
-        Write-Host "Building against GDAL version: $gdalVersion"
-        
-        # Extract major.minor version for artifact naming
-        if ($gdalVersion -match "GDAL (\d+\.\d+)") {
-            $majorMinor = $matches[1]
-            echo "GDAL_VERSION=$majorMinor" >> $env:GITHUB_ENV
-            Write-Host "Will create artifact for GDAL $majorMinor"
-        } else {
-            echo "GDAL_VERSION=unknown" >> $env:GITHUB_ENV
-            Write-Host "Warning: Could not determine GDAL version"
-        }
 
-    - name: Setup MSVC 2022
+    - name: Setup MSVC (Windows)
+      if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
 
-    - name: Build Plugin
+    # Configure & Build
+    - name: Configure & Build (Linux/macOS)
+      if: runner.os != 'Windows'
       run: |
-        cmake -S . -B build `
-          -G "Visual Studio 17 2022" `
-          -A x64 `
-          -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" `
-          -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-        cmake --build build --config Release
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+        cmake --build build --parallel
 
-    - name: Create Test Zarr Dataset
+    - name: Configure & Build (Windows)
+      if: runner.os == 'Windows'
       run: |
-        mkdir -p C:/temp/test.zarr
+        cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+        cmake --build build --config ${{ matrix.cfg }} --parallel
 
-        echo '{"zarr_format": 2}' > C:/temp/test.zarr/.zgroup
-        echo '{"metadata": {".zattrs": {}, ".zgroup": {"zarr_format": 2}}}' > C:/temp/test.zarr/.zmetadata
-        
-        # Create a simple array
-        mkdir -p C:/temp/test.zarr/data
-        echo '{"chunks": [10, 10], "compressor": null, "dtype": "<f8", "fill_value": 0, "filters": null, "order": "C", "shape": [20, 30], "zarr_format": 2}' > C:/temp/test.zarr/data/.zarray
-        
-        dir C:/temp/test.zarr
-        dir C:/temp/test.zarr/data
-        type C:/temp/test.zarr/.zgroup
-        type C:/temp/test.zarr/.zmetadata
-        type C:/temp/test.zarr/data/.zarray
-
-    - name: Test Plugin
+    # Testing
+    - name: Smoke test (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
       run: |
-        $env:GDAL_DRIVER_PATH="$PWD/build/Release"
-        $env:GDAL_DATA="C:/OSGeo4W/share/gdal"
-        $env:PATH="C:/OSGeo4W/bin;$env:PATH"
-        
-        Write-Host "Test 1- Available GDAL drivers:"
+        export GDAL_DRIVER_PATH="$PWD/build"
+        gdalinfo --formats | grep "EOPFZARR"
+
+    - name: Smoke test (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $env:GDAL_DRIVER_PATH = "$pwd\build\${{ matrix.cfg }}"
+        $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+        $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
         gdalinfo --formats | findstr "EOPFZARR"
-        
-        Write-Host "Test 2a- Opening Zarr dataset with automatic detection:"
-        gdalinfo C:/temp/test.zarr/ | findstr "Driver"
-        
-        Write-Host "Test 2b- With EOPF_PROCESS=NO:"
-        gdalinfo -oo EOPF_PROCESS=NO C:/temp/test.zarr/ | findstr "Driver"
-        
-        Write-Host "Test 2c- With EOPF_PROCESS=YES:"
-        try {
-          gdalinfo -oo EOPF_PROCESS=YES C:/temp/test.zarr/ | findstr "Driver"
-        } catch {
-          Write-Host "Failed with EOPF_PROCESS=YES, but continuing"
-        }
-        
-        Write-Host "Debug information:"
-        gdalinfo --version
-        dir $env:GDAL_DRIVER_PATH
 
-    - name: Package Artifacts
-      run: |
-        mkdir dist
-        # Add diagnostic output to verify file location
-        Write-Host "Finding DLL location:"
-        Get-ChildItem -Path build -Recurse -Filter "gdal_EOPFZarr.dll" | ForEach-Object { $_.FullName }
-        
-        # Copy from the correct location for Visual Studio generator
-        if (Test-Path "build/Release/gdal_EOPFZarr.dll") {
-          Copy-Item "build/Release/gdal_EOPFZarr.dll" -Destination dist/
-        } else {
-          Write-Host "ERROR: DLL not found at expected path"
-          dir build -Recurse | Where-Object { $_.Name -like "*.dll" } | ForEach-Object { $_.FullName }
-          exit 1
-        }
-        
-        # Try to show dependencies if dumpbin is available
-        try {
-          dumpbin /DEPENDENTS dist/gdal_EOPFZarr.dll | findstr "DLL"
-        } catch {
-          Write-Host "dumpbin not available, skipping dependency check"
-        }
-        
-    - name: Upload Artifact
+    # Upload Artifacts
+    - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: gdal-plugin-windows
-        path: dist/*
+        name: gdal_EOPFZarr-${{ runner.os }}-${{ matrix.cfg }}
+        path: |
+          build/gdal_EOPFZarr.so
+          build/gdal_EOPFZarr.dylib
+          build/Release/gdal_EOPFZarr.dll
+          build/Debug/gdal_EOPFZarr.dll
+        if-no-files-found: ignore
 
-
-  macos-build:
-    name: macOS Build (Conda)
-    runs-on: macos-13
-    timeout-minutes: 10  # Much faster with conda
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Setup Miniconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-update-conda: true
-        python-version: '3.10'
-        miniforge-version: latest
-        
-    - name: Install GDAL via conda-forge
-      shell: bash -el {0}
-      run: |
-        conda install -c conda-forge gdal cmake ninja -y
-        echo "Conda cache size:"
-        du -sh $CONDA_PKGS_DIRS || echo "Cache size check failed"
-        
-    - name: Configure
-      shell: bash -el {0}
-      run: |
-        cmake -S . -B build \
-          -G Ninja \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
-          
-    - name: Build
-      shell: bash -el {0}
-      run: cmake --build build --parallel
-      
-    - name: Smoke test
-      shell: bash -el {0}
-      run: |
-          export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
-          echo "Test 1- Checking for EOPFZARR driver in available formats:"
-          gdalinfo --formats | grep "EOPFZARR"
-          echo "Test 2- Opening sample Zarr dataset with EOPF_PROCESS=YES:"
-          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver"
-          echo "Test 3- Using EOPFZARR: prefix:"
-          gdalinfo EOPFZARR:$GITHUB_WORKSPACE/src/sample_data/ | grep -i "driver" || echo "EOPFZARR prefix test failed"
-          echo "Test 4- Verifying dataset properties:"
-          gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | grep "Size is" || echo "Dataset dimensions not found"
-          echo "Test 5- Sample of dataset info:"
-          CPL_LOG_ERRORS=OFF gdalinfo -oo EOPF_PROCESS=YES $GITHUB_WORKSPACE/src/sample_data/ | head -n 50
-    
-    - name: Set up Python dependencies
-      shell: bash -el {0}
-      run: |
-        conda install -c conda-forge pytest -y
-        # Install other requirements but exclude GDAL (already installed via conda)
-        if [ -f tests/requirements.txt ]; then
-          grep -v "gdal" tests/requirements.txt | pip install -r /dev/stdin || true
-        fi
-    
-    - name: Run Python tests
-      shell: bash -el {0}
-      run: |
-        # Set the driver path so Python tests can find the plugin
-        export GDAL_DRIVER_PATH=$GITHUB_WORKSPACE/build
-        # Run pytest
-        cd tests
-        pytest -xvs python/
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: gdal_EOPFZarr-macos
-        path: build/*.dylib
-
-  # Consolidate all artifacts for easy distribution
   package-release:
     name: Package Release Artifacts
     runs-on: ubuntu-22.04
-    needs: [linux-build, windows-build, macos-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Download Linux Debug artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gdal_EOPFZarr-Debug
-        path: ./release-package/linux/debug/
-        
-    - name: Download Linux Release artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gdal_EOPFZarr-Release  
-        path: ./release-package/linux/release/
-        
-    - name: Download Windows artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gdal-plugin-windows
-        path: ./release-package/windows/
-        
-    - name: Download macOS artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: gdal_EOPFZarr-macos
-        path: ./release-package/macos/
-        
-    - name: Create installation scripts
-      run: |
-        # Create Linux install script
-        cat > release-package/install-linux.sh << 'EOF'
-        #!/bin/bash
-        set -e
-        
-        PLUGIN_DIR=${GDAL_DRIVER_PATH:-/usr/lib/gdal/plugins}
-        PLUGIN_FILE="gdal_EOPFZarr.so"
-        
-        echo "Installing GDAL EOPF Plugin for Linux..."
-        
-        if [ "$1" = "debug" ]; then
-          SOURCE_DIR="linux/debug"
-          echo "Installing DEBUG version"
-        else
-          SOURCE_DIR="linux/release"  
-          echo "Installing RELEASE version"
-        fi
-        
-        sudo mkdir -p "$PLUGIN_DIR"
-        sudo cp "$SOURCE_DIR/$PLUGIN_FILE" "$PLUGIN_DIR/"
-        sudo chmod 755 "$PLUGIN_DIR/$PLUGIN_FILE"
-        
-        echo "Plugin installed to: $PLUGIN_DIR/$PLUGIN_FILE"
-        echo "Add this to your environment:"
-        echo "export GDAL_DRIVER_PATH=$PLUGIN_DIR:\$GDAL_DRIVER_PATH"
-        EOF
-        
-        # Create macOS install script  
-        cat > release-package/install-macos.sh << 'EOF'
-        #!/bin/bash
-        set -e
-        
-        PLUGIN_DIR=${GDAL_DRIVER_PATH:-$(brew --prefix gdal)/lib/gdal/plugins}
-        PLUGIN_FILE="gdal_EOPFZarr.dylib"
-        
-        echo "Installing GDAL EOPF Plugin for macOS..."
-        
-        mkdir -p "$PLUGIN_DIR"
-        cp "macos/$PLUGIN_FILE" "$PLUGIN_DIR/"
-        chmod 755 "$PLUGIN_DIR/$PLUGIN_FILE"
-        
-        echo "Plugin installed to: $PLUGIN_DIR/$PLUGIN_FILE"
-        echo "Add this to your environment:"
-        echo "export GDAL_DRIVER_PATH=$PLUGIN_DIR:\$GDAL_DRIVER_PATH"
-        EOF
-        
-        # Create Windows install script
-        cat > release-package/install-windows.bat << 'EOF'
-        @echo off
-        setlocal
-        
-        echo Installing GDAL EOPF Plugin for Windows...
-        echo.
-        
-        :: Check if GDAL is available
-        gdalinfo --version >nul 2>&1
-        if errorlevel 1 (
-            echo ERROR: GDAL not found in PATH. Please ensure GDAL is installed.
-            echo.
-            echo Install GDAL from: https://trac.osgeo.org/osgeo4w/
-            echo.
-            pause
-            exit /b 1
-        )
-        
-        :: Get GDAL version
-        for /f "tokens=2" %%i in ('gdalinfo --version 2^>nul') do set GDAL_VERSION=%%i
-        echo Detected GDAL version: %GDAL_VERSION%
-        
-        :: Check version compatibility
-        echo.
-        if "%GDAL_VERSION:~0,4%"=="3.10" (
-            echo ✅ GDAL 3.10.x detected - compatible
-        ) else if "%GDAL_VERSION:~0,4%"=="3.11" (
-            echo ✅ GDAL 3.11.x detected - compatible  
-        ) else (
-            echo ⚠️  GDAL version %GDAL_VERSION% compatibility unknown
-            echo This plugin was built for GDAL 3.11.x
-            echo Continue anyway? (Y/N)
-            set /p continue=
-            if /i not "%continue%"=="Y" exit /b 1
-        )
-        
-        set "PLUGIN_DIR=%GDAL_DRIVER_PATH%"
-        if "%PLUGIN_DIR%"=="" set "PLUGIN_DIR=C:\OSGeo4W\apps\gdal\lib\gdalplugins"
-        set "PLUGIN_FILE=gdal_EOPFZarr.dll"
-        
-        echo.
-        echo Installing to: %PLUGIN_DIR%
-        
-        if not exist "windows\%PLUGIN_FILE%" (
-            echo ERROR: Plugin file not found: windows\%PLUGIN_FILE%
-            pause
-            exit /b 1
-        )
-        
-        if not exist "%PLUGIN_DIR%" mkdir "%PLUGIN_DIR%"
-        copy "windows\%PLUGIN_FILE%" "%PLUGIN_DIR%\"
-        
-        if errorlevel 1 (
-            echo ERROR: Failed to copy plugin file
-            pause
-            exit /b 1
-        )
-        
-        echo.
-        echo ✅ Plugin installed successfully!
-        echo.
-        echo Testing installation...
-        gdalinfo --formats | findstr EOPF >nul 2>&1
-        if errorlevel 1 (
-            echo ⚠️  Plugin installed but not detected by GDAL
-            echo This may be normal on some systems
-        ) else (
-            echo ✅ Plugin detected by GDAL successfully!
-        )
-        
-        echo.
-        echo Installation complete. Test with:
-        echo   gdalinfo --formats ^| findstr EOPF
-        echo.
-        pause
-        EOF
-        
-        # Make scripts executable
-        chmod +x release-package/install-*.sh
-        
-        # Create comprehensive README
-        cat > release-package/README.md << 'EOF'
-        # GDAL EOPF Zarr Plugin - Release Package
-        
-        This package contains the GDAL EOPF plugin for multiple platforms.
-        
-        ## Quick Installation
-        
-        ### Linux
-        ```bash
-        ./install-linux.sh          # Install release version
-        ./install-linux.sh debug    # Install debug version
-        ```
-        
-        ### macOS
-        ```bash
-        ./install-macos.sh
-        ```
-        
-        ### Windows
-        ```cmd
-        install-windows.bat
-        ```
-        
-        ## Manual Installation
-        
-        1. Copy the appropriate plugin file to your GDAL plugins directory:
-           - Linux: `gdal_EOPFZarr.so` 
-           - macOS: `gdal_EOPFZarr.dylib`
-           - Windows: `gdal_EOPFZarr.dll`
-        
-        2. Set the GDAL_DRIVER_PATH environment variable to include the plugins directory
-        
-        ## Verification
-        
-        ```bash
-        gdalinfo --formats | grep EOPF
-        ```
-        
-        You should see the EOPFZARR driver listed.
-        
-        ## Support
-        
-        - GitHub: https://github.com/your-repo/GDAL-ZARR-EOPF
-        - Issues: https://github.com/your-repo/GDAL-ZARR-EOPF/issues
-        EOF
-        
-        # Create build info
-        cat > release-package/BUILD_INFO.json << EOF
-        {
-          "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "commit": "${{ github.sha }}",
-          "ref": "${{ github.ref }}",
-          "workflow": "${{ github.workflow }}",
-          "run_number": "${{ github.run_number }}",
-          "platforms": ["linux", "macos", "windows"],
-          "linux_variants": ["debug", "release"]
-        }
-        EOF
-        
-    - name: Upload consolidated release package
-      uses: actions/upload-artifact@v4
-      with:
-        name: gdal-eopf-plugin-release-v${{ github.run_number }}
-        path: release-package/
-        retention-days: 90
+    needs: [build_and_test]
+    if: github.event_name == 'release' && github.event.action == 'published'
 
-  # Optional: Create GitHub Release for tags
-  create-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-22.04
-    needs: [package-release]
-    if: startsWith(github.ref, 'refs/tags/v')
-    
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Download release package
+    - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
-        name: gdal-eopf-plugin-release-v${{ github.run_number }}
-        path: ./release-assets/
-        
-    - name: Create release archive
+        path: artifacts
+
+    - name: Display downloaded artifacts structure
+      run: ls -R artifacts
+
+    - name: Create Release Packages
       run: |
-        cd release-assets
-        zip -r ../gdal-eopf-plugin-${{ github.ref_name }}.zip .
-        tar -czf ../gdal-eopf-plugin-${{ github.ref_name }}.tar.gz .
-        cd ..
-        
-    - name: Create GitHub Release
+        mkdir -p release_packages
+        for dir in artifacts/*; do
+          if [ -d "$dir" ]; then
+            PKG_NAME=$(basename "$dir")
+            zip -r "release_packages/${PKG_NAME}.zip" "$dir"
+            tar -czf "release_packages/${PKG_NAME}.tar.gz" -C "$dir" .
+          fi
+        done
+
+    - name: Upload Release Assets
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          gdal-eopf-plugin-${{ github.ref_name }}.zip
-          gdal-eopf-plugin-${{ github.ref_name }}.tar.gz
+        files: release_packages/*
         generate_release_notes: true
-        draft: false
-        prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
-        body: |
-          ## GDAL EOPF Plugin ${{ github.ref_name }}
-          
-          ### Installation
-          
-          1. Download the appropriate archive for your platform
-          2. Extract the archive
-          3. Run the installation script for your platform:
-             - Linux: `./install-linux.sh`
-             - macOS: `./install-macos.sh` 
-             - Windows: `install-windows.bat`
-          
-          ### Supported Platforms
-          
-          - ✅ Linux (Ubuntu 22.04+ compatible)
-          - ✅ macOS (Intel & Apple Silicon)
-          - ✅ Windows (64-bit)
-          
-          ### Changes
-          
-          See the full changelog at: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}
-
-  # Future: Integration tests job
-  # Enable when test data becomes available
-  # integration-tests:
-  #   name: Integration Tests
-  #   runs-on: ubuntu-22.04
-  #   needs: [linux-build]
-  #   if: false  # Enable when test data is available
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #   - name: Download build artifacts
-  #     uses: actions/download-artifact@v4
-  #     with:
-  #       name: gdal_EOPFZarr-ubuntu-22.04
-  #       path: ./plugin/
-  #   - name: Install GDAL
-  #     run: sudo apt-get update && sudo apt-get install -y libgdal-dev gdal-bin
-  #   - name: Test with sample data
-  #     run: |
-  #       export GDAL_DRIVER_PATH="./plugin:$GDAL_DRIVER_PATH"
-  #       # Add tests with real EOPF data here
-  #       echo "Integration tests would run here"

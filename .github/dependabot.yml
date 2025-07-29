@@ -1,0 +1,60 @@
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    reviewers:
+      - "EOPF-Sample-Service/maintainers"
+    assignees:
+      - "EOPF-Sample-Service/maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # CMake/C++ dependencies (if using vcpkg or similar)
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly" 
+      day: "monday"
+      time: "06:00"
+    reviewers:
+      - "EOPF-Sample-Service/maintainers"
+    assignees:
+      - "EOPF-Sample-Service/maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "cpp"
+    ignore:
+      # Ignore major version updates for stable releases
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Python dependencies for test scripts
+  - package-ecosystem: "pip"
+    directory: "/tests"
+    schedule:
+      interval: "weekly"
+      day: "monday" 
+      time: "06:00"
+    reviewers:
+      - "EOPF-Sample-Service/maintainers"
+    assignees:
+      - "EOPF-Sample-Service/maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+      - "testing"

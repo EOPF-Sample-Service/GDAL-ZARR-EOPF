@@ -22,4 +22,4 @@ bool IsVirtualPath(const std::string& path);
  */
 bool IsQuotedPath(const std::string& path);
 
-#endif // EOPFZARR_TEST_UTILS_H
+#endif  // EOPFZARR_TEST_UTILS_H

@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planning
+
+- Future enhancements and improvements
+
+## [1.0.0] - 2025-07-29
+
 ### Added
+
 - Comprehensive performance optimization framework
 - TTL-based metadata caching (5-minute metadata, 2-minute network)
 - Lazy loading for geospatial information processing
@@ -17,22 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Memory-efficient metadata merging with const-correctness
 - Comprehensive unit testing framework
 - Cross-platform build system with CMake
-
-### Changed
-- Improved const-correctness for Linux compiler compatibility
-- Enhanced geospatial coordinate detection from corner coordinates
-- Optimized metadata loading with smart caching strategies
-- Streamlined documentation for production focus
-
-### Fixed
-- Linux build compilation errors with const-correctness
-- Memory management in metadata operations
-- Performance issues with repeated metadata access
-- Subdataset path handling for URL-based datasets
-
-## [1.0.0] - Initial Release
-
-### Added
 - GDAL driver for EOPF Zarr datasets
 - QGIS integration with "Add Raster Layer" support
 - Automatic CRS and geotransform detection
@@ -41,27 +32,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform support (Windows, macOS, Linux)
 - Basic metadata attachment from EOPF specifications
 
-### Features
-- **Dataset Access**: Multiple access patterns with EOPFZARR: prefix
-- **Geospatial Intelligence**: Automatic CRS detection from EPSG and STAC metadata
-- **Performance**: Chunked data optimization for large datasets
-- **Integration**: Seamless QGIS and Python API compatibility
+### Changed
+
+- Improved const-correctness for Linux compiler compatibility
+- Enhanced geospatial coordinate detection from corner coordinates
+- Optimized metadata loading with smart caching strategies
+- Streamlined documentation for production focus
+
+### Fixed
+
+- Linux build compilation errors with const-correctness
+- Memory management in metadata operations
+- Performance issues with repeated metadata access
+- Subdataset path handling for URL-based datasets
 
 ## Development History
 
 ### Performance Optimization Phase
+
 - Implemented comprehensive caching framework
 - Added performance monitoring and profiling tools
 - Optimized network operations and metadata access
 - Enhanced block-level data access patterns
 
-### Cleanup and Documentation Phase  
+### Cleanup and Documentation Phase
+
 - Removed excessive verbose documentation
 - Streamlined to essential user and developer guides
 - Focused on production-ready documentation
 - Maintained practical examples and troubleshooting
 
 ### Build System Improvements
+
 - Cross-platform CMake configuration
 - Automated installation scripts for Windows, macOS, Linux
 - CI/CD integration with GitHub Actions
