@@ -9,6 +9,11 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+  actions: read
+  checks: write
+
 jobs:
   lint:
     name: Lint • cppcheck & clang-format
@@ -163,3 +168,4 @@ jobs:
       with:
         files: release_packages/*
         generate_release_notes: true
+        token: ${{ secrets.GITHUB_TOKEN }}
