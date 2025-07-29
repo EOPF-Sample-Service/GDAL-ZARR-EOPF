@@ -2,21 +2,24 @@
 #ifndef EOPF_ZARR_H
 #define EOPF_ZARR_H
 
-#include "gdal_priv.h"
-#include "cpl_vsi.h"
-#include "cpl_json.h"
-#include <vector>
 #include <memory>
 #include <string>
+#include <vector>
+
+#include "cpl_json.h"
+#include "cpl_vsi.h"
+#include "gdal_priv.h"
 
 class EOPFZarrRasterBand;  // Forward declaration
 
-class EOPFZarrDataset final : public GDALDataset {
+class EOPFZarrDataset final : public GDALDataset
+{
     friend class EOPFZarrRasterBand;
-private:
+
+  private:
     std::vector<GDALDataset*> m_apoUnderDS;  // Underlying Zarr datasets (one per array)
     char** m_papszSubdatasets = nullptr;     // Subdataset name list (for multiple arrays)
-public:
+  public:
     EOPFZarrDataset() = default;
     ~EOPFZarrDataset() override;
 
@@ -27,18 +30,21 @@ public:
     // (Optional: implementation for Create() if write support is needed in future)
 
     // Override GetMetadata to expose subdatasets if present
-    char** GetMetadata(const char* pszDomain) override {
+    char** GetMetadata(const char* pszDomain) override
+    {
         if (pszDomain != nullptr && EQUAL(pszDomain, "SUBDATASETS") && m_papszSubdatasets)
             return m_papszSubdatasets;
         return GDALDataset::GetMetadata(pszDomain);
     }
 };
 
-class EOPFZarrRasterBand final : public GDALRasterBand {
-private:
+class EOPFZarrRasterBand final : public GDALRasterBand
+{
+  private:
     GDALRasterBand* m_poBaseBand;  // Underlying Zarr raster band
-public:
-    EOPFZarrRasterBand(EOPFZarrDataset* poDS, int nBand, GDALRasterBand* poBaseBand) {
+  public:
+    EOPFZarrRasterBand(EOPFZarrDataset* poDS, int nBand, GDALRasterBand* poBaseBand)
+    {
         this->poDS = poDS;
         this->nBand = nBand;
         m_poBaseBand = poBaseBand;
@@ -57,4 +63,4 @@ public:
     // (Optionally override other methods like IWriteBlock, if write support is added)
 };
 
-#endif // EOPF_ZARR_H
+#endif  // EOPF_ZARR_H

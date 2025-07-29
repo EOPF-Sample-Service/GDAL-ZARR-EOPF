@@ -4,14 +4,14 @@
  *  This file contains only the core GDAL driver interface functions.
  *  All implementation details are delegated to specialized classes.
  **********************************************************************/
-#include "eopfzarr_dataset.h"
-#include "eopfzarr_path_utils.h"
-#include "eopfzarr_opener.h"
-#include "eopfzarr_registry.h"
-#include "eopfzarr_errors.h"
-#include "gdal_priv.h"
-#include "cpl_vsi.h"
 #include "cpl_string.h"
+#include "cpl_vsi.h"
+#include "eopfzarr_dataset.h"
+#include "eopfzarr_errors.h"
+#include "eopfzarr_opener.h"
+#include "eopfzarr_path_utils.h"
+#include "eopfzarr_registry.h"
+#include "gdal_priv.h"
 
 // Export declarations
 #ifdef _WIN32
@@ -28,22 +28,22 @@ using namespace EOPFErrorUtils;
 /* -------------------------------------------------------------------- */
 /*      Identify — only accept Zarr files with the EOPF prefix           */
 /* -------------------------------------------------------------------- */
-static int EOPFIdentify(GDALOpenInfo *poOpenInfo)
+static int EOPFIdentify(GDALOpenInfo* poOpenInfo)
 {
     // Don't handle update mode
     if (poOpenInfo->eAccess == GA_Update)
         return FALSE;
 
-    const char *pszFilename = poOpenInfo->pszFilename;
+    const char* pszFilename = poOpenInfo->pszFilename;
 
     // Only identify with explicit prefixes or options
     if (STARTS_WITH_CI(pszFilename, "EOPFZARR:"))
         return TRUE;
 
     // Check EOPF_PROCESS option
-    const char *pszEOPFProcess = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
-    if (pszEOPFProcess && 
-        (EQUAL(pszEOPFProcess, "YES") || EQUAL(pszEOPFProcess, "TRUE") || EQUAL(pszEOPFProcess, "1")))
+    const char* pszEOPFProcess = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "EOPF_PROCESS");
+    if (pszEOPFProcess && (EQUAL(pszEOPFProcess, "YES") || EQUAL(pszEOPFProcess, "TRUE") ||
+                           EQUAL(pszEOPFProcess, "1")))
         return TRUE;
 
     // Decline all other files
@@ -53,9 +53,9 @@ static int EOPFIdentify(GDALOpenInfo *poOpenInfo)
 /* -------------------------------------------------------------------- */
 /*      Open — delegate to specialized opener classes                    */
 /* -------------------------------------------------------------------- */
-static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
+static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
 {
-    const char *pszFilename = poOpenInfo->pszFilename;
+    const char* pszFilename = poOpenInfo->pszFilename;
     ErrorHandler::Debug(std::string("Opening file: ") + pszFilename);
 
     // Parse the filename using dedicated parser
@@ -74,22 +74,19 @@ static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
     }
 
     // Open the underlying dataset using specialized opener
-    GDALDataset *poUnderlyingDS = nullptr;
-    
+    GDALDataset* poUnderlyingDS = nullptr;
+
     if (parsedPath.isSubdataset)
     {
-        poUnderlyingDS = DatasetOpener::OpenSubdataset(
-            parsedPath.mainPath, 
-            parsedPath.subdatasetPath,
-            poOpenInfo->nOpenFlags, 
-            poOpenInfo->papszOpenOptions);
+        poUnderlyingDS = DatasetOpener::OpenSubdataset(parsedPath.mainPath,
+                                                       parsedPath.subdatasetPath,
+                                                       poOpenInfo->nOpenFlags,
+                                                       poOpenInfo->papszOpenOptions);
     }
     else
     {
         poUnderlyingDS = DatasetOpener::OpenMainDataset(
-            parsedPath.mainPath,
-            poOpenInfo->nOpenFlags,
-            poOpenInfo->papszOpenOptions);
+            parsedPath.mainPath, poOpenInfo->nOpenFlags, poOpenInfo->papszOpenOptions);
     }
 
     if (!poUnderlyingDS)
@@ -99,7 +96,7 @@ static GDALDataset *EOPFOpen(GDALOpenInfo *poOpenInfo)
     }
 
     // Create our wrapper dataset
-    EOPFZarrDataset *poDS = EOPFZarrDataset::Create(poUnderlyingDS, DriverRegistry::GetDriver());
+    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDS, DriverRegistry::GetDriver());
     if (poDS)
     {
         poDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
