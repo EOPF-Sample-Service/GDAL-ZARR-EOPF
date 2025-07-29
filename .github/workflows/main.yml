@@ -91,28 +91,34 @@ jobs:
         arch: x64
 
     # Configure & Build
-    - name: Configure
+    - name: Configure & Build (Linux/macOS)
+      if: runner.os != 'Windows'
       run: |
-        if [ "${{ runner.os }}" == "Windows" ]; then
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-        else
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
-        fi
-    - name: Build
-      run: cmake --build build --config ${{ matrix.cfg }} --parallel
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+        cmake --build build --parallel
+
+    - name: Configure & Build (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
+        cmake --build build --config ${{ matrix.cfg }} --parallel
 
     # Testing
-    - name: Smoke test
+    - name: Smoke test (Linux/macOS)
+      if: runner.os != 'Windows'
       shell: bash
       run: |
-        if [ "${{ runner.os }}" == "Windows" ]; then
-          export GDAL_DRIVER_PATH="$PWD/build/${{ matrix.cfg }}"
-          export GDAL_DATA="C:/OSGeo4W/share/gdal"
-          export PATH="/c/OSGeo4W/bin:$PATH"
-        else
-          export GDAL_DRIVER_PATH="$PWD/build"
-        fi
+        export GDAL_DRIVER_PATH="$PWD/build"
         gdalinfo --formats | grep "EOPFZARR"
+
+    - name: Smoke test (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $env:GDAL_DRIVER_PATH = "$pwd\build\${{ matrix.cfg }}"
+        $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+        $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
+        gdalinfo --formats | findstr "EOPFZARR"
 
     # Upload Artifacts
     - name: Upload Build Artifact
