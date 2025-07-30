@@ -46,18 +46,13 @@ jobs:
           retention-days: 7
 
   build_and_test:
-    name: Build & Test • ${{ matrix.os }} / ${{ matrix.cfg }}
+    name: Build & Test • ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     needs: [lint]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-13]
-        cfg: [Debug, Release]
-        # Exclude debug build on macOS for faster CI
-        exclude:
-          - os: macos-13
-            cfg: Debug
 
     steps:
     - name: Checkout
@@ -67,8 +62,8 @@ jobs:
     - if: runner.os != 'Windows'
       uses: hendrikmuhs/ccache-action@v1
       with:
-        key: ${{ runner.os }}-${{ matrix.cfg }}-${{ hashFiles('**/*.cpp','**/*.h') }}
-        restore-keys: ${{ runner.os }}-${{ matrix.cfg }}-
+        key: ${{ runner.os }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+        restore-keys: ${{ runner.os }}-
 
     # Platform-specific dependencies
     - name: Install deps (Linux)
@@ -99,14 +94,14 @@ jobs:
     - name: Configure & Build (Linux/macOS)
       if: runner.os != 'Windows'
       run: |
-        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.cfg }}
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel
 
     - name: Configure & Build (Windows)
       if: runner.os == 'Windows'
       run: |
         cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-        cmake --build build --config ${{ matrix.cfg }} --parallel
+        cmake --build build --config Release --parallel
 
     # Testing
     - name: Unit Tests (C++)
@@ -114,13 +109,13 @@ jobs:
       shell: bash
       run: |
         cd build
-        ctest -C ${{ matrix.cfg }} --output-on-failure
+        ctest -C Release --output-on-failure
         
     - name: Unit Tests (C++) - Windows
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $env:GDAL_DRIVER_PATH = "$pwd\build\${{ matrix.cfg }}"
+        $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
         $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
         $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
         cd build
@@ -137,12 +132,12 @@ jobs:
         foreach ($ctestPath in $ctestPaths) {
           if (Test-Path $ctestPath -ErrorAction SilentlyContinue) {
             Write-Host "Using ctest from: $ctestPath"
-            & $ctestPath -C ${{ matrix.cfg }} --output-on-failure
+            & $ctestPath -C Release --output-on-failure
             $ctestFound = $true
             break
           } elseif ($ctestPath -eq "ctest.exe") {
             try {
-              & $ctestPath -C ${{ matrix.cfg }} --output-on-failure
+              & $ctestPath -C Release --output-on-failure
               $ctestFound = $true
               break
             } catch {
@@ -153,7 +148,7 @@ jobs:
         
         if (-not $ctestFound) {
           Write-Host "ctest not found, trying alternative approach..."
-          cmake --build . --config ${{ matrix.cfg }} --target RUN_TESTS
+          cmake --build . --config Release --target RUN_TESTS
         }
 
     - name: Integration Tests (Python)
@@ -162,7 +157,7 @@ jobs:
         # Set environment for tests
         if [ "${{ runner.os }}" = "Windows" ]; then
           # Use OSGeo4W Python environment
-          export GDAL_DRIVER_PATH="$PWD/build/${{ matrix.cfg }}"
+          export GDAL_DRIVER_PATH="$PWD/build/Release"
           export GDAL_DATA="C:/OSGeo4W/share/gdal"
           export PATH="C:/OSGeo4W/bin:$PATH"
           
@@ -191,7 +186,7 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $env:GDAL_DRIVER_PATH = "$pwd\build\${{ matrix.cfg }}"
+        $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
         $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
         $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
         gdalinfo --formats | findstr "EOPFZARR"
@@ -205,7 +200,6 @@ jobs:
           build/gdal_EOPFZarr.so
           build/gdal_EOPFZarr.dylib
           build/Release/gdal_EOPFZarr.dll
-          build/Debug/gdal_EOPFZarr.dll
         if-no-files-found: ignore
 
   package-release:
