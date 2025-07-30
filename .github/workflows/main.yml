@@ -153,25 +153,24 @@ jobs:
 
     - name: Integration Tests (Python)
       shell: bash
-      run: |        
+      run: |
         # Set environment for tests
         if [ "${{ runner.os }}" = "Windows" ]; then
-          # Use OSGeo4W Python environment
           export GDAL_DRIVER_PATH="$PWD/build/Release"
           export GDAL_DATA="C:/OSGeo4W/share/gdal"
           export PATH="C:/OSGeo4W/bin:$PATH"
-          
-          # Install pytest using OSGeo4W Python
-          "C:/OSGeo4W/bin/python.exe" -m pip install pytest numpy
-          
-          # Run Python integration tests with OSGeo4W Python
-          "C:/OSGeo4W/bin/python.exe" -m pytest -c pytest.ini tests/integration/ -v --tb=short
+          PYTHON_PATH="C:/OSGeo4W/bin/python.exe"
+          if [ ! -f "$PYTHON_PATH" ]; then
+            PYTHON_PATH="C:/OSGeo4W/bin/python3.exe"
+          fi
+          if [ ! -f "$PYTHON_PATH" ]; then
+            PYTHON_PATH="python"
+          fi
+          "$PYTHON_PATH" -m pip install pytest numpy
+          "$PYTHON_PATH" -m pytest -c pytest.ini tests/integration/ -v --tb=short
         else
-          # Install pytest and dependencies for Linux/macOS
           python -m pip install pytest numpy
           export GDAL_DRIVER_PATH="$PWD/build"
-          
-          # Run Python integration tests with system Python
           python -m pytest -c pytest.ini tests/integration/ -v --tb=short
         fi
         
