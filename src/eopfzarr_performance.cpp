@@ -314,7 +314,7 @@ PathType DetectPathType(const std::string& path)
     if (path.length() >= 6 && path.substr(0, 6) == "/vsis3/")
         return PathType::VSI_S3;
 
-    if (path.length() >= 10 && path.substr(0, 10) == "/vsiaz/" ||
+    if ((path.length() >= 7 && path.substr(0, 7) == "/vsiaz/") ||
         (path.length() >= 11 && path.substr(0, 11) == "/vsiazure/"))
         return PathType::VSI_AZURE;
 

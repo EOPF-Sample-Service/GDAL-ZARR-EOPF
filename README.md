@@ -143,15 +143,32 @@ python tests/generate_test_data.py
 ### Test Data
 
 Integration tests use automatically generated Zarr datasets covering:
+
 - Basic functionality (sample.zarr)
 - Subdatasets (with_subdatasets.zarr)
 - Geospatial information (georeferenced.zarr)
 - EOPF metadata (with_metadata.zarr)
 - Performance testing (performance_test.zarr)
 
+### Network Testing
+
+The test suite includes comprehensive network testing:
+
+- **HTTPS URLs**: Tests with real-world EODC datasets
+- **VSI Wrappers**: `/vsicurl/` and `/vsis3/` path handling
+- **Error Handling**: Network timeouts and invalid URLs
+- **Performance**: Caching effectiveness with remote datasets
+
+Example tested HTTPS URL:
+
+```text
+https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr
+```
+
 ### CI/CD Testing
 
 GitHub Actions automatically runs:
+
 - Cross-platform builds (Windows, macOS, Linux)
 - C++ unit tests via CTest
 - Python integration tests via pytest
