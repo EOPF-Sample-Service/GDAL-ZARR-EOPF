@@ -237,12 +237,11 @@ static bool ParseSubdatasetPath(const std::string& fullPath,
     if (colonPos != std::string::npos)
     {
         std::string potential_scheme = tmpPath.substr(0, colonPos);
-        
+
         // Common URL schemes that should not be treated as subdataset separators
-        if (potential_scheme == "http" || potential_scheme == "https" || 
-            potential_scheme == "ftp" || potential_scheme == "ftps" ||
-            potential_scheme == "s3" || potential_scheme == "gs" ||
-            potential_scheme == "az" || potential_scheme == "azure")
+        if (potential_scheme == "http" || potential_scheme == "https" ||
+            potential_scheme == "ftp" || potential_scheme == "ftps" || potential_scheme == "s3" ||
+            potential_scheme == "gs" || potential_scheme == "az" || potential_scheme == "azure")
         {
             // This is a URL - don't parse for subdatasets in the simple case
             colonPos = std::string::npos;
@@ -255,14 +254,13 @@ static bool ParseSubdatasetPath(const std::string& fullPath,
     {
         // This is likely a drive letter - look for another colon
         colonPos = tmpPath.find(':', colonPos + 1);
-        
+
         // But check again if the next part looks like a URL scheme
         if (colonPos != std::string::npos && colonPos > 2)
         {
             std::string after_drive = tmpPath.substr(2, colonPos - 2);
-            if (after_drive == "http" || after_drive == "https" || 
-                after_drive == "ftp" || after_drive == "ftps" ||
-                after_drive == "s3" || after_drive == "gs" ||
+            if (after_drive == "http" || after_drive == "https" || after_drive == "ftp" ||
+                after_drive == "ftps" || after_drive == "s3" || after_drive == "gs" ||
                 after_drive == "az" || after_drive == "azure")
             {
                 colonPos = std::string::npos;
