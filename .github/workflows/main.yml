@@ -118,28 +118,37 @@ jobs:
         
     - name: Unit Tests (C++) - Windows
       if: runner.os == 'Windows'
-      shell: pwsh
+      shell: cmd
       run: |
+        call "C:\OSGeo4W\OSGeo4W.bat"
         cd build
+        set GDAL_DRIVER_PATH=%CD%\${{ matrix.cfg }}
+        set GDAL_DATA=C:\OSGeo4W\share\gdal
         ctest -C ${{ matrix.cfg }} --output-on-failure
 
     - name: Integration Tests (Python)
       shell: bash
-      run: |
-        # Install pytest and dependencies
-        python -m pip install pytest pytest-benchmark
-        
+      run: |        
         # Set environment for tests
         if [ "${{ runner.os }}" = "Windows" ]; then
+          # Use OSGeo4W Python environment
           export GDAL_DRIVER_PATH="$PWD/build/${{ matrix.cfg }}"
           export GDAL_DATA="C:/OSGeo4W/share/gdal"
           export PATH="C:/OSGeo4W/bin:$PATH"
+          
+          # Install pytest using OSGeo4W Python
+          "C:/OSGeo4W/bin/python.exe" -m pip install pytest pytest-benchmark
+          
+          # Run Python integration tests with OSGeo4W Python
+          "C:/OSGeo4W/bin/python.exe" -m pytest -c pytest.ini tests/integration/ -v --tb=short
         else
+          # Install pytest and dependencies for Linux/macOS
+          python -m pip install pytest pytest-benchmark
           export GDAL_DRIVER_PATH="$PWD/build"
+          
+          # Run Python integration tests with system Python
+          python -m pytest -c pytest.ini tests/integration/ -v --tb=short
         fi
-        
-        # Run Python integration tests with explicit config
-        python -m pytest -c pytest.ini tests/integration/ -v --tb=short
         
     - name: Smoke test (Linux/macOS)
       if: runner.os != 'Windows'

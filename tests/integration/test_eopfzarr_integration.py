@@ -205,74 +205,125 @@ class TestEOPFZarrIntegration:
     
     @pytest.mark.require_curl
     def test_network_access(self):
-        """Test network dataset access via VSI and HTTPS URLs"""
-        # Test the specific EODC URL
+        """Test network dataset access via VSI and HTTPS URLs - This is the most critical test"""
+        # Test the specific EODC URL - this is our primary use case
         eodc_url = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
         
         print(f"Testing EODC URL: {eodc_url}")
         
-        # Test direct HTTPS access
-        try:
-            ds = gdal.Open(f"EOPFZARR:{eodc_url}")
-            if ds is not None:
-                print("✅ Successfully opened EODC HTTPS dataset")
-                assert ds.RasterCount > 0, "EODC dataset should have bands"
-                
-                # Test reading metadata
-                metadata = ds.GetMetadata()
-                print(f"Metadata keys: {len(metadata)}")
-                
-                # Test reading a small data sample
-                if ds.RasterXSize > 0 and ds.RasterYSize > 0:
-                    band = ds.GetRasterBand(1)
-                    # Read a small 10x10 sample
-                    sample_size = min(10, ds.RasterXSize, ds.RasterYSize)
-                    data = band.ReadAsArray(0, 0, sample_size, sample_size)
-                    if data is not None:
-                        print(f"✅ Successfully read {sample_size}x{sample_size} data sample")
-                    else:
-                        print("⚠️ Could not read data sample")
-                
-                # Test subdatasets if available
-                subdatasets = ds.GetMetadata("SUBDATASETS")
-                if subdatasets:
-                    print(f"Found {len(subdatasets)//2} subdatasets")
-                    
-            else:
-                print("⚠️ Could not open EODC dataset (may be network issue)")
-                
-        except Exception as e:
-            print(f"⚠️ EODC dataset access failed: {e}")
-            # Don't fail the test - network issues are expected
-        
-        # Test with VSI wrapper
-        try:
-            vsi_url = f"/vsicurl/{eodc_url}"
-            ds_vsi = gdal.Open(f"EOPFZARR:{vsi_url}")
-            if ds_vsi is not None:
-                print("✅ Successfully opened EODC dataset via /vsicurl/")
-                assert ds_vsi.RasterCount > 0, "VSI EODC dataset should have bands"
-            else:
-                print("⚠️ Could not open EODC dataset via /vsicurl/")
-        except Exception as e:
-            print(f"⚠️ VSI EODC dataset access failed: {e}")
-        
-        # Test other public HTTPS URLs if available
-        test_urls = [
-            "https://example.com/public/test.zarr",  # Hypothetical
+        # Test different URL formats to find working ones
+        url_formats = [
+            ("Direct HTTPS", f"EOPFZARR:{eodc_url}"),
+            ("VSI Curl", f"EOPFZARR:/vsicurl/{eodc_url}"),
+            ("Quoted VSI", f'EOPFZARR:"/vsicurl/{eodc_url}"'),
         ]
         
-        for url in test_urls:
+        successful_format = None
+        dataset = None
+        
+        for format_name, url in url_formats:
+            print(f"\n--- Testing {format_name} ---")
             try:
-                ds = gdal.Open(f"EOPFZARR:{url}")
+                ds = gdal.Open(url)
                 if ds is not None:
-                    print(f"✅ Successfully opened {url}")
-                    assert ds.RasterCount > 0
+                    print(f"✅ Successfully opened EODC dataset via {format_name}")
+                    print(f"   RasterCount: {ds.RasterCount}")
+                    print(f"   Size: {ds.RasterXSize}x{ds.RasterYSize}")
+                    
+                    # Basic validation
+                    assert ds.RasterXSize > 0, f"Dataset should have positive width"
+                    assert ds.RasterYSize > 0, f"Dataset should have positive height"
+                    
+                    successful_format = format_name
+                    dataset = ds
+                    break
                 else:
-                    print(f"⚠️ Could not open {url} (expected)")
+                    print(f"⚠️ Could not open EODC dataset via {format_name} (returned None)")
+                    
+            except Exception as e:
+                print(f"⚠️ {format_name} failed: {e}")
+        
+        # At least one format should work
+        assert successful_format is not None, "None of the URL formats worked for HTTPS access"
+        assert dataset is not None, "Could not open the EODC dataset with any format"
+        
+        print(f"\n=== Working format: {successful_format} ===")
+        
+        # Test metadata access
+        metadata = dataset.GetMetadata()
+        print(f"Metadata keys: {len(metadata)}")
+        assert isinstance(metadata, dict), "Metadata should be a dictionary"
+        
+        # Test subdatasets - this is crucial for EOPF data
+        subdatasets = dataset.GetMetadata("SUBDATASETS")
+        if subdatasets:
+            subds_count = len([k for k in subdatasets.keys() if k.endswith("_NAME")])
+            print(f"Found {subds_count} subdatasets")
+            assert subds_count > 0, "Should have subdatasets for EOPF data"
+            
+            # Test opening first few subdatasets
+            for i in range(1, min(4, subds_count + 1)):  # Test first 3 subdatasets
+                subds_name = subdatasets.get(f"SUBDATASET_{i}_NAME")
+                subds_desc = subdatasets.get(f"SUBDATASET_{i}_DESC", "No description")
+                if subds_name:
+                    print(f"  Testing subdataset {i}: {subds_desc}")
+                    try:
+                        subds = gdal.Open(subds_name)
+                        if subds is not None:
+                            print(f"    ✅ Opened: {subds.RasterXSize}x{subds.RasterYSize}, {subds.RasterCount} bands")
+                            assert subds.RasterCount > 0, f"Subdataset {i} should have bands"
+                            assert subds.RasterXSize > 0 and subds.RasterYSize > 0, f"Subdataset {i} should have valid dimensions"
+                            
+                            # Test reading a small data sample from subdataset
+                            if subds.RasterCount > 0:
+                                band = subds.GetRasterBand(1)
+                                sample_size = min(5, subds.RasterXSize, subds.RasterYSize)
+                                try:
+                                    data = band.ReadAsArray(0, 0, sample_size, sample_size)
+                                    if data is not None:
+                                        print(f"    ✅ Successfully read {sample_size}x{sample_size} data from subdataset {i}")
+                                    else:
+                                        print(f"    ⚠️ Could not read data from subdataset {i}")
+                                except Exception as e:
+                                    print(f"    ⚠️ Data read failed for subdataset {i}: {e}")
+                        else:
+                            print(f"    ❌ Failed to open subdataset {i}")
+                    except Exception as e:
+                        print(f"    ❌ Exception opening subdataset {i}: {e}")
+        else:
+            print("No subdatasets found (this might be unexpected for EOPF data)")
+        
+        # Test reading a small data sample from main dataset if it has bands
+        if dataset.RasterCount > 0:
+            band = dataset.GetRasterBand(1)
+            sample_size = min(10, dataset.RasterXSize, dataset.RasterYSize)
+            try:
+                data = band.ReadAsArray(0, 0, sample_size, sample_size)
+                if data is not None:
+                    print(f"✅ Successfully read {sample_size}x{sample_size} data sample from main dataset")
+                else:
+                    print("⚠️ Could not read data sample from main dataset")
+            except Exception as e:
+                print(f"⚠️ Data read failed from main dataset: {e}")
+        
+        print(f"\n🎉 HTTPS URL testing completed successfully with {successful_format}!")
+        
+        # Test additional URLs if time permits
+        additional_test_urls = [
+            "https://example.com/public/test.zarr",  # Should fail gracefully
+        ]
+        
+        print(f"\n--- Testing error handling with invalid URLs ---")
+        for url in additional_test_urls:
+            try:
+                ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+                if ds is not None:
+                    print(f"⚠️ Unexpectedly opened {url}")
+                else:
+                    print(f"✅ Correctly failed to open invalid URL: {url}")
             except Exception:
+                print(f"✅ Correctly raised exception for invalid URL: {url}")
                 # Expected for non-existent URLs
-                pass
     
     def test_error_handling(self):
         """Test proper error handling for invalid inputs"""
