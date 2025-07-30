@@ -138,8 +138,8 @@ jobs:
           export GDAL_DRIVER_PATH="$PWD/build"
         fi
         
-        # Run Python integration tests
-        python -m pytest tests/integration/ -v --tb=short
+        # Run Python integration tests with explicit config
+        python -m pytest -c pytest.ini tests/integration/ -v --tb=short
         
     - name: Smoke test (Linux/macOS)
       if: runner.os != 'Windows'
