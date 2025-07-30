@@ -118,13 +118,43 @@ jobs:
         
     - name: Unit Tests (C++) - Windows
       if: runner.os == 'Windows'
-      shell: cmd
+      shell: pwsh
       run: |
-        call "C:\OSGeo4W\OSGeo4W.bat"
+        $env:GDAL_DRIVER_PATH = "$pwd\build\${{ matrix.cfg }}"
+        $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+        $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
         cd build
-        set GDAL_DRIVER_PATH=%CD%\${{ matrix.cfg }}
-        set GDAL_DATA=C:\OSGeo4W\share\gdal
-        ctest -C ${{ matrix.cfg }} --output-on-failure
+        
+        # Try to find ctest in common locations
+        $ctestPaths = @(
+          "C:\Program Files\CMake\bin\ctest.exe",
+          "C:\Program Files (x86)\CMake\bin\ctest.exe", 
+          "C:\OSGeo4W\bin\ctest.exe",
+          "ctest.exe"
+        )
+        
+        $ctestFound = $false
+        foreach ($ctestPath in $ctestPaths) {
+          if (Test-Path $ctestPath -ErrorAction SilentlyContinue) {
+            Write-Host "Using ctest from: $ctestPath"
+            & $ctestPath -C ${{ matrix.cfg }} --output-on-failure
+            $ctestFound = $true
+            break
+          } elseif ($ctestPath -eq "ctest.exe") {
+            try {
+              & $ctestPath -C ${{ matrix.cfg }} --output-on-failure
+              $ctestFound = $true
+              break
+            } catch {
+              # Continue to next option
+            }
+          }
+        }
+        
+        if (-not $ctestFound) {
+          Write-Host "ctest not found, trying alternative approach..."
+          cmake --build . --config ${{ matrix.cfg }} --target RUN_TESTS
+        }
 
     - name: Integration Tests (Python)
       shell: bash
