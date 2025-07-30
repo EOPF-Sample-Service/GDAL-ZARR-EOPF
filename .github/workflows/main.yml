@@ -109,6 +109,38 @@ jobs:
         cmake --build build --config ${{ matrix.cfg }} --parallel
 
     # Testing
+    - name: Unit Tests (C++)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        cd build
+        ctest -C ${{ matrix.cfg }} --output-on-failure
+        
+    - name: Unit Tests (C++) - Windows
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        cd build
+        ctest -C ${{ matrix.cfg }} --output-on-failure
+
+    - name: Integration Tests (Python)
+      shell: bash
+      run: |
+        # Install pytest and dependencies
+        python -m pip install pytest pytest-benchmark
+        
+        # Set environment for tests
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          export GDAL_DRIVER_PATH="$PWD/build/${{ matrix.cfg }}"
+          export GDAL_DATA="C:/OSGeo4W/share/gdal"
+          export PATH="C:/OSGeo4W/bin:$PATH"
+        else
+          export GDAL_DRIVER_PATH="$PWD/build"
+        fi
+        
+        # Run Python integration tests
+        python -m pytest tests/integration/ -v --tb=short
+        
     - name: Smoke test (Linux/macOS)
       if: runner.os != 'Windows'
       shell: bash

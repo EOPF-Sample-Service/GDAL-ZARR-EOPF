@@ -105,15 +105,57 @@ sudo make install
 
 ## Testing
 
+The project includes comprehensive testing following industry best practices:
+
+### Test Types
+
+- **Unit Tests (C++)** - Core functionality and GDAL integration
+- **Integration Tests (Python)** - End-to-end driver functionality using pytest
+- **Performance Tests** - Caching and optimization validation
+- **Compatibility Tests** - Different Zarr format support
+
+### Quick Test Run
+
 ```bash
-# Run tests
+# Run all tests with the test runner
+python run_tests.py
+
+# Or run specific test types
+python run_tests.py --type smoke     # Basic driver functionality
+python run_tests.py --type unit      # C++ unit tests via CTest
+python run_tests.py --type integration  # Python integration tests
+```
+
+### Manual Testing
+
+```bash
+# C++ unit tests via CTest
 cd build
 ctest -C Release --verbose
 
-# Or run specific tests
-./test_compatibility
-./test_performance
+# Python integration tests via pytest  
+pytest tests/integration/ -v
+
+# Generate test data (if needed)
+python tests/generate_test_data.py
 ```
+
+### Test Data
+
+Integration tests use automatically generated Zarr datasets covering:
+- Basic functionality (sample.zarr)
+- Subdatasets (with_subdatasets.zarr)
+- Geospatial information (georeferenced.zarr)
+- EOPF metadata (with_metadata.zarr)
+- Performance testing (performance_test.zarr)
+
+### CI/CD Testing
+
+GitHub Actions automatically runs:
+- Cross-platform builds (Windows, macOS, Linux)
+- C++ unit tests via CTest
+- Python integration tests via pytest
+- Smoke tests for driver registration
 
 ## License
 
