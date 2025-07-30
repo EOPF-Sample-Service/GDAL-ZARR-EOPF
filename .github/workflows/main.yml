@@ -137,13 +137,13 @@ jobs:
           export PATH="C:/OSGeo4W/bin:$PATH"
           
           # Install pytest using OSGeo4W Python
-          "C:/OSGeo4W/bin/python.exe" -m pip install pytest pytest-benchmark
+          "C:/OSGeo4W/bin/python.exe" -m pip install pytest
           
           # Run Python integration tests with OSGeo4W Python
           "C:/OSGeo4W/bin/python.exe" -m pytest -c pytest.ini tests/integration/ -v --tb=short
         else
           # Install pytest and dependencies for Linux/macOS
-          python -m pip install pytest pytest-benchmark
+          python -m pip install pytest
           export GDAL_DRIVER_PATH="$PWD/build"
           
           # Run Python integration tests with system Python
