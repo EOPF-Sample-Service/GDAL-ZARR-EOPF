@@ -297,7 +297,7 @@ jobs:
 
 
       - name: Smoke test (Linux)
-        if: runner.os != 'Linux'
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           export GDAL_DRIVER_PATH="$PWD/build"
