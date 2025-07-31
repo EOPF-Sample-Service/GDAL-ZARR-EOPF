@@ -15,13 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Comprehensive performance optimization framework
-- TTL-based metadata caching (5-minute metadata, 2-minute network)
-- Lazy loading for geospatial information processing
-- Block access pattern tracking for intelligent prefetching
-- Performance profiling with ScopedTimer and EOPF_PERF_TIMER macros
-- Optimized string operations (FastTokenize, OptimizedCSL functions)
-- Memory-efficient metadata merging with const-correctness
 - Comprehensive unit testing framework
 - Cross-platform build system with CMake
 - GDAL driver for EOPF Zarr datasets
