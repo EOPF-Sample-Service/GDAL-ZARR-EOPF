@@ -29,7 +29,7 @@ pytestmark = pytest.mark.require_driver("EOPFZARR")
 
 # Remote Zarr test data URLs (publicly accessible)
 REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
-REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202507-s02msil2a/21/products/cpm_v256/S2B_MSIL2A_20250721T073619_N0511_R092_T36HUG_20250721T095416.zarr/conditions/mask/detector_footprint/r10m/b04"  # Use same for demo
+REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202507-s02msil2a/21/products/cpm_v256/S2B_MSIL2A_20250721T073619_N0511_R092_T36HUG_20250721T095416.zarr/conditions/mask/detector_footprint/r10m/b04"
 
 
 
@@ -110,7 +110,7 @@ class TestEOPFZarrIntegration:
     
     def test_subdatasets(self):
         """Test subdataset enumeration and access (remote HTTPS)"""
-        url = REMOTE_WITH_SUBDATASETS_ZARR
+        url = REMOTE_SAMPLE_ZARR
         ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
