@@ -44,13 +44,13 @@ A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Z
 
 ```bash
 # Get dataset info
-gdalinfo EOPFZARR:/path/to/data.zarr
+gdalinfo 'EOPFZARR:"/path/to/data.zarr"'
 
 # Convert to GeoTIFF
-gdal_translate EOPFZARR:/path/to/data.zarr output.tif
+gdal_translate 'EOPFZARR:"/path/to/data.zarr"' output.tif
 
 # Reproject
-gdalwarp -t_srs EPSG:4326 EOPFZARR:/path/to/data.zarr reprojected.tif
+gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr"' reprojected.tif
 ```
 
 ### Python
@@ -59,7 +59,7 @@ gdalwarp -t_srs EPSG:4326 EOPFZARR:/path/to/data.zarr reprojected.tif
 from osgeo import gdal
 
 # Open dataset
-ds = gdal.Open("EOPFZARR:/path/to/data.zarr")
+ds = gdal.Open('EOPFZARR:"/path/to/data.zarr"')
 
 # Access subdatasets
 subdatasets = ds.GetMetadata("SUBDATASETS")
@@ -114,17 +114,6 @@ The project includes comprehensive testing following industry best practices:
 - **Performance Tests** - Caching and optimization validation
 - **Compatibility Tests** - Different Zarr format support
 
-### Quick Test Run
-
-```bash
-# Run all tests with the test runner
-python run_tests.py
-
-# Or run specific test types
-python run_tests.py --type smoke     # Basic driver functionality
-python run_tests.py --type unit      # C++ unit tests via CTest
-python run_tests.py --type integration  # Python integration tests
-```
 
 ### Manual Testing
 
@@ -144,11 +133,11 @@ python tests/generate_test_data.py
 
 Integration tests use automatically generated Zarr datasets covering:
 
-- Basic functionality (sample.zarr)
-- Subdatasets (with_subdatasets.zarr)
-- Geospatial information (georeferenced.zarr)
-- EOPF metadata (with_metadata.zarr)
-- Performance testing (performance_test.zarr)
+- Basic functionality
+- Subdatasets
+- Geospatial information
+- EOPF metadata
+- Performance testing
 
 ### Network Testing
 
