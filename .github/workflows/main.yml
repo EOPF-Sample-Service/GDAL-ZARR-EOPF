@@ -20,23 +20,19 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
       - name: Install tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends cppcheck clang-format
-
       - name: cppcheck
         run: |
           cppcheck --enable=all --inconclusive --xml --xml-version=2 \
             src/ include/ 2> cppcheck-report.xml || true
-
       - name: Check code formatting
         run: |
           find src include -name "*.cpp" -o -name "*.h" | \
             xargs clang-format --style=file --dry-run --Werror || \
-            (echo "Code formatting check failed. Please run 'clang-format -i <file>' on your changes." && exit 1)
-
+            (echo "Code formatting check failed. Please run 'clang-format -i <files>' on your changes." && exit 1)
       - name: Upload cppcheck report
         uses: actions/upload-artifact@v4
         if: always()
@@ -53,176 +49,245 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-13]
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    # Caching for Linux/macOS
-    - if: runner.os != 'Windows'
-      uses: hendrikmuhs/ccache-action@v1
-      with:
-        key: ${{ runner.os }}-${{ hashFiles('**/*.cpp','**/*.h') }}
-        restore-keys: ${{ runner.os }}-
+      # Caching for Linux/macOS
+      - if: runner.os != 'Windows'
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ${{ runner.os }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+          restore-keys: ${{ runner.os }}-
 
-    # Platform-specific dependencies
-    - name: Install deps (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \
-          gdal-bin libgdal-dev cmake ninja-build build-essential
+      # Platform-specific dependencies
+      - name: Install deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gdal-bin libgdal-dev cmake ninja-build build-essential
 
-    - name: Install deps (macOS)
-      if: runner.os == 'macOS'
-      run: brew install gdal cmake ninja
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gdal cmake ninja
 
-    - name: Install deps (Windows)
-      if: runner.os == 'Windows'
-      uses: echoix/setup-OSGeo4W@v0.2.0
-      with:
-        packages: gdal-devel cmake ninja
-        root: C:\OSGeo4W
+      - name: Install deps (Windows)
+        if: runner.os == 'Windows'
+        uses: echoix/setup-OSGeo4W@v0.2.0
+        with:
+          packages: gdal-devel cmake ninja
+          root: C:\OSGeo4W
 
-    - name: Setup MSVC (Windows)
-      if: runner.os == 'Windows'
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
-    # Configure & Build
-    - name: Configure & Build (Linux/macOS)
-      if: runner.os != 'Windows'
-      run: |
-        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --parallel
+      # Configure & Build
+      - name: Configure & Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
 
-    - name: Configure & Build (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
-        cmake --build build --config Release --parallel
+      - name: Configure & Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:\OSGeo4W;C:\OSGeo4W\apps\gdal" -DGDAL_DIR="C:\OSGeo4W\apps\gdal\lib\cmake\gdal"
+          cmake --build build --config Release --parallel
 
-    # Testing
-    - name: Unit Tests (C++)
-      if: runner.os != 'Windows'
-      shell: bash
-      run: |
-        cd build
-        ctest -C Release --output-on-failure
-        
-    - name: Unit Tests (C++) - Windows
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
-        $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
-        $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
-        cd build
-        
-        # Try to find ctest in common locations
-        $ctestPaths = @(
-          "C:\Program Files\CMake\bin\ctest.exe",
-          "C:\Program Files (x86)\CMake\bin\ctest.exe", 
-          "C:\OSGeo4W\bin\ctest.exe",
-          "ctest.exe"
-        )
-        
-        $ctestFound = $false
-        foreach ($ctestPath in $ctestPaths) {
-          if (Test-Path $ctestPath -ErrorAction SilentlyContinue) {
-            Write-Host "Using ctest from: $ctestPath"
-            & $ctestPath -C Release --output-on-failure
-            $ctestFound = $true
-            break
-          } elseif ($ctestPath -eq "ctest.exe") {
-            try {
+      # Testing
+      - name: Unit Tests (C++)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd build
+          ctest -C Release --output-on-failure
+
+      - name: Unit Tests (C++) - Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
+          $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+          $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
+          Set-Location build
+          
+          # Try to find ctest in common locations
+          $ctestPaths = @(
+            "C:\Program Files\CMake\bin\ctest.exe",
+            "C:\Program Files (x86)\CMake\bin\ctest.exe",
+            "C:\OSGeo4W\bin\ctest.exe",
+            "ctest.exe"
+          )
+          
+          $ctestFound = $false
+          foreach ($ctestPath in $ctestPaths) {
+            if (Test-Path $ctestPath -ErrorAction SilentlyContinue) {
+              Write-Host "Using ctest from: $ctestPath"
               & $ctestPath -C Release --output-on-failure
               $ctestFound = $true
               break
-            } catch {
-              # Continue to next option
+            } elseif ($ctestPath -eq "ctest.exe") {
+              try {
+                & $ctestPath -C Release --output-on-failure
+                $ctestFound = $true
+                break
+              } catch {
+                # Continue to next option
+              }
             }
           }
-        }
-        
-        if (-not $ctestFound) {
-          Write-Host "ctest not found, trying alternative approach..."
-          cmake --build . --config Release --target RUN_TESTS
-        }
+          
+          if (-not $ctestFound) {
+            Write-Host "ctest not found, trying alternative approach..."
+            cmake --build . --config Release --target RUN_TESTS
+          }
 
-    - name: Integration Tests (Python)
-      shell: bash
-      run: |
-        # Set environment for tests
-        if [ "${{ runner.os }}" = "Windows" ]; then
-          export GDAL_DRIVER_PATH="$PWD/build/Release"
-          export GDAL_DATA="C:/OSGeo4W/share/gdal"
-          export PATH="C:/OSGeo4W/bin:$PATH"
-          C:/OSGeo4W/bin/python.exe -m pip install pytest numpy
-          C:/OSGeo4W/bin/python.exe -m pytest -c pytest.ini tests/integration/ -v --tb=short
-        else
+      # Enhanced Integration Tests with proper Windows PowerShell support
+      - name: Integration Tests (Python) - Linux/macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
           python -m pip install pytest numpy
           export GDAL_DRIVER_PATH="$PWD/build"
           python -m pytest -c pytest.ini tests/integration/ -v --tb=short
-        fi
-        
-    - name: Smoke test (Linux/macOS)
-      if: runner.os != 'Windows'
-      shell: bash
-      run: |
-        export GDAL_DRIVER_PATH="$PWD/build"
-        gdalinfo --formats | grep "EOPFZARR"
 
-    - name: Smoke test (Windows)
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
-        $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
-        $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
-        gdalinfo --formats | findstr "EOPFZARR"
+      - name: Integration Tests (Python) - Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Set working directory explicitly
+          Set-Location $pwd
+          
+          # Configure environment variables using PowerShell syntax
+          $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
+          $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+          $env:PROJ_LIB = "C:\OSGeo4W\share\proj"
+          $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
+          
+          # Configure PYTHONPATH for OSGeo4W Python environment
+          $pythonVersion = "39"  # Adjust based on OSGeo4W Python version
+          $env:PYTHONPATH = "C:\OSGeo4W\apps\Python$pythonVersion\Lib\site-packages;" + $env:PYTHONPATH
+          
+          # Install Python packages
+          Write-Host "Installing Python packages..."
+          C:\OSGeo4W\bin\python.exe -m pip install pytest numpy
+          
+          # Verify package installation
+          Write-Host "Verifying pytest installation..."
+          C:\OSGeo4W\bin\python.exe -c "import pytest; print('pytest version:', pytest.__version__)"
+          
+          Write-Host "Verifying numpy installation..."
+          C:\OSGeo4W\bin\python.exe -c "import numpy; print('numpy version:', numpy.__version__)"
+          
+          # Verify environment variables
+          Write-Host "Environment Variables:"
+          Write-Host "GDAL_DRIVER_PATH: $env:GDAL_DRIVER_PATH"
+          Write-Host "GDAL_DATA: $env:GDAL_DATA"
+          Write-Host "PROJ_LIB: $env:PROJ_LIB"
+          Write-Host "PYTHONPATH: $env:PYTHONPATH"
+          
+          # Test GDAL driver loading
+          Write-Host "Testing GDAL driver loading..."
+          C:\OSGeo4W\bin\python.exe -c "from osgeo import gdal; print('GDAL version:', gdal.__version__)"
+          
+          # Verify pytest.ini exists and is accessible
+          if (Test-Path "pytest.ini") {
+            Write-Host "Found pytest.ini configuration file"
+          } else {
+            Write-Host "Warning: pytest.ini not found in current directory"
+            Get-ChildItem -Name "pytest*" -ErrorAction SilentlyContinue
+          }
+          
+          # Verify test directory exists
+          if (Test-Path "tests\integration") {
+            Write-Host "Integration test directory found"
+            Write-Host "Test files:"
+            Get-ChildItem "tests\integration" -Recurse -Include "*.py" | ForEach-Object { Write-Host "  $_" }
+          } else {
+            Write-Host "Error: Integration test directory not found"
+            exit 1
+          }
+          
+          # Run integration tests with explicit configuration
+          Write-Host "Running integration tests..."
+          C:\OSGeo4W\bin\python.exe -m pytest -c pytest.ini tests\integration\ -v --tb=short --no-header -s
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Integration tests failed with exit code: $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
-    # Upload Artifacts
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: gdal_EOPFZarr-${{ runner.os }}
-        path: |
-          build/gdal_EOPFZarr.so
-          build/gdal_EOPFZarr.dylib
-          build/Release/gdal_EOPFZarr.dll
-        if-no-files-found: ignore
+      # Smoke Tests
+      - name: Smoke test (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          export GDAL_DRIVER_PATH="$PWD/build"
+          gdalinfo --formats | grep "EOPFZARR"
+
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
+          $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+          $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
+          
+          Write-Host "Checking GDAL formats..."
+          $formats = gdalinfo --formats
+          if ($formats -match "EOPFZARR") {
+            Write-Host "✓ EOPFZARR driver is properly registered"
+          } else {
+            Write-Host "✗ EOPFZARR driver not found in GDAL formats"
+            Write-Host "Available formats containing 'ZARR':"
+            $formats | Select-String -Pattern "ZARR" -AllMatches
+            exit 1
+          }
+
+      # Upload Artifacts
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdal_EOPFZarr-${{ runner.os }}
+          path: |
+            build/gdal_EOPFZarr.so
+            build/gdal_EOPFZarr.dylib
+            build/Release/gdal_EOPFZarr.dll
+          if-no-files-found: ignore
 
   package-release:
     name: Package Release Artifacts
     runs-on: ubuntu-22.04
     needs: [build_and_test]
     if: github.event_name == 'release' && github.event.action == 'published'
-
     steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-    - name: Display downloaded artifacts structure
-      run: ls -R artifacts
+      - name: Display downloaded artifacts structure
+        run: ls -R artifacts
 
-    - name: Create Release Packages
-      run: |
-        mkdir -p release_packages
-        for dir in artifacts/*; do
-          if [ -d "$dir" ]; then
-            PKG_NAME=$(basename "$dir")
-            zip -r "release_packages/${PKG_NAME}.zip" "$dir"
-            tar -czf "release_packages/${PKG_NAME}.tar.gz" -C "$dir" .
-          fi
-        done
+      - name: Create Release Packages
+        run: |
+          mkdir -p release_packages
+          for dir in artifacts/*; do
+            if [ -d "$dir" ]; then
+              PKG_NAME=$(basename "$dir")
+              zip -r "release_packages/${PKG_NAME}.zip" "$dir"
+              tar -czf "release_packages/${PKG_NAME}.tar.gz" -C "$dir" .
+            fi
+          done
 
-    - name: Upload Release Assets
-      uses: softprops/action-gh-release@v2
-      with:
-        files: release_packages/*
-        generate_release_notes: true
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release_packages/*
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
