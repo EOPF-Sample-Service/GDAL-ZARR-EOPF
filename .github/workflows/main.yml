@@ -71,12 +71,16 @@ jobs:
       - name: Install deps (macOS)
         if: runner.os == 'macOS'
         run: brew install gdal cmake ninja
+            curl -o miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
+            bash miniconda.sh -b -p $HOME/miniconda
+            source $HOME/miniconda/bin/activate
+            conda install -c conda-forge gdal
 
       - name: Install deps (Windows)
         if: runner.os == 'Windows'
         uses: echoix/setup-OSGeo4W@v0.2.0
         with:
-          packages: gdal-devel cmake ninja python3-core python3-pip python3-numpy python3-pytest
+          packages: gdal-devel cmake ninja python3-core python3-pip python3-gdal python3-numpy python3-pytest
           root: C:\OSGeo4W
 
       - name: Setup MSVC (Windows)
