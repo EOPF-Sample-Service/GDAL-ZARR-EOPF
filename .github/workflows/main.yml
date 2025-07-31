@@ -32,7 +32,7 @@ jobs:
         run: |
           find src include -name "*.cpp" -o -name "*.h" | \
             xargs clang-format --style=file --dry-run --Werror || \
-            (echo "Code formatting check failed. Please run 'clang-format -i <files>' on your changes." && exit 1)
+            (echo "Code formatting check failed. Please run 'clang-format -i' on your changes." && exit 1)
       - name: Upload cppcheck report
         uses: actions/upload-artifact@v4
         if: always()
@@ -76,7 +76,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: echoix/setup-OSGeo4W@v0.2.0
         with:
-          packages: gdal-devel cmake ninja
+          packages: gdal-devel cmake ninja python3-pip python3-numpy
           root: C:\OSGeo4W
 
       - name: Setup MSVC (Windows)
@@ -94,9 +94,8 @@ jobs:
 
       - name: Configure & Build (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:\OSGeo4W;C:\OSGeo4W\apps\gdal" -DGDAL_DIR="C:\OSGeo4W\apps\gdal\lib\cmake\gdal"
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
           cmake --build build --config Release --parallel
 
       # Testing
@@ -114,7 +113,7 @@ jobs:
           $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
           $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
           $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
-          Set-Location build
+          cd build
           
           # Try to find ctest in common locations
           $ctestPaths = @(
@@ -147,82 +146,109 @@ jobs:
             cmake --build . --config Release --target RUN_TESTS
           }
 
-      # Enhanced Integration Tests with proper Windows PowerShell support
-      - name: Integration Tests (Python) - Linux/macOS
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          python -m pip install pytest numpy
-          export GDAL_DRIVER_PATH="$PWD/build"
-          python -m pytest -c pytest.ini tests/integration/ -v --tb=short
-
       - name: Integration Tests (Python) - Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Set working directory explicitly
-          Set-Location $pwd
+          Write-Host "# Set working directory explicitly"
+          Set-Location $PWD
           
-          # Configure environment variables using PowerShell syntax
-          $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
+          Write-Host "Setting up environment variables..."
+          $env:GDAL_DRIVER_PATH = "$PWD\build\Release"
           $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
           $env:PROJ_LIB = "C:\OSGeo4W\share\proj"
-          $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
+          $env:PATH = "C:\OSGeo4W\bin;C:\OSGeo4W\apps\Python39;C:\OSGeo4W\apps\Python39\Scripts;" + $env:PATH
+          $env:PYTHONPATH = "C:\OSGeo4W\apps\Python39\Lib\site-packages"
           
-          # Configure PYTHONPATH for OSGeo4W Python environment
-          $pythonVersion = "39"  # Adjust based on OSGeo4W Python version
-          $env:PYTHONPATH = "C:\OSGeo4W\apps\Python$pythonVersion\Lib\site-packages;" + $env:PYTHONPATH
+          Write-Host "Verifying OSGeo4W Python installation..."
+          $pythonPaths = @(
+            "C:\OSGeo4W\apps\Python39\python.exe",    # Most common location
+            "C:\OSGeo4W\bin\python.exe",              # Alternative location
+            "C:\OSGeo4W\apps\Python310\python.exe",   # Python 3.10 variant
+            "C:\OSGeo4W\apps\Python311\python.exe"    # Python 3.11 variant
+          )
           
-          # Install Python packages
-          Write-Host "Installing Python packages..."
-          C:\OSGeo4W\bin\python.exe -m pip install pytest numpy
-          
-          # Verify package installation
-          Write-Host "Verifying pytest installation..."
-          C:\OSGeo4W\bin\python.exe -c "import pytest; print('pytest version:', pytest.__version__)"
-          
-          Write-Host "Verifying numpy installation..."
-          C:\OSGeo4W\bin\python.exe -c "import numpy; print('numpy version:', numpy.__version__)"
-          
-          # Verify environment variables
-          Write-Host "Environment Variables:"
-          Write-Host "GDAL_DRIVER_PATH: $env:GDAL_DRIVER_PATH"
-          Write-Host "GDAL_DATA: $env:GDAL_DATA"
-          Write-Host "PROJ_LIB: $env:PROJ_LIB"
-          Write-Host "PYTHONPATH: $env:PYTHONPATH"
-          
-          # Test GDAL driver loading
-          Write-Host "Testing GDAL driver loading..."
-          C:\OSGeo4W\bin\python.exe -c "from osgeo import gdal; print('GDAL version:', gdal.__version__)"
-          
-          # Verify pytest.ini exists and is accessible
-          if (Test-Path "pytest.ini") {
-            Write-Host "Found pytest.ini configuration file"
-          } else {
-            Write-Host "Warning: pytest.ini not found in current directory"
-            Get-ChildItem -Name "pytest*" -ErrorAction SilentlyContinue
+          $pythonExe = $null
+          foreach ($path in $pythonPaths) {
+            if (Test-Path $path -ErrorAction SilentlyContinue) {
+              Write-Host "Found Python at: $path"
+              $pythonExe = $path
+              break
+            } else {
+              Write-Host "Python not found at: $path"
+            }
           }
           
-          # Verify test directory exists
-          if (Test-Path "tests\integration") {
-            Write-Host "Integration test directory found"
-            Write-Host "Test files:"
-            Get-ChildItem "tests\integration" -Recurse -Include "*.py" | ForEach-Object { Write-Host "  $_" }
-          } else {
-            Write-Host "Error: Integration test directory not found"
+          if (-not $pythonExe) {
+            Write-Host "ERROR: No Python executable found in OSGeo4W installation"
+            Write-Host "Available files in C:\OSGeo4W\apps:"
+            if (Test-Path "C:\OSGeo4W\apps" -ErrorAction SilentlyContinue) {
+              Get-ChildItem "C:\OSGeo4W\apps" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host " - $($_.Name)" }
+            }
+            Write-Host "Available files in C:\OSGeo4W\bin:"
+            if (Test-Path "C:\OSGeo4W\bin" -ErrorAction SilentlyContinue) {
+              Get-ChildItem "C:\OSGeo4W\bin" -Name "python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host " - $_" }
+            }
             exit 1
           }
           
-          # Run integration tests with explicit configuration
-          Write-Host "Running integration tests..."
-          C:\OSGeo4W\bin\python.exe -m pytest -c pytest.ini tests\integration\ -v --tb=short --no-header -s
-          
+          Write-Host "Testing Python version..."
+          & $pythonExe --version
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Integration tests failed with exit code: $LASTEXITCODE"
-            exit $LASTEXITCODE
+            Write-Host "ERROR: Python version check failed"
+            exit 1
+          }
+          
+          Write-Host "Installing Python packages..."
+          & $pythonExe -m pip install pytest numpy
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to install Python packages"
+            exit 1
+          }
+          
+          Write-Host "Verifying package installation..."
+          & $pythonExe -c "import pytest; import numpy; print('Packages imported successfully')"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to import installed packages"
+            exit 1
+          }
+          
+          Write-Host "Testing GDAL driver loading..."
+          & $pythonExe -c "import os; os.environ['GDAL_DRIVER_PATH']='$PWD\\build\\Release'; from osgeo import gdal; print('GDAL imported successfully')"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: GDAL import test failed, but continuing with pytest"
+          }
+          
+          Write-Host "Checking pytest configuration..."
+          if (-not (Test-Path "pytest.ini" -ErrorAction SilentlyContinue)) {
+            Write-Host "WARNING: pytest.ini not found in current directory"
+            Write-Host "Current directory contents:"
+            Get-ChildItem | ForEach-Object { Write-Host " - $($_.Name)" }
+          }
+          
+          Write-Host "Running integration tests..."
+          if (Test-Path "tests\integration" -ErrorAction SilentlyContinue) {
+            & $pythonExe -m pytest tests\integration\ -v --tb=short
+          } else {
+            Write-Host "ERROR: Integration test directory not found"
+            Write-Host "Available test directories:"
+            if (Test-Path "tests" -ErrorAction SilentlyContinue) {
+              Get-ChildItem "tests" | ForEach-Object { Write-Host " - tests\$($_.Name)" }
+            } else {
+              Write-Host "No tests directory found"
+            }
+            exit 1
           }
 
-      # Smoke Tests
+      - name: Integration Tests (Python) - Linux/macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Set environment for tests
+          export GDAL_DRIVER_PATH="$PWD/build"
+          python -m pip install pytest numpy
+          python -m pytest -c pytest.ini tests/integration/ -v --tb=short
+
       - name: Smoke test (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -237,17 +263,7 @@ jobs:
           $env:GDAL_DRIVER_PATH = "$pwd\build\Release"
           $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
           $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
-          
-          Write-Host "Checking GDAL formats..."
-          $formats = gdalinfo --formats
-          if ($formats -match "EOPFZARR") {
-            Write-Host "✓ EOPFZARR driver is properly registered"
-          } else {
-            Write-Host "✗ EOPFZARR driver not found in GDAL formats"
-            Write-Host "Available formats containing 'ZARR':"
-            $formats | Select-String -Pattern "ZARR" -AllMatches
-            exit 1
-          }
+          gdalinfo --formats | findstr "EOPFZARR"
 
       # Upload Artifacts
       - name: Upload Build Artifact
@@ -270,10 +286,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Display downloaded artifacts structure
         run: ls -R artifacts
-
       - name: Create Release Packages
         run: |
           mkdir -p release_packages
@@ -284,7 +298,6 @@ jobs:
               tar -czf "release_packages/${PKG_NAME}.tar.gz" -C "$dir" .
             fi
           done
-
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
