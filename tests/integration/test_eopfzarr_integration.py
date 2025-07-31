@@ -118,7 +118,7 @@ class TestEOPFZarrIntegration:
         if subdatasets:
             subds_count = len([k for k in subdatasets.keys() if k.endswith("_NAME")])
             assert subds_count > 0, "No subdatasets found"
-            first_subds = subdatasets["SUBDATASET_1_NAME"]
+            first_subds = subdatasets["SUBDATASET_15_NAME"]
             subds = gdal.Open(first_subds)
             assert subds is not None, f"Failed to open subdataset: {first_subds}"
             assert subds.RasterCount > 0, "Subdataset has no bands"
