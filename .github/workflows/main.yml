@@ -159,15 +159,8 @@ jobs:
           export GDAL_DRIVER_PATH="$PWD/build/Release"
           export GDAL_DATA="C:/OSGeo4W/share/gdal"
           export PATH="C:/OSGeo4W/bin:$PATH"
-          PYTHON_PATH="C:/OSGeo4W/bin/python.exe"
-          if [ ! -f "$PYTHON_PATH" ]; then
-            PYTHON_PATH="C:/OSGeo4W/bin/python3.exe"
-          fi
-          if [ ! -f "$PYTHON_PATH" ]; then
-            PYTHON_PATH="python"
-          fi
-          "$PYTHON_PATH" -m pip install pytest numpy
-          "$PYTHON_PATH" -m pytest -c pytest.ini tests/integration/ -v --tb=short
+          C:/OSGeo4W/bin/python.exe -m pip install pytest numpy
+          C:/OSGeo4W/bin/python.exe -m pytest -c pytest.ini tests/integration/ -v --tb=short
         else
           python -m pip install pytest numpy
           export GDAL_DRIVER_PATH="$PWD/build"
