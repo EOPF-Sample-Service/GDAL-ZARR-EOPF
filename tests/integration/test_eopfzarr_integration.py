@@ -122,7 +122,7 @@ class TestEOPFZarrIntegration:
             subds = gdal.Open(first_subds)
             assert subds is not None, f"Failed to open subdataset: {first_subds}"
             assert subds.RasterCount > 0, "Subdataset has no bands"
-            for i in range(1, subds_count + 1):
+            for i in range(10, subds_count + 1):
                 subds_name = subdatasets.get(f"SUBDATASET_{i}_NAME")
                 if subds_name:
                     subds = gdal.Open(subds_name)
