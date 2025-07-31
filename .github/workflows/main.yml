@@ -71,7 +71,7 @@ jobs:
       - name: Install deps (macOS)
         if: runner.os == 'macOS'
         run: brew install gdal cmake ninja
-            conda install -c conda-forge gdal
+            pip install GDAL==$(gdal-config --version)
 
       - name: Install deps (Windows)
         if: runner.os == 'Windows'
