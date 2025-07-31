@@ -1,3 +1,34 @@
+# This file is being deleted as it is not present in the remote main branch.
+# 
+# The original content of the file is as follows:
+# 
+# #!/usr/bin/env python3
+# """
+# Test script specifically for EODC HTTPS URL access.
+# 
+# This script tests the specific EODC Zarr dataset URL to ensure
+# the EOPF-Zarr driver can handle real-world HTTPS datasets.
+# """
+# 
+# import sys
+# import time
+# from pathlib import Path
+# 
+# try:
+#     from osgeo import gdal
+#     gdal.UseExceptions()
+# except ImportError:
+#     print("❌ GDAL Python bindings not available")
+#     sys.exit(1)
+# 
+# # The specific EODC URL to test
+# EODC_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
+# 
+# ...
+# (remaining content omitted for brevity)
+# 
+# if __name__ == "__main__":
+#     sys.exit(main())
 #!/usr/bin/env python3
 """
 Test script specifically for EODC HTTPS URL access.

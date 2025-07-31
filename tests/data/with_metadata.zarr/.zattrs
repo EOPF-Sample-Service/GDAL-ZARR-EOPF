@@ -1,0 +1,11 @@
+{
+    "acquisition_start": "2024-01-15T10:30:00Z",
+    "acquisition_stop": "2024-01-15T10:30:15Z",
+    "eopf_version": "2.0",
+    "instrument": "MSI",
+    "mission": "Sentinel-2",
+    "orbit_number": 12345,
+    "processing_level": "L2A",
+    "product_type": "L2A",
+    "tile_id": "T32TPS"
+}
