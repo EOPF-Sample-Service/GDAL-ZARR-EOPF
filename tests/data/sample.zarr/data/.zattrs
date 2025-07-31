@@ -1,8 +1,0 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "y",
-        "x"
-    ],
-    "description": "Sample test data for EOPF-Zarr driver",
-    "units": "Digital Numbers"
-}

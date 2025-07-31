@@ -1,7 +1,0 @@
-{
-    "subdatasets": [
-        "band1",
-        "band2"
-    ],
-    "title": "Multi-band Zarr Dataset"
-}
