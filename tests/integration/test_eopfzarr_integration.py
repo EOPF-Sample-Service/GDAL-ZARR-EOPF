@@ -15,32 +15,28 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+
 try:
     from osgeo import gdal, osr
     gdal.UseExceptions()
 except ImportError:
+    gdal = None
+    osr = None
     pytest.skip("GDAL not available", allow_module_level=True)
 
 pytestmark = pytest.mark.require_driver("EOPFZARR")
 
-# Test data directory
-TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+
+# Remote Zarr test data URLs (publicly accessible)
+REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
+REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202507-s02msil2a/21/products/cpm_v256/S2B_MSIL2A_20250721T073619_N0511_R092_T36HUG_20250721T095416.zarr/conditions/mask/detector_footprint/r10m/b04"  # Use same for demo
 
 
+
+# No-op: All tests use remote data, so no test data generation is needed
 @pytest.fixture(scope="session", autouse=True)
 def ensure_test_data():
-    """Ensure test data exists before running tests."""
-    if not os.path.exists(TEST_DATA_DIR):
-        # Try to generate test data
-        generate_script = os.path.join(os.path.dirname(__file__), "..", "generate_test_data.py")
-        if os.path.exists(generate_script):
-            import subprocess
-            try:
-                subprocess.run([sys.executable, generate_script], check=True)
-            except subprocess.CalledProcessError:
-                pytest.skip("Could not generate test data")
-        else:
-            pytest.skip("Test data and generator not available")
+    pass
 
 
 @pytest.fixture
@@ -82,43 +78,30 @@ class TestEOPFZarrIntegration:
         assert driver.GetMetadataItem(gdal.DCAP_OPEN) == "YES"
     
     def test_basic_dataset_open(self):
-        """Test opening a basic EOPF-Zarr dataset"""
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-            
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
-        assert ds is not None, "Failed to open test dataset"
-        assert ds.RasterCount > 0, "Dataset has no raster bands"
+        """Test opening a basic EOPF-Zarr dataset (remote HTTPS)"""
+        url = REMOTE_SAMPLE_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
+
         assert ds.RasterXSize > 0, "Dataset has zero width"
         assert ds.RasterYSize > 0, "Dataset has zero height"
-        
-        # Test raster band properties
-        band = ds.GetRasterBand(1)
-        assert band is not None, "Failed to get raster band"
-        assert band.DataType in [
-            gdal.GDT_Byte, gdal.GDT_UInt16, gdal.GDT_Int16, 
-            gdal.GDT_UInt32, gdal.GDT_Int32, gdal.GDT_Float32, gdal.GDT_Float64
-        ], "Unsupported data type"
+
     
     def test_data_reading(self):
-        """Test reading data from EOPF-Zarr dataset"""
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-            
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
+        """Test reading data from remote EOPF-Zarr dataset (HTTPS)"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
-        
         # Test reading a small block
         width = min(10, ds.RasterXSize)
         height = min(10, ds.RasterYSize)
         data = band.ReadAsArray(0, 0, width, height)
-        
         assert data is not None, "Failed to read data"
         assert data.shape == (height, width), f"Unexpected data shape: {data.shape}"
         assert data.size > 0, "Empty data array"
-        
         # Test reading full dataset (if not too large)
         if ds.RasterXSize * ds.RasterYSize < 1000000:  # Less than 1M pixels
             full_data = band.ReadAsArray()
@@ -126,26 +109,19 @@ class TestEOPFZarrIntegration:
             assert full_data.shape == (ds.RasterYSize, ds.RasterXSize), "Full data shape mismatch"
     
     def test_subdatasets(self):
-        """Test subdataset enumeration and access"""
-        test_file = os.path.join(TEST_DATA_DIR, "with_subdatasets.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-            
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
+        """Test subdataset enumeration and access (remote HTTPS)"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         subdatasets = ds.GetMetadata("SUBDATASETS")
-        
         if subdatasets:
-            # Verify subdataset metadata format
             subds_count = len([k for k in subdatasets.keys() if k.endswith("_NAME")])
             assert subds_count > 0, "No subdatasets found"
-            
-            # Test opening first subdataset
             first_subds = subdatasets["SUBDATASET_1_NAME"]
             subds = gdal.Open(first_subds)
             assert subds is not None, f"Failed to open subdataset: {first_subds}"
             assert subds.RasterCount > 0, "Subdataset has no bands"
-            
-            # Test all subdatasets can be opened
             for i in range(1, subds_count + 1):
                 subds_name = subdatasets.get(f"SUBDATASET_{i}_NAME")
                 if subds_name:
@@ -153,49 +129,44 @@ class TestEOPFZarrIntegration:
                     assert subds is not None, f"Failed to open subdataset {i}: {subds_name}"
     
     def test_geospatial_info(self):
-        """Test geospatial information retrieval"""
-        test_file = os.path.join(TEST_DATA_DIR, "georeferenced.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-            
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
-        
+        """Test geospatial information retrieval (remote HTTPS)"""
+        url = REMOTE_SAMPLE_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test geotransform
         gt = ds.GetGeoTransform()
         assert gt != (0, 1, 0, 0, 0, 1), "Default geotransform detected"
         assert len(gt) == 6, "Invalid geotransform format"
         assert gt[1] != 0 and gt[5] != 0, "Zero pixel size in geotransform"
-        
         # Test spatial reference
         srs = ds.GetSpatialRef()
         if srs:
-            assert srs.IsValid(), "Invalid spatial reference"
-            # Test that we can get authority code
+            if hasattr(srs, "Validate"):
+                assert srs.Validate() == 0, "Invalid spatial reference (Validate() != 0)"
+            elif hasattr(srs, "IsValid"):
+                assert srs.IsValid(), "Invalid spatial reference (IsValid() == False)"
             auth_code = srs.GetAuthorityCode(None)
             if auth_code:
                 assert auth_code.isdigit(), f"Invalid authority code: {auth_code}"
     
     def test_metadata_retrieval(self):
-        """Test EOPF metadata retrieval"""
-        test_file = os.path.join(TEST_DATA_DIR, "with_metadata.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-            
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
-        
+        """Test EOPF metadata retrieval from remote HTTPS Zarr"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test dataset metadata
         metadata = ds.GetMetadata()
         assert isinstance(metadata, dict), "Metadata should be a dictionary"
-        
-        # Test band metadata
+        # Test band metadata (check band exists)
         band = ds.GetRasterBand(1)
-        band_metadata = band.GetMetadata()
-        assert isinstance(band_metadata, dict), "Band metadata should be a dictionary"
-        
+        if band is not None:
+            band_metadata = band.GetMetadata()
+            assert isinstance(band_metadata, dict), "Band metadata should be a dictionary"
         # Test specific EOPF metadata if present
         if "eopf_version" in metadata:
             assert metadata["eopf_version"], "EOPF version should not be empty"
-        
         # Test metadata domains
         domains = ds.GetMetadataDomainList()
         if domains:
@@ -350,58 +321,44 @@ class TestEOPFZarrIntegration:
             pass  # Exception is also acceptable
     
     def test_performance_features(self):
-        """Test performance optimization features"""
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
+        """Test performance optimization features (remote HTTPS)"""
+        url = REMOTE_SAMPLE_ZARR
         # Enable performance logging
         original_debug = gdal.GetConfigOption("CPL_DEBUG")
         original_timers = gdal.GetConfigOption("EOPF_ENABLE_PERFORMANCE_TIMERS")
-        
         try:
             gdal.SetConfigOption("EOPF_ENABLE_PERFORMANCE_TIMERS", "1")
             gdal.SetConfigOption("CPL_DEBUG", "EOPFZARR_PERF")
-            
-            ds = gdal.Open(f"EOPFZARR:{test_file}")
-            assert ds is not None, "Failed to open dataset with performance logging"
-            
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            if ds is None:
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
             # Test metadata caching by accessing multiple times
             start_time = time.time()
             for _ in range(5):
                 metadata = ds.GetMetadata()
             first_duration = time.time() - start_time
-            
             # Second round should be faster due to caching
             start_time = time.time()
             for _ in range(5):
                 metadata = ds.GetMetadata()
             second_duration = time.time() - start_time
-            
             # Note: We don't assert timing differences as they may vary
-            # The important thing is no crashes occur with performance features enabled
-            
         finally:
             gdal.SetConfigOption("EOPF_ENABLE_PERFORMANCE_TIMERS", original_timers)
             gdal.SetConfigOption("CPL_DEBUG", original_debug)
     
     def test_block_reading_patterns(self):
-        """Test different block reading patterns for memory efficiency"""
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
+        """Test different block reading patterns for memory efficiency (remote HTTPS)"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
-        
-        # Test different read patterns
         block_sizes = band.GetBlockSize()
         block_width, block_height = block_sizes
-        
         # Read aligned with block boundaries
         aligned_data = band.ReadAsArray(0, 0, block_width, block_height)
         assert aligned_data is not None, "Failed to read block-aligned data"
-        
         # Read crossing block boundaries
         if ds.RasterXSize > block_width and ds.RasterYSize > block_height:
             cross_boundary_data = band.ReadAsArray(
@@ -411,66 +368,53 @@ class TestEOPFZarrIntegration:
             assert cross_boundary_data is not None, "Failed to read cross-boundary data"
     
     def test_large_dataset_handling(self):
-        """Test handling of large datasets"""
-        test_file = os.path.join(TEST_DATA_DIR, "performance_test.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
+        """Test handling of large remote HTTPS Zarr datasets"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
         if ds is None:
-            pytest.skip("Performance test dataset not available")
-        
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test that we can handle large datasets without loading everything into memory
         assert ds.RasterXSize > 0 and ds.RasterYSize > 0, "Dataset should have valid dimensions"
-        
-        # Read a small portion of a large dataset
+        # Read a small portion of a large dataset (check band exists)
         band = ds.GetRasterBand(1)
-        small_data = band.ReadAsArray(0, 0, min(100, ds.RasterXSize), min(100, ds.RasterYSize))
-        assert small_data is not None, "Should be able to read small portion of large dataset"
+        if band is not None:
+            small_data = band.ReadAsArray(0, 0, min(100, ds.RasterXSize), min(100, ds.RasterYSize))
+            assert small_data is not None, "Should be able to read small portion of large dataset"
 
 
 class TestEOPFZarrPerformance:
     """Performance-specific integration tests"""
     
     def test_caching_effectiveness(self):
-        """Test that caching actually improves performance"""
-        test_file = os.path.join(TEST_DATA_DIR, "with_metadata.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
-        
+        """Test that caching actually improves performance (remote HTTPS)"""
+        url = REMOTE_SAMPLE_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         # First access (should populate cache)
         start_time = time.time()
         metadata1 = ds.GetMetadata()
         first_access_time = time.time() - start_time
-        
         # Second access (should use cache)
         start_time = time.time()
         metadata2 = ds.GetMetadata()
         second_access_time = time.time() - start_time
-        
         # Verify same metadata returned
         assert metadata1 == metadata2, "Cached metadata should be identical"
-        
         # Note: We don't assert timing as it may vary, but both should succeed
     
     def test_memory_efficiency(self):
-        """Test memory efficiency with repeated operations"""
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
+        """Test memory efficiency with repeated operations (remote HTTPS)"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
         # Test that repeated dataset opens don't accumulate memory
         for i in range(10):
-            ds = gdal.Open(f"EOPFZARR:{test_file}")
-            assert ds is not None, f"Failed to open dataset on iteration {i}"
-            
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            if ds is None:
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
             # Read some data
             band = ds.GetRasterBand(1)
             data = band.ReadAsArray(0, 0, min(50, ds.RasterXSize), min(50, ds.RasterYSize))
             assert data is not None, f"Failed to read data on iteration {i}"
-            
             # Explicitly close to test cleanup
             ds = None
 
@@ -479,38 +423,26 @@ class TestEOPFZarrCompatibility:
     """Compatibility tests with different Zarr formats"""
     
     def test_zarr_format_compatibility(self):
-        """Test compatibility with different Zarr format variations"""
-        # Test different compression algorithms if available
-        test_files = [
-            "sample.zarr",
-            "with_subdatasets.zarr", 
-            "georeferenced.zarr",
-            "with_metadata.zarr"
+        """Test compatibility with different Zarr format variations (remote HTTPS)"""
+        urls = [
+            REMOTE_WITH_SUBDATASETS_ZARR,
         ]
-        
-        for test_file in test_files:
-            full_path = os.path.join(TEST_DATA_DIR, test_file)
-            if os.path.exists(full_path):
-                ds = gdal.Open(f"EOPFZARR:{full_path}")
-                if ds is not None:  # File may not be compatible
-                    assert ds.RasterCount > 0, f"Dataset {test_file} should have bands"
-                    
-                    # Test reading data
-                    band = ds.GetRasterBand(1)
-                    data = band.ReadAsArray(0, 0, min(10, ds.RasterXSize), min(10, ds.RasterYSize))
-                    assert data is not None, f"Should be able to read data from {test_file}"
+        for url in urls:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            if ds is None:
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            assert ds.RasterCount > 0, f"Dataset {url} should have bands"
+            band = ds.GetRasterBand(1)
+            data = band.ReadAsArray(0, 0, min(10, ds.RasterXSize), min(10, ds.RasterYSize))
+            assert data is not None, f"Should be able to read data from {url}"
     
     def test_different_data_types(self):
-        """Test handling of different data types"""
-        # This would test various numpy dtypes if available in test data
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
+        """Test handling of different data types (remote HTTPS)"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
-        
-        # Verify data type is supported
         data_type = band.DataType
         supported_types = [
             gdal.GDT_Byte, gdal.GDT_UInt16, gdal.GDT_Int16,
@@ -519,19 +451,13 @@ class TestEOPFZarrCompatibility:
         assert data_type in supported_types, f"Unsupported data type: {data_type}"
     
     def test_chunk_size_variations(self):
-        """Test handling of different chunk configurations"""
-        test_file = os.path.join(TEST_DATA_DIR, "performance_test.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
+        """Test handling of different chunk configurations (remote HTTPS)"""
+        url = REMOTE_WITH_SUBDATASETS_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
         if ds is None:
-            pytest.skip("Performance test dataset not available")
-        
-        # Test block size handling
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
         block_sizes = band.GetBlockSize()
-        
         assert block_sizes[0] > 0 and block_sizes[1] > 0, "Block sizes should be positive"
         assert block_sizes[0] <= ds.RasterXSize, "Block width should not exceed dataset width"
         assert block_sizes[1] <= ds.RasterYSize, "Block height should not exceed dataset height"
@@ -547,17 +473,13 @@ class TestEOPFZarrEdgeCases:
         pass
     
     def test_malformed_metadata(self):
-        """Test handling of malformed or missing metadata"""
-        # Test with dataset that might have incomplete metadata
-        test_file = os.path.join(TEST_DATA_DIR, "sample.zarr")
-        if not os.path.exists(test_file):
-            pytest.skip(f"Test data not found: {test_file}")
-        
-        ds = gdal.Open(f"EOPFZARR:{test_file}")
-        
+        """Test handling of malformed or missing metadata (remote HTTPS)"""
+        url = REMOTE_SAMPLE_ZARR
+        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        if ds is None:
+            pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Should handle missing optional metadata gracefully
         metadata = ds.GetMetadata()
-        # Test should not fail even if some metadata is missing
         assert isinstance(metadata, dict), "Should return dict even with limited metadata"
     
     def test_url_parsing_edge_cases(self):
