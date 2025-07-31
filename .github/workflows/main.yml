@@ -70,8 +70,34 @@ jobs:
 
       - name: Install deps (macOS)
         if: runner.os == 'macOS'
-        run: brew install gdal cmake ninja
-
+        run: |
+          # Install GDAL and build tools via Homebrew
+          brew install gdal cmake ninja
+          
+          # Install GDAL Python bindings with proper version matching
+          GDAL_VERSION=$(gdal-config --version)
+          echo "Installing GDAL Python bindings for version: $GDAL_VERSION"
+          
+          # Method 1: Try pip install with version matching
+          pip install GDAL==$GDAL_VERSION || {
+            echo "Direct pip install failed, trying manual compilation method..."
+            
+            # Method 2: Manual compilation approach
+            pip download GDAL==$GDAL_VERSION
+            tar -xzf GDAL-$GDAL_VERSION.tar.gz
+            cd GDAL-$GDAL_VERSION
+            
+            # Configure for macOS Homebrew GDAL installation
+            python setup.py build_ext --gdal-config=$(which gdal-config)
+            python setup.py build
+            python setup.py install
+            cd ..
+            rm -rf GDAL-$GDAL_VERSION*
+          }
+          
+          # Verify GDAL Python bindings installation
+          python -c "from osgeo import gdal; print(f'GDAL Python bindings version: {gdal.VersionInfo()}')"
+          
       - name: Install deps (Windows)
         if: runner.os == 'Windows'
         uses: echoix/setup-OSGeo4W@v0.2.0
@@ -227,18 +253,51 @@ jobs:
           Write-Host "Running integration tests..."
           & $pythonExe -m pytest -c pytest.ini tests/integration/ -v --tb=short
           
-      - name: Integration Tests (Python) - Linux/macOS
-        if: runner.os != 'Windows'
+      - name: Integration Tests (Python) - Linux
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           # Set environment for tests
-
           python -m pip install pytest numpy
           export GDAL_DRIVER_PATH="$PWD/build"
           python -m pytest -c pytest.ini tests/integration/ -v --tb=short
 
-      - name: Smoke test (Linux/macOS)
-        if: runner.os != 'Windows'
+      
+      - name: Integration Tests (Python) - macOS
+        if: runner.os == 'macOS'
+        run: |
+          # Install pytest and numpy
+          python -m pip install pytest numpy
+          
+          # Set environment variables for macOS
+          export GDAL_DRIVER_PATH="$PWD/build"
+          export GDAL_DATA="$(brew --prefix)/share/gdal"
+          export PROJ_LIB="$(brew --prefix)/share/proj"
+          export PYTHONPATH="$PWD:$PYTHONPATH"
+          
+          # Add Homebrew paths to ensure libraries are found
+          export PATH="$(brew --prefix)/bin:$PATH"
+          export DYLD_LIBRARY_PATH="$(brew --prefix)/lib:$DYLD_LIBRARY_PATH"
+          
+          # Verify GDAL Python bindings
+          python -c "from osgeo import gdal; print('GDAL Python bindings available')"
+          python -c "import gdal; print(f'GDAL version: {gdal.VersionInfo()}')" 2>/dev/null || echo "Legacy GDAL import check"
+          
+          # Debug: List test files to ensure they exist
+          echo "Integration test files:"
+          find tests/integration/ -name "*.py" -type f 2>/dev/null || echo "No Python files found in tests/integration/"
+          ls -la tests/integration/ 2>/dev/null || echo "tests/integration/ directory not found"
+          
+          # Run integration tests with diagnostic information
+          echo "Running pytest with diagnostic collection..."
+          python -m pytest --collect-only tests/integration/ -v || echo "Test collection failed"
+          
+          # Run actual tests
+          python -m pytest tests/integration/ -v --tb=short
+
+
+      - name: Smoke test (Linux)
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           export GDAL_DRIVER_PATH="$PWD/build"
