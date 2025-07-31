@@ -87,6 +87,14 @@ bool testPathTypeDetection()
     assert(EOPFPerformanceUtils::DetectPathType("https://example.com") ==
            EOPFPerformanceUtils::PathType::NETWORK_HTTP);
 
+    // Test the specific EODC HTTPS URL
+    assert(EOPFPerformanceUtils::DetectPathType("https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr") ==
+           EOPFPerformanceUtils::PathType::NETWORK_HTTP);
+
+    // Test HTTP URL
+    assert(EOPFPerformanceUtils::DetectPathType("http://example.com/data.zarr") ==
+           EOPFPerformanceUtils::PathType::NETWORK_HTTP);
+
     assert(EOPFPerformanceUtils::DetectPathType("/local/path/file.zarr") ==
            EOPFPerformanceUtils::PathType::LOCAL_FILE);
 
@@ -94,6 +102,7 @@ bool testPathTypeDetection()
     assert(EOPFPerformanceUtils::IsNetworkPath("/vsicurl/http://example.com"));
     assert(EOPFPerformanceUtils::IsNetworkPath("/vsis3/bucket/file"));
     assert(EOPFPerformanceUtils::IsNetworkPath("https://example.com"));
+    assert(EOPFPerformanceUtils::IsNetworkPath("https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"));
     assert(!EOPFPerformanceUtils::IsNetworkPath("/local/path/file.zarr"));
 
     std::cout << "✅ PathType detection works correctly" << std::endl;

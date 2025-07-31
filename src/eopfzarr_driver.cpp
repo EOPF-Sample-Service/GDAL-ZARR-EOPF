@@ -229,9 +229,24 @@ static bool ParseSubdatasetPath(const std::string& fullPath,
     }
 
     // Check for simple path with subdataset separator (e.g., EOPFZARR:path:subds)
-    // This is complicated on Windows due to drive letters (C:)
+    // This is complicated on Windows due to drive letters (C:) and URLs (https://)
     std::string tmpPath = pathWithoutPrefix;
     size_t colonPos = tmpPath.find(':');
+
+    // Check if this looks like a URL scheme first
+    if (colonPos != std::string::npos)
+    {
+        std::string potential_scheme = tmpPath.substr(0, colonPos);
+
+        // Common URL schemes that should not be treated as subdataset separators
+        if (potential_scheme == "http" || potential_scheme == "https" ||
+            potential_scheme == "ftp" || potential_scheme == "ftps" || potential_scheme == "s3" ||
+            potential_scheme == "gs" || potential_scheme == "az" || potential_scheme == "azure")
+        {
+            // This is a URL - don't parse for subdatasets in the simple case
+            colonPos = std::string::npos;
+        }
+    }
 
 #ifdef _WIN32
     // On Windows, the first colon might be the drive letter
@@ -239,6 +254,18 @@ static bool ParseSubdatasetPath(const std::string& fullPath,
     {
         // This is likely a drive letter - look for another colon
         colonPos = tmpPath.find(':', colonPos + 1);
+
+        // But check again if the next part looks like a URL scheme
+        if (colonPos != std::string::npos && colonPos > 2)
+        {
+            std::string after_drive = tmpPath.substr(2, colonPos - 2);
+            if (after_drive == "http" || after_drive == "https" || after_drive == "ftp" ||
+                after_drive == "ftps" || after_drive == "s3" || after_drive == "gs" ||
+                after_drive == "az" || after_drive == "azure")
+            {
+                colonPos = std::string::npos;
+            }
+        }
     }
 #endif
 
@@ -679,6 +706,7 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     GDALDriver* driver = new GDALDriver();
     driver->SetDescription("EOPFZARR");
     driver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver");
+    driver->SetMetadataItem(GDAL_DMD_EXTENSION, "zarr");
     driver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");

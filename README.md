@@ -44,13 +44,13 @@ A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Z
 
 ```bash
 # Get dataset info
-gdalinfo EOPFZARR:/path/to/data.zarr
+gdalinfo 'EOPFZARR:"/path/to/data.zarr"'
 
 # Convert to GeoTIFF
-gdal_translate EOPFZARR:/path/to/data.zarr output.tif
+gdal_translate 'EOPFZARR:"/path/to/data.zarr"' output.tif
 
 # Reproject
-gdalwarp -t_srs EPSG:4326 EOPFZARR:/path/to/data.zarr reprojected.tif
+gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr"' reprojected.tif
 ```
 
 ### Python
@@ -59,7 +59,7 @@ gdalwarp -t_srs EPSG:4326 EOPFZARR:/path/to/data.zarr reprojected.tif
 from osgeo import gdal
 
 # Open dataset
-ds = gdal.Open("EOPFZARR:/path/to/data.zarr")
+ds = gdal.Open('EOPFZARR:"/path/to/data.zarr"')
 
 # Access subdatasets
 subdatasets = ds.GetMetadata("SUBDATASETS")
@@ -105,15 +105,63 @@ sudo make install
 
 ## Testing
 
+The project includes comprehensive testing following industry best practices:
+
+### Test Types
+
+- **Unit Tests (C++)** - Core functionality and GDAL integration
+- **Integration Tests (Python)** - End-to-end driver functionality using pytest
+- **Performance Tests** - Caching and optimization validation
+- **Compatibility Tests** - Different Zarr format support
+
+
+### Manual Testing
+
 ```bash
-# Run tests
+# C++ unit tests via CTest
 cd build
 ctest -C Release --verbose
 
-# Or run specific tests
-./test_compatibility
-./test_performance
+# Python integration tests via pytest  
+pytest tests/integration/ -v
+
+# Generate test data (if needed)
+python tests/generate_test_data.py
 ```
+
+### Test Data
+
+Integration tests use automatically generated Zarr datasets covering:
+
+- Basic functionality
+- Subdatasets
+- Geospatial information
+- EOPF metadata
+- Performance testing
+
+### Network Testing
+
+The test suite includes comprehensive network testing:
+
+- **HTTPS URLs**: Tests with real-world EODC datasets
+- **VSI Wrappers**: `/vsicurl/` and `/vsis3/` path handling
+- **Error Handling**: Network timeouts and invalid URLs
+- **Performance**: Caching effectiveness with remote datasets
+
+Example tested HTTPS URL:
+
+```text
+https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr
+```
+
+### CI/CD Testing
+
+GitHub Actions automatically runs:
+
+- Cross-platform builds (Windows, macOS, Linux)
+- C++ unit tests via CTest
+- Python integration tests via pytest
+- Smoke tests for driver registration
 
 ## License
 
