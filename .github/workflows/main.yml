@@ -149,6 +149,7 @@ jobs:
       - name: Integration Tests (Python)
         shell: bash
         run: |
+          python -m pip install pytest numpy
           if [ "${{ runner.os }}" = "Windows" ]; then
             export PYTHONPATH="$PWD:$PWD/src"
             export GDAL_DRIVER_PATH="$PWD/build/Release"
