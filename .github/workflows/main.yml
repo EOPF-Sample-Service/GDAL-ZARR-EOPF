@@ -146,6 +146,13 @@ jobs:
             cmake --build . --config Release --target RUN_TESTS
           }
 
+      - name: Integration Tests (Python)
+        shell: bash
+        run: |
+          python -m pip install pytest numpy
+
+
+
       - name: Integration Tests (Python) - Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -224,7 +231,7 @@ jobs:
           & $pythonExe -c "import pytest; import numpy; print('Packages successfully imported')"
           
           Write-Host "Running integration tests..."
-          & $pythonExe -m pytest -c pytest.ini
+          & $pythonExe -m pytest -c pytest.ini tests/integration/ -v --tb=short
           
       - name: Integration Tests (Python) - Linux/macOS
         if: runner.os != 'Windows'
@@ -234,7 +241,7 @@ jobs:
 
           python -m pip install pytest numpy
           export GDAL_DRIVER_PATH="$PWD/build"
-          python -m pytest -c pytest.ini
+          python -m pytest -c pytest.ini tests/integration/ -v --tb=short
 
       - name: Smoke test (Linux/macOS)
         if: runner.os != 'Windows'
