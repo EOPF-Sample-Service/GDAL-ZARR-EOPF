@@ -146,11 +146,6 @@ jobs:
             cmake --build . --config Release --target RUN_TESTS
           }
 
-      - name: Integration Tests (Python)
-        shell: bash
-        run: |
-          python -m pip install pytest numpy
-
       - name: Integration Tests (Python) - Windows
         if: runner.os == 'Windows'
         shell: pwsh

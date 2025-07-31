@@ -90,3 +90,4 @@ test_output_*
 Testing/
 DartConfiguration.tcl
 CTestTestfile.cmake
+tests/data/

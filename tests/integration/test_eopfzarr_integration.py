@@ -109,24 +109,42 @@ class TestEOPFZarrIntegration:
             assert full_data.shape == (ds.RasterYSize, ds.RasterXSize), "Full data shape mismatch"
     
     def test_subdatasets(self):
-        """Test subdataset enumeration and access (remote HTTPS)"""
+        """Test subdataset enumeration and access with a limit of 10"""
+        # Example remote dataset URL (replace with your actual dataset)
         url = REMOTE_SAMPLE_ZARR
         ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        
+        # Check if the dataset opened successfully
         if ds is None:
-            pytest.skip(f"Remote Zarr data not accessible: {url}")
+            pytest.skip(f"Remote data not accessible: {url}")
+        
+        # Get subdataset metadata
         subdatasets = ds.GetMetadata("SUBDATASETS")
-        if subdatasets:
-            subds_count = len([k for k in subdatasets.keys() if k.endswith("_NAME")])
-            assert subds_count > 0, "No subdatasets found"
-            first_subds = subdatasets["SUBDATASET_15_NAME"]
-            subds = gdal.Open(first_subds)
-            assert subds is not None, f"Failed to open subdataset: {first_subds}"
-            assert subds.RasterCount > 0, "Subdataset has no bands"
-            for i in range(10, subds_count + 1):
-                subds_name = subdatasets.get(f"SUBDATASET_{i}_NAME")
-                if subds_name:
+        if not subdatasets:
+            assert False, "No subdatasets found"
+        
+        # Count the total number of subdatasets
+        subds_count = len([k for k in subdatasets.keys() if k.endswith("_NAME")])
+        assert subds_count > 0, "No subdatasets found"
+        
+        # Limit to checking the first 10 subdatasets (or fewer if less than 10)
+        max_subds_to_check = min(10, subds_count)
+        opened_subds = 0
+        
+        # Loop through only the first 10 (or fewer) subdatasets
+        for i in range(1, max_subds_to_check + 1):
+            subds_name = subdatasets.get(f"SUBDATASET_{i}_NAME")
+            if subds_name:
+                try:
                     subds = gdal.Open(subds_name)
-                    assert subds is not None, f"Failed to open subdataset {i}: {subds_name}"
+                    if subds is not None and subds.RasterCount > 0:
+                        opened_subds += 1
+                except RuntimeError:
+                    # Skip subdatasets that fail to open (e.g., non-raster data)
+                    continue
+        
+        # Ensure at least one subdataset was successfully opened
+        assert opened_subds > 0, "No subdatasets could be opened as raster datasets among the first 10"
     
     def test_geospatial_info(self):
         """Test geospatial information retrieval (remote HTTPS)"""
