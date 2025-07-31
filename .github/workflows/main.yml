@@ -146,6 +146,26 @@ jobs:
             cmake --build . --config Release --target RUN_TESTS
           }
 
+      - name: Integration Tests (Python)
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            export PYTHONPATH="$PWD:$PWD/src"
+            export GDAL_DRIVER_PATH="$PWD/build/Release"
+            export GDAL_DATA="C:/OSGeo4W/share/gdal"
+            export PATH="C:/OSGeo4W/bin:$PATH"
+            C:/OSGeo4W/bin/python.exe -m pytest tests/integration/ -v --tb=short --collect-only
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            export PYTHONPATH="$PWD:$PWD/src"
+            export GDAL_DRIVER_PATH="$PWD/build"
+            python -m pytest tests/integration/ -v --tb=short --collect-only
+          else
+            export PYTHONPATH="$PWD:$PWD/src"
+            export GDAL_DRIVER_PATH="$PWD/build"
+            python -m pytest tests/integration/ -v --tb=short --collect-only
+          fi
+
+
       - name: Integration Tests (Python) - Windows
         if: runner.os == 'Windows'
         shell: pwsh
