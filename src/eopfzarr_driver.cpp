@@ -706,17 +706,17 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     GDALDriver* driver = new GDALDriver();
     driver->SetDescription("EOPFZARR");
     driver->SetMetadataItem(GDAL_DMD_LONGNAME, "EOPF Zarr Wrapper Driver");
-    
+
     // Use .eopfzarr as primary extension to avoid conflicts with built-in Zarr
     // This ensures rasterio can discover our driver without interfering with original Zarr
     driver->SetMetadataItem(GDAL_DMD_EXTENSION, "eopfzarr");
-    
+
     // Support both .eopfzarr and .zarr extensions, but prioritize .eopfzarr
     driver->SetMetadataItem(GDAL_DMD_EXTENSIONS, "eopfzarr zarr");
-    
+
     // Add connection prefix for explicit driver usage
     driver->SetMetadataItem(GDAL_DMD_CONNECTION_PREFIX, "EOPFZARR:");
-    
+
     driver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
     driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
     driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
