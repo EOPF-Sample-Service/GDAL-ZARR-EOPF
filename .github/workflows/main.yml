@@ -178,77 +178,24 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Setting up environment variables..."
-          
-          # Set proper environment variables for OSGeo4W Python
           $env:GDAL_DRIVER_PATH = "$PWD\build\Release"
           $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
           $env:PROJ_LIB = "C:\OSGeo4W\share\proj"
           $env:PATH = "C:\OSGeo4W\bin;C:\OSGeo4W\apps\Python312;C:\OSGeo4W\apps\Python312\Scripts;" + $env:PATH
           $env:PYTHONPATH = "C:\OSGeo4W\apps\Python312\Lib\site-packages"
-          $env:PYTHONHOME = "C:\OSGeo4W\apps\Python312"
           
-          Write-Host "Verifying OSGeo4W Python installation..."
+          # Use OSGeo4W Python directly
+          $pythonExe = "C:\OSGeo4W\apps\Python312\python3.exe"
           
-          # Try multiple potential Python locations
-          $pythonPaths = @(
-            "C:\OSGeo4W\apps\Python312\python.exe",
-            "C:\OSGeo4W\apps\Python311\python.exe", 
-            "C:\OSGeo4W\apps\Python39\python.exe",
-            "C:\OSGeo4W\bin\python.exe"
-          )
-          
-          $pythonExe = $null
-          foreach ($pythonPath in $pythonPaths) {
-            if (Test-Path $pythonPath) {
-              $pythonExe = $pythonPath
-              Write-Host "Found Python at: $pythonPath"
-              break
-            } else {
-              Write-Host "Python not found at: $pythonPath"
-            }
-          }
-          
-          if (-not $pythonExe) {
-            Write-Host "ERROR: No Python executable found in OSGeo4W installation"
-            Write-Host "Available files in C:\OSGeo4W\apps:"
-            if (Test-Path "C:\OSGeo4W\apps") {
-              Get-ChildItem -Path "C:\OSGeo4W\apps" -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
-            }
-            exit 1
-          }
-          
-          Write-Host "Testing Python version..."
+          Write-Host "Verifying Python and GDAL..."
           & $pythonExe --version
+          & $pythonExe -c "from osgeo import gdal; print(f'GDAL version: {gdal.VersionInfo()}')"
           
-          Write-Host "Installing Python packages..."
-          
-          # Install packages using the found Python executable
-          try {
-            & $pythonExe -m pip install pytest numpy
-            Write-Host "Successfully installed Python packages"
-          } catch {
-            Write-Host "ERROR: Failed to install Python packages"
-            Write-Host "Attempting alternative installation methods..."
-            
-            # Try using ensurepip if pip is not available
-            try {
-              Write-Host "Trying to bootstrap pip..."
-              & $pythonExe -m ensurepip --upgrade
-              & $pythonExe -m pip install pytest numpy
-              Write-Host "Successfully installed packages after bootstrapping pip"
-            } catch {
-              Write-Host "ERROR: All package installation methods failed"
-              Write-Host "Python executable: $pythonExe"
-              Write-Host "Environment variables:"
-              Write-Host "  PYTHONHOME: $env:PYTHONHOME"
-              Write-Host "  PYTHONPATH: $env:PYTHONPATH"
-              Write-Host "  PATH: $env:PATH"
-              exit 1
-            }
-          }
+          Write-Host "Installing required packages..."
+          & $pythonExe -m pip install pytest rasterio numpy
           
           Write-Host "Verifying package installation..."
-          & $pythonExe -c "import pytest; import numpy; print('Packages successfully imported')"
+          & $pythonExe -c "import pytest, rasterio, numpy; print('All packages imported successfully')"
           
           Write-Host "Running integration tests..."
           & $pythonExe -m pytest -c pytest.ini tests/integration/ -v --tb=short
@@ -257,43 +204,43 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          # Install Python packages including rasterio
+          python -m pip install pytest numpy rasterio
+          
           # Set environment for tests
-          python -m pip install pytest numpy
           export GDAL_DRIVER_PATH="$PWD/build"
+          
+          # Verify installations
+          python -c "from osgeo import gdal; import rasterio; print('GDAL and rasterio available')"
+          
+          # Run integration tests
           python -m pytest -c pytest.ini tests/integration/ -v --tb=short
 
       
       - name: Integration Tests (Python) - macOS
         if: runner.os == 'macOS'
         run: |
-          # Install pytest and numpy
-          python -m pip install pytest numpy
+          # Install pytest, numpy, and rasterio
+          python -m pip install pytest numpy rasterio
           
           # Set environment variables for macOS
           export GDAL_DRIVER_PATH="$PWD/build"
           export GDAL_DATA="$(brew --prefix)/share/gdal"
           export PROJ_LIB="$(brew --prefix)/share/proj"
-          export PYTHONPATH="$PWD:$PYTHONPATH"
           
           # Add Homebrew paths to ensure libraries are found
           export PATH="$(brew --prefix)/bin:$PATH"
           export DYLD_LIBRARY_PATH="$(brew --prefix)/lib:$DYLD_LIBRARY_PATH"
           
-          # Verify GDAL Python bindings
-          python -c "from osgeo import gdal; print('GDAL Python bindings available')"
-          python -c "import gdal; print(f'GDAL version: {gdal.VersionInfo()}')" 2>/dev/null || echo "Legacy GDAL import check"
+          # Verify GDAL Python bindings and rasterio
+          python -c "from osgeo import gdal; import rasterio; print('GDAL and rasterio available')"
           
           # Debug: List test files to ensure they exist
           echo "Integration test files:"
           find tests/integration/ -name "*.py" -type f 2>/dev/null || echo "No Python files found in tests/integration/"
-          ls -la tests/integration/ 2>/dev/null || echo "tests/integration/ directory not found"
           
-          # Run integration tests with diagnostic information
-          echo "Running pytest with diagnostic collection..."
-          python -m pytest --collect-only tests/integration/ -v || echo "Test collection failed"
-          
-          # Run actual tests
-          python -m pytest tests/integration/ -v --tb=short
+          # Run integration tests
+          python -m pytest -c pytest.ini tests/integration/ -v --tb=short
 
 
       - name: Smoke test (Linux)
