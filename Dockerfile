@@ -117,10 +117,8 @@ RUN mkdir -p /home/jupyter/work \
 # Copy docker entrypoint and test scripts
 COPY docker-entrypoint.sh /usr/local/bin/
 COPY test-environment.py /usr/local/bin/
-COPY test-production-docker.py /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-    && chmod +x /usr/local/bin/test-environment.py \
-    && chmod +x /usr/local/bin/test-production-docker.py
+    && chmod +x /usr/local/bin/test-environment.py
 
 # Create test notebooks directory and copy notebooks
 RUN mkdir -p /home/jupyter/work/notebooks
