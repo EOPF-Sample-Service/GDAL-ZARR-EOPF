@@ -47,6 +47,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
     dask \
     geopandas \
     rasterio \
+    rioxarray \
     fiona \
     shapely \
     pyproj \
@@ -116,19 +117,27 @@ RUN mkdir -p /home/jupyter/work \
 # Copy docker entrypoint and test scripts
 COPY docker-entrypoint.sh /usr/local/bin/
 COPY test-environment.py /usr/local/bin/
+COPY test-production-docker.py /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-    && chmod +x /usr/local/bin/test-environment.py
+    && chmod +x /usr/local/bin/test-environment.py \
+    && chmod +x /usr/local/bin/test-production-docker.py
+
+# Create test notebooks directory and copy notebooks
+RUN mkdir -p /home/jupyter/work/notebooks
+
+# Copy notebooks before switching to jupyter user (as root)
+COPY notebooks/ /home/jupyter/work/notebooks/
 
 # Switch to non-root user
 USER jupyter
 WORKDIR /home/jupyter
 
-# Create test notebooks directory
-RUN mkdir -p /home/jupyter/work/notebooks
+# Fix ownership after copying (this needs to be done as root, so we'll fix it differently)
+USER root
+RUN chown -R jupyter:jupyter /home/jupyter/work/
 
-# Copy test notebooks (if they exist) 
-COPY notebooks/ /home/jupyter/work/notebooks/
-RUN chown -R jupyter:jupyter /home/jupyter/work/notebooks/ 2>/dev/null || true
+# Switch back to jupyter user
+USER jupyter
 
 # Expose JupyterLab port
 EXPOSE 8888
