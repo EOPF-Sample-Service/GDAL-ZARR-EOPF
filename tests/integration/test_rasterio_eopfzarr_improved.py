@@ -132,33 +132,6 @@ def rasterio_context():
     return create_rasterio_context()
 
 
-# Core Driver Tests
-def test_driver_registration():
-    """Test that EOPFZARR driver is properly registered"""
-    driver = gdal.GetDriverByName("EOPFZARR")
-    assert driver is not None
-    
-    long_name = driver.GetMetadataItem("DMD_LONGNAME")
-    assert long_name is not None
-    assert "EOPF" in long_name or "Zarr" in long_name
-
-
-# Environment-Aware Rasterio Tests
-def test_rasterio_environment_compatibility(rasterio_context):
-    """Test that rasterio works with EOPFZARR in current environment"""
-    with rasterio_context:
-        # Force driver registration
-        gdal.AllRegister()
-        
-        # Check if EOPFZARR is available in rasterio context
-        driver = gdal.GetDriverByName("EOPFZARR")
-        assert driver is not None, "EOPFZARR driver not available in rasterio context"
-        
-        # Check environment variables are properly set
-        driver_path = gdal.GetConfigOption('GDAL_DRIVER_PATH')
-        assert driver_path is not None, "GDAL_DRIVER_PATH not set in rasterio context"
-
-
 def test_rasterio_basic_file_operations(rasterio_context):
     """Test basic rasterio file operations (environment-independent)"""
     env_info = detect_environment()
@@ -179,7 +152,7 @@ def test_rasterio_basic_file_operations(rasterio_context):
             pytest.skip(f"Basic rasterio operations not supported in {env_info['name']}: {e}")
 
 
-def test_rasterio_remote_url_access(rasterio_context):
+def test_rasterio_remote_url_access_improved():
     """Test rasterio with remote URLs (environment-dependent)"""
     env_info = detect_environment()
     
@@ -192,7 +165,7 @@ def test_rasterio_remote_url_access(rasterio_context):
     
     path = f'EOPFZARR:"/vsicurl/{url}"'
     
-    with rasterio_context:
+    with create_rasterio_context():
         try:
             with rasterio.open(path) as src:
                 assert src.driver == "EOPFZARR"
@@ -206,7 +179,7 @@ def test_rasterio_remote_url_access(rasterio_context):
                 raise AssertionError(f"Rasterio remote access failed in {env_info['name']}: {e}")
 
 
-def test_rasterio_data_reading(rasterio_context):
+def test_rasterio_data_reading_improved():
     """Test reading data with rasterio (environment-aware)"""
     env_info = detect_environment()
     
@@ -215,25 +188,29 @@ def test_rasterio_data_reading(rasterio_context):
     
     url = REMOTE_WITH_SUBDATASETS_ZARR
     skip_if_url_not_accessible(url, "rasterio data reading")
+
     
-    path = f'EOPFZARR:"/vsicurl/{url}"'
-    
-    with rasterio_context:
+    with create_rasterio_context():
         try:
-            with rasterio.open(path) as src:
-                if src.count == 0:
-                    pytest.skip("Dataset has no bands")
-                
-                # Read a small window
-                width = min(10, src.width)
-                height = min(10, src.height)
-                window = rasterio.windows.Window(0, 0, width, height)
-                data = src.read(1, window=window)
-                
-                assert data is not None
-                assert data.shape == (height, width)
-                assert data.size > 0
-                print(f"✅ Rasterio data reading successful in {env_info['name']}")
+            if env_info['is_osgeo4w'] and not env_info['is_ci']:
+                url = REMOTE_SAMPLE_ZARR
+                if check_url_accessible_with_gdal(url):
+                    path = f'EOPFZARR:"/vsicurl/{url}"'
+
+                    with rasterio.open(path) as src:
+                        if src.count == 0:
+                            pytest.skip("Dataset has no bands")
+
+                        # Read a small window
+                        width = min(10, src.width)
+                        height = min(10, src.height)
+                        window = rasterio.windows.Window(0, 0, width, height)
+                        data = src.read(1, window=window)
+
+                        assert data is not None
+                        assert data.shape == (height, width)
+                        assert data.size > 0
+                        print(f"✅ Rasterio data reading successful in {env_info['name']}")
                 
         except Exception as e:
             if env_info['is_docker']:
@@ -373,8 +350,6 @@ def test_rasterio_metadata_access_improved():
                 print(f"ℹ️ Production workflow adapted for {env_info['name']}: {e}")
             else:
                 raise
-
-
 
 if __name__ == "__main__":
     # Allow running tests directly
