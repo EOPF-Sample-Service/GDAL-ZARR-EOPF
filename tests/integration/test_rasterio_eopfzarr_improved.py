@@ -291,26 +291,28 @@ def test_rasterio_geospatial_info_improved():
     url = REMOTE_SAMPLE_ZARR
     path = f'EOPFZARR:"/vsicurl/{url}"'
 
-    try:
-        with rasterio.open(path) as src:
-            # Test basic properties
-            assert hasattr(src, 'width')
-            assert hasattr(src, 'height')
-            assert hasattr(src, 'count')
-            assert hasattr(src, 'crs')
-            assert hasattr(src, 'transform')
+    env_info = detect_environment()
+    with create_rasterio_context():
+        try:
+            with rasterio.open(path) as src:
+                # Test basic properties
+                assert hasattr(src, 'width')
+                assert hasattr(src, 'height')
+                assert hasattr(src, 'count')
+                assert hasattr(src, 'crs')
+                assert hasattr(src, 'transform')
 
-            # Test bounds
-            bounds = src.bounds
-            assert len(bounds) == 4, "Bounds should have 4 values"
+                # Test bounds
+                bounds = src.bounds
+                assert len(bounds) == 4, "Bounds should have 4 values"
 
-            # Test profile - Profile class behaves like dict but isn't isinstance(dict)
-            profile = src.profile
-            assert hasattr(profile, '__getitem__'), "Profile should be dict-like"
-            assert 'driver' in profile
-            assert profile['driver'] == 'EOPFZARR'
-    except Exception as e:
-        pytest.skip(f"Remote data not accessible: {e}")
+                # Test profile - Profile class behaves like dict but isn't isinstance(dict)
+                profile = src.profile
+                assert hasattr(profile, '__getitem__'), "Profile should be dict-like"
+                assert 'driver' in profile
+                assert profile['driver'] == 'EOPFZARR'
+        except Exception as e:
+            pytest.skip(f"Remote data not accessible: {e}")
 
 
 def test_rasterio_metadata_access_improved():
