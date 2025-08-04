@@ -418,7 +418,7 @@ def test_manual_rasterio_integration():
     """Manual test function for development/debugging"""
     try:
         with rasterio.open(f'EOPFZARR:"/vsicurl/{REMOTE_SAMPLE_ZARR}"') as src:
-            print(f"✅ Rasterio: {src.driver}, {src.width}x{src.height}")
+            assert src.driver == "EOPFZARR"
     except Exception as e:
         print(f"❌ Rasterio failed: {e}")
 
