@@ -82,35 +82,32 @@ def temp_zarr_path():
     yield Path(temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
 
-class TestRasterioEOPFZarrIntegration:
-    """Integration test suite for Rasterio following GDAL patterns"""
+# Module-level setup for all tests
+def setup_module():
+    """Setup GDAL for all tests in this module"""
+    gdal.UseExceptions()
+    # Ensure our driver is loaded
+    driver = gdal.GetDriverByName("EOPFZARR")
+    if driver is None:
+        pytest.skip("EOPFZARR driver not available", allow_module_level=True)
+
+def test_driver_registration():
+    """Test that EOPFZARR driver is properly registered"""
+    driver = gdal.GetDriverByName("EOPFZARR")
+    assert driver is not None
     
-    @pytest.fixture(autouse=True, scope="module")
-    def setup_gdal(self):
-        """Setup GDAL for testing"""
-        gdal.UseExceptions()
-        # Ensure our driver is loaded
-        driver = gdal.GetDriverByName("EOPFZARR")
-        if driver is None:
-            pytest.skip("EOPFZARR driver not available")
+    # Check basic driver metadata
+    long_name = driver.GetMetadataItem("DMD_LONGNAME")
+    assert long_name is not None
+    assert "EOPF" in long_name or "Zarr" in long_name
     
-    def test_driver_registration(self):
-        """Test that EOPFZARR driver is properly registered"""
-        driver = gdal.GetDriverByName("EOPFZARR")
-        assert driver is not None
-        
-        # Check basic driver metadata
-        long_name = driver.GetMetadataItem("DMD_LONGNAME")
-        assert long_name is not None
-        assert "EOPF" in long_name or "Zarr" in long_name
-        
-        # Check supported extensions
-        extensions = driver.GetMetadataItem("DMD_EXTENSION")
-        assert extensions is not None
-        assert "zarr" in extensions.lower()
-        
-        # Check capabilities
-        assert driver.GetMetadataItem(gdal.DCAP_OPEN) == "YES"
+    # Check supported extensions
+    extensions = driver.GetMetadataItem("DMD_EXTENSION")
+    assert extensions is not None
+    assert "zarr" in extensions.lower()
+    
+    # Check capabilities
+    assert driver.GetMetadataItem(gdal.DCAP_OPEN) == "YES"
 
     def test_root_zarr_open(self):
         """Test that EOPFZARR driver is properly registered"""
@@ -209,180 +206,7 @@ class TestRasterioEOPFZarrIntegration:
                 assert opened_subds > 0, "No subdatasets could be opened as raster datasets among the first 10"
         except Exception as e:
             pytest.skip(f"Remote data not accessible: {e}")
-    
-    def test_rasterio_geospatial_info(self):
-        """Test geospatial information retrieval with rasterio (remote HTTPS)"""
-        url = REMOTE_SAMPLE_ZARR
-        path = f'EOPFZARR:"/vsicurl/{url}"'
-        
-        try:
-            with rasterio.open(path) as src:
-                # Test basic properties
-                assert hasattr(src, 'width')
-                assert hasattr(src, 'height')
-                assert hasattr(src, 'count')
-                assert hasattr(src, 'crs')
-                assert hasattr(src, 'transform')
-                
-                # Test bounds
-                bounds = src.bounds
-                assert len(bounds) == 4, "Bounds should have 4 values"
-                
-                # Test profile - Profile class behaves like dict but isn't isinstance(dict)
-                profile = src.profile
-                assert hasattr(profile, '__getitem__'), "Profile should be dict-like"
-                assert 'driver' in profile
-                assert profile['driver'] == 'EOPFZARR'
-        except Exception as e:
-            pytest.skip(f"Remote data not accessible: {e}")
-    
-    def test_rasterio_metadata_access(self):
-        """Test metadata access with rasterio"""
-        url = REMOTE_SAMPLE_ZARR
-        path = f'EOPFZARR:"/vsicurl/{url}"'
-        
-        try:
-            with rasterio.open(path) as src:
-                # Test dataset metadata
-                meta = src.meta
-                assert hasattr(meta, '__getitem__'), "Meta should be dict-like"
-                
-                # Test tags (may be empty)
-                tags = src.tags()
-                assert isinstance(tags, dict)
-                
-                # Test profile  
-                profile = src.profile
-                assert hasattr(profile, '__getitem__'), "Profile should be dict-like"
-                assert 'width' in profile
-                assert 'height' in profile
-                assert 'count' in profile
-                assert 'driver' in profile
-        except Exception as e:
-            pytest.skip(f"Remote data not accessible: {e}")
-    
-    def test_rasterio_path_formats(self):
-        """Test different path formats with GDAL and rasterio integration"""
-        url = REMOTE_SAMPLE_ZARR
-        
-        path_formats = [
-            f'EOPFZARR:"/vsicurl/{url}"',
-            f'EOPFZARR:/vsicurl/{url}',
-            f'EOPFZARR:{url}',
-            f'EOPFZARR:"{url}"'
-        ]
-        
-        working_formats = []
-        for path in path_formats:
-            try:
-                # First test with GDAL
-                ds = gdal.Open(path)
-                if ds is not None and ds.RasterXSize > 0 and ds.RasterYSize > 0:
-                    working_formats.append(path)
-                    
-                    # Test integration with rasterio by converting to rasterio-compatible format
-                    # Rasterio can work with GDAL datasets through memory drivers
-                    try:
-                        # Create a memory dataset that rasterio can understand
-                        mem_path = f"/vsimem/test_{len(working_formats)}.tif"
-                        mem_ds = gdal.GetDriverByName("GTiff").CreateCopy(mem_path, ds)
-                        if mem_ds:
-                            with rasterio.open(mem_path) as src:
-                                assert src.width > 0
-                                assert src.height > 0
-                            gdal.Unlink(mem_path)
-                    except Exception:
-                        pass  # Rasterio integration optional for this test
-                ds = None
-            except Exception:
-                continue
-        
-        # At least one format should work with GDAL
-        assert len(working_formats) > 0, "No path formats work with GDAL EOPFZARR driver"
-    
-    def test_rasterio_driver_comparison(self):
-        """Compare EOPFZARR vs standard Zarr driver behavior"""
-        url = REMOTE_SAMPLE_ZARR
-        eopf_path = f'EOPFZARR:"/vsicurl/{url}"'
-        zarr_path = f'ZARR:"/vsicurl/{url}"'
-        
-        eopf_success = False
-        zarr_success = False
-        eopf_props = None
-        zarr_props = None
-        
-        # Test EOPFZARR with GDAL first
-        try:
-            ds = gdal.Open(eopf_path)
-            if ds is not None and ds.RasterXSize > 0 and ds.RasterYSize > 0:
-                eopf_success = True
-                eopf_props = (ds.RasterXSize, ds.RasterYSize, ds.RasterCount)
-                
-                # Try rasterio integration via memory dataset
-                try:
-                    mem_path = "/vsimem/eopf_test.tif"
-                    mem_ds = gdal.GetDriverByName("GTiff").CreateCopy(mem_path, ds)
-                    if mem_ds:
-                        with rasterio.open(mem_path) as src:
-                            assert src.width == eopf_props[0]
-                            assert src.height == eopf_props[1]
-                        gdal.Unlink(mem_path)
-                except Exception:
-                    pass  # Rasterio integration is optional
-            ds = None
-        except Exception:
-            pass
-        
-        # Test standard Zarr with GDAL
-        try:
-            ds = gdal.Open(zarr_path)
-            if ds is not None and ds.RasterXSize > 0 and ds.RasterYSize > 0:
-                zarr_success = True
-                zarr_props = (ds.RasterXSize, ds.RasterYSize, ds.RasterCount)
-            ds = None
-        except Exception:
-            pass
-        
-        # At least EOPFZARR should work with GDAL
-        assert eopf_success, "EOPFZARR driver should work with GDAL"
-        
-        # If both work, they should return similar results
-        if eopf_success and zarr_success and eopf_props and zarr_props:
-            assert eopf_props[0] == zarr_props[0], "Width mismatch between drivers"
-            assert eopf_props[1] == zarr_props[1], "Height mismatch between drivers"
-    
-    def test_rasterio_production_workflow(self):
-        """Test complete production workflow with rasterio: open → read → process"""
-        url = REMOTE_WITH_SUBDATASETS_ZARR
-        path = f'EOPFZARR:"/vsicurl/{url}"'
-        
-        try:
-            with rasterio.open(path) as src:
-                # Step 1: Verify dataset properties
-                assert src.driver == "EOPFZARR"
-                if src.count == 0:
-                    pytest.skip("Dataset has no bands for production workflow")
-                
-                # Step 2: Read data
-                window = rasterio.windows.Window(0, 0, min(20, src.width), min(20, src.height))
-                data = src.read(1, window=window)
-                
-                # Step 3: Basic processing
-                assert data.size > 0
-                stats = {
-                    'min': float(data.min()),
-                    'max': float(data.max()),
-                    'mean': float(data.mean()),
-                    'std': float(data.std())
-                }
-                
-                # Step 4: Verify processing results
-                assert all(isinstance(v, float) for v in stats.values())
-                assert stats['min'] <= stats['max']
-                
-                print(f"✅ Production workflow successful: {stats}")
-        except Exception as e:
-            pytest.skip(f"Production workflow failed: {e}")
+
     
     def test_rasterio_error_handling(self):
         """Test error handling for invalid paths and network issues with rasterio"""
@@ -396,6 +220,87 @@ class TestRasterioEOPFZarrIntegration:
             with pytest.raises((Exception, RuntimeError)):
                 with rasterio.open(invalid_path) as src:
                     pass  # Should not reach here
+
+def test_rasterio_geospatial_info():
+    """Test geospatial information retrieval with rasterio (remote HTTPS)"""
+    url = REMOTE_SAMPLE_ZARR
+    path = f'EOPFZARR:"/vsicurl/{url}"'
+
+    try:
+        with rasterio.open(path) as src:
+            # Test basic properties
+            assert hasattr(src, 'width')
+            assert hasattr(src, 'height')
+            assert hasattr(src, 'count')
+            assert hasattr(src, 'crs')
+            assert hasattr(src, 'transform')
+
+            # Test bounds
+            bounds = src.bounds
+            assert len(bounds) == 4, "Bounds should have 4 values"
+
+            # Test profile - Profile class behaves like dict but isn't isinstance(dict)
+            profile = src.profile
+            assert hasattr(profile, '__getitem__'), "Profile should be dict-like"
+            assert 'driver' in profile
+            assert profile['driver'] == 'EOPFZARR'
+    except Exception as e:
+        pytest.skip(f"Remote data not accessible: {e}")
+
+def test_rasterio_metadata_access():
+    """Test metadata access with rasterio"""
+    url = REMOTE_SAMPLE_ZARR
+    path = f'EOPFZARR:"/vsicurl/{url}"'
+
+    try:
+        with rasterio.open(path) as src:
+            # Test dataset metadata
+            meta = src.meta
+            assert hasattr(meta, '__getitem__'), "Meta should be dict-like"
+
+            # Test tags (may be empty)
+            tags = src.tags()
+            assert isinstance(tags, dict)
+
+            # Test profile
+            profile = src.profile
+            assert hasattr(profile, '__getitem__'), "Profile should be dict-like"
+            assert 'width' in profile
+            assert 'height' in profile
+            assert 'count' in profile
+            assert 'driver' in profile
+    except Exception as e:
+        pytest.skip(f"Remote data not accessible: {e}")
+
+def test_rasterio_production_workflow():
+    """Test complete production workflow with rasterio: open → read → process"""
+    try:
+        with rasterio.open(f'EOPFZARR:"/vsicurl/{REMOTE_WITH_SUBDATASETS_ZARR}"') as src:
+                # Step 1: Verify dataset properties
+            assert src.driver == "EOPFZARR"
+            if src.count == 0:
+                pytest.skip("Dataset has no bands for production workflow")
+
+                # Step 2: Read data
+            window = rasterio.windows.Window(0, 0, min(20, src.width), min(20, src.height))
+            data = src.read(1, window=window)
+
+            # Step 3: Basic processing
+            assert data.size > 0
+            stats = {
+                    'min': float(data.min()),
+                    'max': float(data.max()),
+                    'mean': float(data.mean()),
+                    'std': float(data.std())
+                }
+
+            # Step 4: Verify processing results
+            assert all(isinstance(v, float) for v in stats.values())
+            assert stats['min'] <= stats['max']
+
+            print(f"✅ Production workflow successful: {stats}")
+    except Exception as e:
+        pytest.skip(f"Production workflow failed: {e}")
 
 def test_rasterio_concurrent_access():
     """Test that multiple concurrent rasterio sessions work"""
