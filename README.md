@@ -38,6 +38,26 @@ A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Z
 
 4. **Use with QGIS**: Add raster layer with `EOPFZARR:/path/to/data.zarr`
 
+## 🐳 Docker Quick Start
+
+The easiest way to get started is using our pre-built Docker image:
+
+```bash
+# Pull and run the image
+docker pull yuvraj1989/eopf-zarr-driver:v2.0.0
+docker run -p 8888:8888 yuvraj1989/eopf-zarr-driver:v2.0.0
+
+# Access JupyterLab at: http://localhost:8888
+```
+
+The Docker image includes:
+- ✅ **GDAL 3.10.2** with EOPF-Zarr driver pre-installed
+- ✅ **Complete rasterio integration** 
+- ✅ **JupyterLab environment** with all geospatial packages
+- ✅ **Network access** for remote Zarr datasets
+
+See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for detailed usage instructions.
+
 ## Usage
 
 ### Command Line

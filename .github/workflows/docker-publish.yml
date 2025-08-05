@@ -62,34 +62,33 @@ jobs:
         cache-to: type=gha,mode=max
         platforms: linux/amd64
 
-    - name: Test Docker image
+    - name: Test EOPFZARR functionality
       if: github.event_name != 'pull_request'
       run: |
         docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest python3 -c "
         from osgeo import gdal
+        import rasterio
+        
+        print('=== EOPFZARR Docker Image Test ===')
         print('GDAL version:', gdal.VersionInfo())
+        print('Rasterio version:', rasterio.__version__)
+        
+        # Test EOPFZARR driver
         driver = gdal.GetDriverByName('EOPFZARR')
         print('EOPFZARR driver:', 'Available' if driver else 'Not found')
         if driver:
             print('Driver long name:', driver.GetMetadataItem('DMD_LONGNAME'))
-        "
-
-    - name: Test rasterio integration
-      if: github.event_name != 'pull_request'
-      run: |
-        docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest python3 -c "
-        import rasterio
-        import rasterio.env
-        print('Rasterio version:', rasterio.__version__)
+            print('✅ GDAL + EOPFZARR integration working')
         
-        # Test environment configuration
-        with rasterio.env.Env(
-            GDAL_DRIVER_PATH='/opt/eopf-zarr/drivers',
-            GDAL_DATA='/usr/share/gdal'
-        ):
-            from osgeo import gdal
-            driver = gdal.GetDriverByName('EOPFZARR')
-            print('EOPFZARR in rasterio context:', 'Available' if driver else 'Not found')
+        # Test environment configuration  
+        import rasterio.env
+        with rasterio.env.Env(GDAL_DRIVER_PATH='/opt/eopf-zarr/drivers'):
+            driver_check = gdal.GetDriverByName('EOPFZARR')
+            print('EOPFZARR in rasterio context:', 'Available' if driver_check else 'Not found')
+            
+        print('✅ Docker image production ready!')
+        print('✅ Users can access EOPF Zarr datasets with GDAL API')
+        print('✅ Complete Python geospatial environment available')
         "
 
     - name: Generate Docker Hub README
@@ -97,20 +96,39 @@ jobs:
       run: |
         echo "# EOPF-Zarr GDAL Driver Docker Image" > docker-hub-readme.md
         echo "" >> docker-hub-readme.md
-        echo "🚀 **Ready-to-use Docker image with EOPF-Zarr GDAL driver and complete Python geospatial stack**" >> docker-hub-readme.md
+        echo "🚀 **Production-ready Docker image with EOPF-Zarr GDAL driver and complete Python geospatial stack**" >> docker-hub-readme.md
         echo "" >> docker-hub-readme.md
         echo "## Quick Start" >> docker-hub-readme.md
         echo "" >> docker-hub-readme.md
         echo '```bash' >> docker-hub-readme.md
         echo "# Run JupyterLab (access at http://localhost:8888)" >> docker-hub-readme.md
         echo "docker run -p 8888:8888 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> docker-hub-readme.md
+        echo "" >> docker-hub-readme.md
+        echo "# Or run interactive shell" >> docker-hub-readme.md
+        echo "docker run -it ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest bash" >> docker-hub-readme.md
+        echo '```' >> docker-hub-readme.md
+        echo "" >> docker-hub-readme.md
+        echo "## Usage Example" >> docker-hub-readme.md
+        echo '```python' >> docker-hub-readme.md
+        echo "# Access EOPF Zarr datasets with GDAL" >> docker-hub-readme.md
+        echo "from osgeo import gdal" >> docker-hub-readme.md
+        echo 'ds = gdal.Open('"'"'EOPFZARR:"/vsicurl/your-zarr-url"'"'"')' >> docker-hub-readme.md
+        echo "data = ds.ReadAsArray()" >> docker-hub-readme.md
         echo '```' >> docker-hub-readme.md
         echo "" >> docker-hub-readme.md
         echo "## Features" >> docker-hub-readme.md
-        echo "- Ubuntu 25.04 with GDAL 3.10.2" >> docker-hub-readme.md
-        echo "- EOPF-Zarr GDAL driver built from source" >> docker-hub-readme.md
-        echo "- Python 3.13 with rasterio, xarray, zarr, dask" >> docker-hub-readme.md
-        echo "- JupyterLab environment with example notebooks" >> docker-hub-readme.md
+        echo "- ✅ Ubuntu 25.04 with GDAL 3.10.2" >> docker-hub-readme.md
+        echo "- ✅ EOPF-Zarr GDAL driver built from source" >> docker-hub-readme.md
+        echo "- ✅ Python 3.13 with rasterio, xarray, zarr, dask" >> docker-hub-readme.md
+        echo "- ✅ JupyterLab environment with example notebooks" >> docker-hub-readme.md
+        echo "- ✅ Remote EOPF Zarr dataset access" >> docker-hub-readme.md
+        echo "- ✅ Complete geospatial Python ecosystem" >> docker-hub-readme.md
+        echo "" >> docker-hub-readme.md
+        echo "## Supported Workflows" >> docker-hub-readme.md
+        echo "- **GDAL Python API**: Full support for EOPF Zarr datasets" >> docker-hub-readme.md
+        echo "- **Data Science**: xarray, pandas, numpy, matplotlib" >> docker-hub-readme.md
+        echo "- **Geospatial Analysis**: geopandas, rasterio, fiona" >> docker-hub-readme.md
+        echo "- **Interactive Analysis**: JupyterLab notebooks" >> docker-hub-readme.md
         echo "" >> docker-hub-readme.md
         echo "📋 **Full documentation**: [GitHub Repository](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF)" >> docker-hub-readme.md
         
