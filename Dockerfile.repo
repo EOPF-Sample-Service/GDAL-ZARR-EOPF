@@ -3,8 +3,8 @@
 FROM ubuntu:25.04
 
 LABEL maintainer="EOPF Sample Service"
-LABEL description="EOPF-Zarr GDAL Driver with Ubuntu 25, GDAL 3.10, and EOPF Python environment"
-LABEL version="1.0.0"
+LABEL description="EOPF-Zarr GDAL Driver with Ubuntu 25, GDAL 3.10, EOPF Python environment, and JupyterHub compatibility"
+LABEL version="2.1.0"
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -79,26 +79,15 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
     jupyterlab \
     notebook
 
-# Update PYTHONPATH to use system Python site-packages
-ENV PYTHONPATH=/usr/local/lib/python3.13/site-packages
-
 # Create directories for EOPF-Zarr driver
 RUN mkdir -p /opt/eopf-zarr/drivers \
-    && mkdir -p /opt/eopf-zarr/src
+    && mkdir -p /opt/eopf-zarr/build
 
-# Create build and driver directories
-RUN mkdir -p /opt/eopf-zarr/drivers /opt/eopf-zarr/build
-
-# Clone and build EOPF-Zarr driver from source
+# Clone EOPF-Zarr driver from main repository
 WORKDIR /opt/eopf-zarr
+RUN git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git source
 
-# Copy only the essential source files for building
-COPY src/ source/src/
-COPY include/ source/include/
-COPY tests/ source/tests/
-COPY CMakeLists.txt source/CMakeLists.txt
-
-# Build EOPF-Zarr driver  
+# Build EOPF-Zarr driver from main repository source
 WORKDIR /opt/eopf-zarr/build
 RUN cmake ../source \
         -DCMAKE_BUILD_TYPE=Release \
@@ -113,47 +102,83 @@ RUN cmake ../source \
     && echo "Driver installed successfully:" \
     && ls -la /opt/eopf-zarr/drivers/
 
+# Clean up source code to reduce image size (optional)
+RUN rm -rf /opt/eopf-zarr/source/.git \
+    && rm -rf /opt/eopf-zarr/source/build \
+    && rm -rf /opt/eopf-zarr/source/notebooks \
+    && rm -rf /opt/eopf-zarr/source/docs
+
 # Verify driver installation
 RUN ls -la /opt/eopf-zarr/drivers/ \
     && echo "GDAL_DRIVER_PATH=/opt/eopf-zarr/drivers" >> /etc/environment
 
-# Install additional JupyterHub packages for compatibility
+# Install JupyterHub and single-user server components for compatibility
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
     jupyterhub \
     notebook \
     jupyterlab \
-    ipywidgets
+    ipywidgets \
+    jupyter-server \
+    jupyter-lsp
 
-# Create a non-root user for JupyterHub
-RUN useradd -m -s /bin/bash jupyter \
-    && echo "jupyter:jupyter" | chpasswd
+# Set up JupyterHub single-user environment variables
+ENV NB_USER=jupyter
+ENV NB_UID=1000
+ENV NB_GID=100
+ENV HOME=/home/jupyter
+ENV SHELL=/bin/bash
 
-# Create jupyter workspace directory
+# Create a non-root user compatible with JupyterHub single-user setup
+RUN groupadd -f -g ${NB_GID} ${NB_USER} 2>/dev/null || true && \
+    if id "${NB_USER}" 2>/dev/null; then \
+        echo "User ${NB_USER} exists, modifying..."; \
+        usermod -u ${NB_UID} -g ${NB_GID} -d /home/${NB_USER} -s ${SHELL} ${NB_USER}; \
+    elif id "${NB_UID}" 2>/dev/null; then \
+        echo "UID ${NB_UID} exists, recreating user..."; \
+        existing_user=$(id -nu ${NB_UID}); \
+        userdel ${existing_user}; \
+        useradd -m -s ${SHELL} -u ${NB_UID} -g ${NB_GID} ${NB_USER}; \
+    else \
+        echo "Creating new user ${NB_USER}..."; \
+        useradd -m -s ${SHELL} -u ${NB_UID} -g ${NB_GID} ${NB_USER}; \
+    fi && \
+    mkdir -p /home/${NB_USER} && \
+    chown -R ${NB_USER}:${NB_GID} /home/${NB_USER} && \
+    echo "${NB_USER}:${NB_USER}" | chpasswd
+
+# Create jupyter workspace directory with proper permissions
 RUN mkdir -p /home/jupyter/work \
-    && chown -R jupyter:jupyter /home/jupyter
+    && chown -R ${NB_USER}:${NB_GID} /home/jupyter
 
-# Copy docker entrypoint and test scripts
+# Set up environment for EOPF-Zarr driver for the jupyter user
+RUN echo 'export GDAL_DRIVER_PATH=/opt/eopf-zarr/drivers' >> /home/jupyter/.bashrc \
+    && echo 'export PYTHONPATH=/usr/local/lib/python3.13/site-packages:$PYTHONPATH' >> /home/jupyter/.bashrc
+
+# Copy docker entrypoint and test scripts (these will be in the Docker repo)
 COPY docker-entrypoint.sh /usr/local/bin/
 COPY test-environment.py /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
     && chmod +x /usr/local/bin/test-environment.py
 
-# Create test notebooks directory and copy notebooks
+# Create test notebooks directory and copy example notebooks
 RUN mkdir -p /home/jupyter/work/notebooks
 
-# Copy notebooks before switching to jupyter user (as root)
+# Copy example notebooks from Docker repo (not main repo)
 COPY notebooks/ /home/jupyter/work/notebooks/
 
-# Switch to non-root user
-USER jupyter
-WORKDIR /home/jupyter
+# Fix ownership for JupyterHub compatibility
+RUN chown -R ${NB_USER}:${NB_GID} /home/jupyter/work/
 
-# Fix ownership after copying (this needs to be done as root, so we'll fix it differently)
-USER root
-RUN chown -R jupyter:jupyter /home/jupyter/work/
+# Add JupyterHub single-user entry points
+RUN mkdir -p /usr/local/bin \
+    && echo '#!/bin/bash' > /usr/local/bin/start-singleuser.sh \
+    && echo 'source /home/jupyter/.bashrc' >> /usr/local/bin/start-singleuser.sh \
+    && echo 'exec "$@"' >> /usr/local/bin/start-singleuser.sh \
+    && chmod +x /usr/local/bin/start-singleuser.sh
 
-# Switch back to jupyter user
-USER jupyter
+# Switch to non-root user for JupyterHub compatibility
+USER ${NB_USER}
+WORKDIR ${HOME}
 
 # Expose JupyterLab port
 EXPOSE 8888

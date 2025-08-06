@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  eopf-zarr:
+    image: yuvraj1989/eopf-zarr-driver:latest
+    container_name: eopf-zarr-driver
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jupyter/work/notebooks
+      - ./data:/home/jupyter/work/data
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=
+    restart: unless-stopped
+
+  # Alternative: Build from local Dockerfile
+  eopf-zarr-build:
+    build: .
+    container_name: eopf-zarr-build
+    ports:
+      - "8889:8888"
+    volumes:
+      - ./notebooks:/home/jupyter/work/notebooks
+      - ./data:/home/jupyter/work/data
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=
+    restart: unless-stopped
+    profiles:
+      - build

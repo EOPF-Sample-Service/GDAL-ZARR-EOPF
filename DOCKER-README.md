@@ -1,8 +1,37 @@
-# EOPF-Zarr Docker Deployment
+# EOPF-Zarr GDAL Driver - Docker Image
 
-This directory contains Docker configuration for deploying the EOPF-Zarr GDAL driver in a clean Ubuntu 25 environment with GDAL 3.10 and the complete EOPF Python environment.
+## Overview
+
+This Docker image provides the EOPF-Zarr GDAL driver with a complete Python environment for working with EOPF (Earth Observation Processing Framework) Zarr datasets.
+
+## Features
+
+- **Ubuntu 25.04** base with **GDAL 3.10.2**
+- **EOPF-Zarr GDAL driver** built from source
+- **Python 3.13** with comprehensive geospatial stack:
+  - rasterio (with EOPFZARR compatibility)
+  - xarray, zarr, dask
+  - geopandas, fiona, shapely
+  - netcdf4, h5py, scipy
+  - matplotlib, cartopy
+  - JupyterLab environment
+- **Pre-configured environment** for optimal performance
+- **Ready-to-use notebooks** with examples
 
 ## 🚀 Quick Start
+
+### Pull and Run
+
+```bash
+# Pull the image
+docker pull eopfsampleservice/eopf-zarr-gdal:latest
+
+# Run JupyterLab (access at http://localhost:8888)
+docker run -p 8888:8888 eopfsampleservice/eopf-zarr-gdal:latest
+
+# Run with persistent storage
+docker run -p 8888:8888 -v $(pwd)/data:/home/jupyter/work/data eopfsampleservice/eopf-zarr-gdal:latest
+```
 
 ### Local Testing
 ```bash
