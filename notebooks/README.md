@@ -70,32 +70,89 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 📦 Installation Options
 
+#### Option 1: Docker Environment (Recommended)
+
+**Pre-built Image (Fastest)**:
+```bash
+# Pull the ready-to-use Docker image
+docker pull yuvraj1989/eopf-zarr-driver:v2.0.0
+
+# Run with JupyterLab
+docker run -p 8888:8888 yuvraj1989/eopf-zarr-driver:v2.0.0
+# ➜ Access Jupyter at: http://localhost:8888
+```
+
+**Docker Compose (Development)**:
+```bash
+# Clone repository and use docker-compose
+git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+cd GDAL-ZARR-EOPF
+docker-compose up --build
+# ➜ Access Jupyter at: http://localhost:8888
+```
+
+#### Option 2: Manual Installation
+
+**Download Pre-built Driver**:
+```bash
+# Get latest release for your platform
+# Linux
+wget https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/releases/latest/download/gdal_EOPFZarr-Linux.zip
+
+# macOS  
+wget https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/releases/latest/download/gdal_EOPFZarr-macOS.zip
+
+# Windows
+curl -L https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/releases/latest/download/gdal_EOPFZarr-Windows.zip -o driver.zip
+```
+
+**Install Dependencies**:
 ```bash
 # Required packages
-pip install gdal rasterio xarray zarr matplotlib numpy pandas
+pip install gdal rasterio xarray zarr matplotlib numpy pandas jupyter
 ```
 
-### Environment Setup
+**Configure Environment**:
+```bash
+# Set environment variables (Linux/macOS)
+export GDAL_DRIVER_PATH=/path/to/extracted/driver
+export GDAL_DATA=/usr/share/gdal
 
-#### Docker Environment (Recommended)
+# Windows PowerShell
+$env:GDAL_DRIVER_PATH="C:\path\to\extracted\driver"
+$env:GDAL_DATA="C:\Program Files\GDAL\share\gdal"
+```
+
+**Verify Installation**:
+```bash
+# Check if driver is loaded
+gdalinfo --formats | grep EOPF
+# Should show: EOPFZARR -raster- (rw+): EOPF Zarr
+```
+
+#### Option 3: Build from Source
 
 ```bash
-# Build and run the Docker container
-docker-compose up --build
+# Clone and build
+git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+cd GDAL-ZARR-EOPF
 
-# Access Jupyter at http://localhost:8888
+# Build with CMake
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --parallel
+
+# Set environment
+export GDAL_DRIVER_PATH=$PWD/build
 ```
 
-#### Local Environment
+### 📖 Complete Documentation
 
-```bash
-# Ensure GDAL and EOPFZARR driver are installed
-# Set environment variables
-export GDAL_DRIVER_PATH=/path/to/drivers
-export GDAL_DATA=/path/to/gdal/data
-```
+- **Installation Guide**: [../INSTALLATION.md](../INSTALLATION.md)
+- **Docker Quick Start**: [../DOCKER_QUICKSTART.md](../DOCKER_QUICKSTART.md)
+- **Troubleshooting**: [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
 
 ## 📖 Usage Examples
 
