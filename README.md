@@ -44,8 +44,8 @@ The easiest way to get started is using our pre-built Docker image:
 
 ```bash
 # Pull and run the image
-docker pull yuvraj1989/eopf-zarr-driver:v2.0.0
-docker run -p 8888:8888 yuvraj1989/eopf-zarr-driver:v2.0.0
+docker pull yuvraj1989/eopf-zarr-driver:latest
+docker run -p 8888:8888 yuvraj1989/eopf-zarr-driver:latest
 
 # Access JupyterLab at: http://localhost:8888
 ```
