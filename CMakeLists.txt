@@ -226,6 +226,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
+    # 2b. Simple path parsing unit tests (no GDAL dependency)
+    add_executable(test_path_parsing_unit
+        tests/test_path_parsing_unit.cpp
+    )
+    
+    # No GDAL linking needed for this simple test
+    
     # ===== GDAL INTEGRATION TESTS (Require OSGeo4W) =====
     
     # 3. Driver integration tests
@@ -246,33 +253,87 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
+    # 5. Subdataset format tests (for new functionality)
+    add_executable(test_subdataset_formats
+        tests/test_subdataset_formats.cpp
+    )
+    
+    target_link_libraries(test_subdataset_formats PRIVATE 
+        GDAL::GDAL
+    )
+    
+    # 6. Real data integration tests (using sample data)
+    add_executable(test_real_data_integration
+        tests/test_real_data_integration.cpp
+    )
+    
+    target_link_libraries(test_real_data_integration PRIVATE 
+        GDAL::GDAL
+    )
+    
+    # 7. Simple sample data structure tests (no GDAL dependency)
+    add_executable(test_sample_data_structure
+        tests/test_sample_data_structure.cpp
+    )
+    
+    # 8. Basic GDAL functionality test
+    add_executable(test_gdal_basic
+        tests/test_gdal_basic.cpp
+    )
+    
+    target_link_libraries(test_gdal_basic PRIVATE 
+        GDAL::GDAL
+    )
+    
     # ===== CTEST REGISTRATION =====
     
-    # Core tests (always run)
+    # ===== CORE TESTS (Always Work) =====
+    
+    # Core tests (no GDAL runtime dependencies)
     add_test(NAME basic_functionality 
              COMMAND test_basic_functionality)
     
     add_test(NAME unit_path_parsing 
              COMMAND test_path_parsing)
+             
+    add_test(NAME unit_path_parsing_simple 
+             COMMAND test_path_parsing_unit)
+             
+    add_test(NAME sample_data_structure
+             COMMAND test_sample_data_structure)
+
+    # ===== INTEGRATION TESTS (Environment-Dependent) =====
     
-    # GDAL integration tests
+    # GDAL integration tests (require proper runtime environment)
     add_test(NAME integration_driver
              COMMAND test_driver_integration)
              
     add_test(NAME compatibility_urls
              COMMAND test_compatibility)
-    
-    # Set environment for GDAL-dependent tests
-    set_tests_properties(integration_driver compatibility_urls PROPERTIES
+             
+    add_test(NAME subdataset_formats
+             COMMAND test_subdataset_formats)
+             
+    add_test(NAME real_data_integration
+             COMMAND test_real_data_integration)    # Set environment for GDAL-dependent tests (may fail in dev environment)
+    set_tests_properties(integration_driver compatibility_urls subdataset_formats real_data_integration PROPERTIES
         ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}")
     
-    # Test suite summary
-    add_test(NAME test_summary
+    # Core test suite summary (tests that should always pass)
+    add_test(NAME core_test_summary
              COMMAND ${CMAKE_COMMAND} 
-             -E echo "✅ Core EOPF-Zarr driver tests completed successfully")
+             -E echo "✅ Core EOPF-Zarr plugin tests completed successfully")
     
-    set_tests_properties(test_summary PROPERTIES
-        DEPENDS "basic_functionality;unit_path_parsing;integration_driver;compatibility_urls")
+    set_tests_properties(core_test_summary PROPERTIES
+        DEPENDS "basic_functionality;unit_path_parsing;unit_path_parsing_simple;sample_data_structure")
+        
+    # Full test suite summary (includes environment-dependent tests)
+    add_test(NAME full_test_summary
+             COMMAND ${CMAKE_COMMAND} 
+             -E echo "✅ Full EOPF-Zarr test suite completed (some may require environment setup)")
+    
+    set_tests_properties(full_test_summary PROPERTIES
+        DEPENDS "basic_functionality;unit_path_parsing;unit_path_parsing_simple;sample_data_structure;integration_driver;compatibility_urls;subdataset_formats;real_data_integration")
     
     # ===== STATUS MESSAGES =====
     
