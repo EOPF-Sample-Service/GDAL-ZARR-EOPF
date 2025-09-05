@@ -88,20 +88,13 @@ GDALDataset* DatasetOpener::OpenSubdataset(const std::string& mainPath,
     char** openOptions = FilterOpenOptions(originalOptions);
     char* const azDrvList[] = {(char*) "Zarr", nullptr};
 
-    // Try direct path first - most reliable for QGIS
-    std::string directPath = mainPath;
-    if (!directPath.empty() && directPath.back() != '/' && directPath.back() != '\\')
-#ifdef _WIN32
-        directPath += '\\';
-#else
-        directPath += '/';
-#endif
-    directPath += subdatasetPath;
+    // Try direct Zarr formatted path first - correct format for subdatasets
+    std::string zarrFormattedPath = "ZARR:\"" + mainPath + "\":" + subdatasetPath;
 
-    EOPFErrorUtils::ErrorHandler::Debug(std::string("Attempting to open subdataset directly: ") +
-                                        directPath);
+    EOPFErrorUtils::ErrorHandler::Debug(std::string("Attempting to open subdataset with Zarr format: ") +
+                                        zarrFormattedPath);
     GDALDataset* poDS =
-        static_cast<GDALDataset*>(GDALOpenEx(directPath.c_str(),
+        static_cast<GDALDataset*>(GDALOpenEx(zarrFormattedPath.c_str(),
                                              openFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
                                              azDrvList,
                                              openOptions,
@@ -116,9 +109,12 @@ GDALDataset* DatasetOpener::OpenSubdataset(const std::string& mainPath,
     // If direct access fails, try opening parent and then finding the subdataset
     EOPFErrorUtils::ErrorHandler::Debug("Direct access failed, trying through parent dataset");
 
+    // Format parent path correctly for Zarr driver
+    std::string parentZarrPath = "ZARR:\"" + mainPath + "\"";
+    
     // Open parent dataset
     GDALDataset* poParentDS =
-        static_cast<GDALDataset*>(GDALOpenEx(mainPath.c_str(),
+        static_cast<GDALDataset*>(GDALOpenEx(parentZarrPath.c_str(),
                                              openFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
                                              azDrvList,
                                              openOptions,
