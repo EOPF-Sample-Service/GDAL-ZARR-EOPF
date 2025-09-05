@@ -67,13 +67,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             gdal-bin libgdal-dev cmake ninja-build build-essential
-            
-      - name: Uninstall existing cmake (if present)
-        run: brew uninstall --ignore-dependencies cmake || true
+
 
       - name: Install deps (macOS)
         if: runner.os == 'macOS'
         run: |
+          brew uninstall --ignore-dependencies cmake || true
           # Install GDAL and build tools via Homebrew
           brew install gdal cmake ninja
           
