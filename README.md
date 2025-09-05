@@ -66,11 +66,17 @@ See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for detailed usage instructions
 # Get dataset info
 gdalinfo 'EOPFZARR:"/path/to/data.zarr"'
 
+# Access subdatasets (recommended format - clean output)
+gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
+
+# Alternative format (shows expected .zmetadata errors)
+gdalinfo 'EOPFZARR:"/path/to/data.zarr/measurements/reflectance/r10m/b04"'
+
 # Convert to GeoTIFF
-gdal_translate 'EOPFZARR:"/path/to/data.zarr"' output.tif
+gdal_translate 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04' output.tif
 
 # Reproject
-gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr"' reprojected.tif
+gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04' reprojected.tif
 ```
 
 ### Python
@@ -78,15 +84,52 @@ gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr"' reprojected.tif
 ```python
 from osgeo import gdal
 
-# Open dataset
+# Open main dataset
 ds = gdal.Open('EOPFZARR:"/path/to/data.zarr"')
 
-# Access subdatasets
+# Access subdatasets (recommended approach)
 subdatasets = ds.GetMetadata("SUBDATASETS")
 sub_ds = gdal.Open(subdatasets["SUBDATASET_1_NAME"])
 
+# Or open subdataset directly (colon format recommended)
+sub_ds = gdal.Open('EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04')
+
 # Read as NumPy array
-array = ds.ReadAsArray()
+array = sub_ds.ReadAsArray()
+```
+
+## Configuration
+
+### Subdataset Access Formats
+
+The plugin supports two formats for accessing subdatasets:
+
+1. **Colon-separated format (recommended)**: `EOPFZARR:"/path/to/data.zarr":subdataset/path`
+   - Clean output with no error messages
+   - More efficient access pattern
+
+2. **Direct path format**: `EOPFZARR:"/path/to/data.zarr/subdataset/path"`
+   - Shows expected `.zmetadata` error messages (harmless)
+   - Compatible with older usage patterns
+
+### Environment Variables
+
+- **`EOPF_SHOW_ZARR_ERRORS`** - Controls visibility of Zarr driver error messages
+  - `NO` (default) - Suppresses expected error messages during subdataset opening
+  - `YES` - Shows all Zarr driver error messages for debugging
+
+**Examples:**
+
+```bash
+# Normal usage - clean output with colon format
+gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
+
+# Debug mode - show all errors 
+EOPF_SHOW_ZARR_ERRORS=YES gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
+
+# Windows PowerShell
+$env:EOPF_SHOW_ZARR_ERRORS = "YES"
+gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
 ```
 
 ## Building

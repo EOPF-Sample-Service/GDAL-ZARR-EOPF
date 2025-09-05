@@ -439,10 +439,21 @@ static GDALDataset* OpenSubdataset(const std::string& mainPath,
 {
     char* const azDrvList[] = {(char*) "Zarr", nullptr};
 
+    // Check if we should quiet errors (default is to quiet them unless EOPF_SHOW_ZARR_ERRORS=1)
+    bool quietErrors = !CPLTestBool(CPLGetConfigOption("EOPF_SHOW_ZARR_ERRORS", "NO"));
+    CPLErrorHandler oldHandler = nullptr;
+
+    if (quietErrors)
+    {
+        oldHandler = CPLSetErrorHandler(CPLQuietErrorHandler);
+    }
+
     // Try direct Zarr formatted path first - correct format for subdatasets
     std::string zarrFormattedPath = "ZARR:\"" + mainPath + "\":" + subdatasetPath;
 
-    CPLDebug("EOPFZARR", "Attempting to open subdataset with Zarr format: %s", zarrFormattedPath.c_str());
+    CPLDebug("EOPFZARR",
+             "Attempting to open subdataset with Zarr format: %s",
+             zarrFormattedPath.c_str());
     GDALDataset* poDS =
         static_cast<GDALDataset*>(GDALOpenEx(zarrFormattedPath.c_str(),
                                              nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
@@ -451,7 +462,14 @@ static GDALDataset* OpenSubdataset(const std::string& mainPath,
                                              nullptr));
 
     if (poDS)
+    {
+        // Restore original error handler before returning
+        if (quietErrors && oldHandler)
+        {
+            CPLSetErrorHandler(oldHandler);
+        }
         return poDS;
+    }
 
     // If direct access fails, try opening parent and then finding the subdataset
     CPLDebug("EOPFZARR", "Direct access failed, trying through parent dataset");
@@ -469,6 +487,11 @@ static GDALDataset* OpenSubdataset(const std::string& mainPath,
 
     if (!poParentDS)
     {
+        // Restore original error handler before returning
+        if (quietErrors && oldHandler)
+        {
+            CPLSetErrorHandler(oldHandler);
+        }
         CPLDebug("EOPFZARR", "Failed to open parent dataset: %s", mainPath.c_str());
         return nullptr;
     }
@@ -521,23 +544,32 @@ static GDALDataset* OpenSubdataset(const std::string& mainPath,
                     // Found a matching subdataset, open it directly
                     CPLDebug("EOPFZARR", "Found matching subdataset: %s", pszValue);
 
-                    CPLErrorHandler oldHandler = CPLSetErrorHandler(CPLQuietErrorHandler);
                     poDS = static_cast<GDALDataset*>(
                         GDALOpenEx(pszValue,
                                    nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
                                    azDrvList,
                                    papszOpenOptions,
                                    nullptr));
-                    CPLSetErrorHandler(oldHandler);
 
                     if (poDS)
                     {
+                        // Restore original error handler before returning
+                        if (quietErrors && oldHandler)
+                        {
+                            CPLSetErrorHandler(oldHandler);
+                        }
                         return poDS;
                     }
                 }
             }
         }
         CPLFree(pszKey);
+    }
+
+    // Restore original error handler before final return
+    if (quietErrors && oldHandler)
+    {
+        CPLSetErrorHandler(oldHandler);
     }
 
     CPLDebug("EOPFZARR", "No matching subdataset found for: %s", subdatasetPath.c_str());
