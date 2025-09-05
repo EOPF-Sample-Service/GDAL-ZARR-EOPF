@@ -3,6 +3,7 @@
 #include <vector>
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 
 /**
  * @brief Simple unit tests for subdataset path parsing logic
