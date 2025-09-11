@@ -26,18 +26,6 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
   - Error handling and troubleshooting
 - **Use Case**: Working with cloud-hosted ZARR data
 
-#### `03-Rasterio-Compatibility-Demo.ipynb`
-
-- **Purpose**: Comprehensive rasterio integration testing
-- **Features**:
-  - ZARR vs EOPFZARR compatibility analysis
-  - URL scheme recognition issues
-  - Workarounds and solutions
-  - Performance comparisons
-- **Use Case**: Understanding rasterio limitations and workarounds
-
-### Testing and Analysis Notebooks
-
 #### `EOPF-Zarr-Test.ipynb`
 
 - **Purpose**: Docker environment testing and validation
@@ -188,9 +176,8 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 
 ### Rasterio Compatibility
 
-- ✅ **ZARR driver**: Full rasterio support
-- ❌ **EOPFZARR driver**: Limited rasterio support due to URL scheme recognition
-- 🔧 **Workaround**: Use GDAL directly or ZARR scheme for rasterio compatibility
+- ✅ **EOPFZARR driver**: Full rasterio support
+
 
 ### Performance Tips
 
@@ -222,9 +209,9 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 
 | Operation | GDAL + EOPFZARR | GDAL + ZARR | Rasterio + ZARR | Rasterio + EOPFZARR |
 |-----------|------------------|-------------|------------------|---------------------|
-| Local data | ✅ Full support | ✅ Full support | ✅ Full support | ❌ URL scheme issue |
-| Remote data | ✅ Full support | ✅ Full support | ✅ Full support | ❌ URL scheme issue |
-| Subdatasets | ✅ Full support | ✅ Full support | ✅ Full support | ❌ URL scheme issue |
+| Local data | ✅ Full support | ✅ Full support | ✅ Full support | ✅ URL scheme issue |
+| Remote data | ✅ Full support | ✅ Full support | ✅ Full support | ✅ URL scheme issue |
+| Subdatasets | ✅ Full support | ✅ Full support | ✅ Full support | ✅ URL scheme issue |
 
 ## 🐛 Troubleshooting
 
