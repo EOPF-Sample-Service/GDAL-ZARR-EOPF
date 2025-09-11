@@ -40,8 +40,12 @@ jobs:
           # Check if all changed files are documentation/notebooks
           DOCS_ONLY=true
           for file in $CHANGED_FILES; do
-            # Allow changes to notebooks, markdown files, and documentation
-            if [[ ! "$file" =~ \.(ipynb|md|rst|txt)$ ]] && [[ ! "$file" =~ ^(notebooks/|docs/|README|CHANGELOG|LICENSE|\.github/workflows/) ]]; then
+            # Only consider these as documentation-only changes:
+            # - Notebook files (.ipynb)
+            # - Markdown files (.md, .rst, .txt)
+            # - Files in notebooks/ or docs/ directories
+            # - README, CHANGELOG, LICENSE files
+            if [[ ! "$file" =~ \.(ipynb|md|rst|txt)$ ]] && [[ ! "$file" =~ ^(notebooks/|docs/) ]] && [[ ! "$file" =~ ^(README|CHANGELOG|LICENSE)$ ]]; then
               echo "Non-docs file changed: $file"
               DOCS_ONLY=false
               break
