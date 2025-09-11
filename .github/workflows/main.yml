@@ -15,9 +15,84 @@ permissions:
   checks: write
 
 jobs:
+  check-changes:
+    name: Check File Changes
+    runs-on: ubuntu-24.04
+    outputs:
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for docs-only changes
+        id: changes
+        run: |
+          # Get the list of changed files
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Check if all changed files are documentation/notebooks
+          DOCS_ONLY=true
+          for file in $CHANGED_FILES; do
+            # Only consider these as documentation-only changes:
+            # - Notebook files (.ipynb)
+            # - Markdown files (.md, .rst, .txt)
+            # - Files in notebooks/ or docs/ directories
+            # - README, CHANGELOG, LICENSE files
+            if [[ ! "$file" =~ \.(ipynb|md|rst|txt)$ ]] && [[ ! "$file" =~ ^(notebooks/|docs/) ]] && [[ ! "$file" =~ ^(README|CHANGELOG|LICENSE)$ ]]; then
+              echo "Non-docs file changed: $file"
+              DOCS_ONLY=false
+              break
+            fi
+          done
+          
+          echo "docs-only=$DOCS_ONLY" >> $GITHUB_OUTPUT
+          echo "Documentation-only changes: $DOCS_ONLY"
+
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-24.04
+    needs: [check-changes]
+    if: needs.check-changes.outputs.docs-only == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate notebooks
+        run: |
+          echo "Validating notebook files..."
+          find notebooks/ -name "*.ipynb" -type f | while read notebook; do
+            echo "Checking $notebook"
+            # Basic JSON validation for notebooks
+            python3 -m json.tool "$notebook" > /dev/null || {
+              echo "ERROR: $notebook is not valid JSON"
+              exit 1
+            }
+            echo "$notebook is valid"
+          done
+          echo "All notebooks are valid JSON"
+      - name: Check markdown files
+        run: |
+          echo "Checking markdown files for basic formatting..."
+          find . -name "*.md" -type f | while read mdfile; do
+            echo "Checking $mdfile"
+            # Basic check that file is readable
+            head -n 1 "$mdfile" > /dev/null || {
+              echo "ERROR: Cannot read $mdfile"
+              exit 1
+            }
+          done
+          echo "All markdown files are readable"
+
   lint:
     name: Lint • cppcheck & clang-format
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    needs: [check-changes]
+    if: needs.check-changes.outputs.docs-only != 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Install tools
@@ -44,11 +119,12 @@ jobs:
   build_and_test:
     name: Build & Test • ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: [lint]
+    needs: [check-changes, lint]
+    if: needs.check-changes.outputs.docs-only != 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-13]
+        os: [ubuntu-24.04, windows-latest, macos-13]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,11 +138,34 @@ jobs:
 
       # Platform-specific dependencies
       - name: Install deps (Linux)
-        if: runner.os == 'Linux'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            gdal-bin libgdal-dev cmake ninja-build build-essential
+          # Install system GDAL 3.11.3 (UbuntuGIS) - following working example
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable -y
+          sudo apt-get update
+          
+          # Install GDAL from the PPA (brings matching libgdal)
+          sudo apt-get install -y libgdal-dev gdal-bin cmake ninja-build build-essential
+          
+          # Verify installation
+          gdalinfo --version
+          
+          # Show where libgdal comes from (should be /usr/lib/* from UbuntuGIS)
+          apt-cache policy libgdal-dev | sed -n '1,20p'
+          
+          # Verify GDAL version meets requirements
+          GDAL_VERSION=$(gdal-config --version)
+          echo "GDAL version: $GDAL_VERSION"
+          
+          # Check if version meets requirements (3.10+ but prefer stable releases)
+          if dpkg --compare-versions "$GDAL_VERSION" lt "3.10"; then
+            echo "❌ GDAL version $GDAL_VERSION is too old (minimum 3.10 required)"
+            exit 1
+          else
+            echo "✅ GDAL version $GDAL_VERSION meets requirements"
+          fi
 
 
       - name: Install deps (macOS)
@@ -274,9 +373,9 @@ jobs:
 
   package-release:
     name: Package Release Artifacts
-    runs-on: ubuntu-22.04
-    needs: [build_and_test]
-    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-24.04
+    needs: [check-changes, build_and_test]
+    if: github.event_name == 'release' && github.event.action == 'published' && needs.check-changes.outputs.docs-only != 'true'
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
