@@ -2,6 +2,8 @@
 
 This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver functionality and compatibility testing.
 
+**📊 Current notebooks: 6 total (4 core + 2 additional)**
+
 ## 📚 Available Notebooks
 
 ### Core Functionality Notebooks
@@ -26,7 +28,7 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
   - Error handling and troubleshooting
 - **Use Case**: Working with cloud-hosted ZARR data
 
-#### `EOPF-Zarr-Test.ipynb`
+#### `03-EOPF-Zarr-Test.ipynb`
 
 - **Purpose**: Docker environment testing and validation
 - **Features**:
@@ -36,25 +38,37 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
   - End-to-end functionality validation
 - **Use Case**: CI/CD testing and environment validation
 
-#### `zarr_rasterio_testing.ipynb`
+#### `04-Explore_sentinel2_EOPFZARR.ipynb`
 
-- **Purpose**: Clean ZARR + rasterio testing framework
+- **Purpose**: Explores Sentinel-2 data using the EOPFZARR driver
 - **Features**:
-  - Local and remote data testing
-  - Subdataset access patterns
-  - Data visualization examples
-  - GDAL vs rasterio comparison
-- **Use Case**: Systematic testing of ZARR driver with rasterio
+  - Real-world Sentinel-2 data exploration
+  - EOPF Zarr product structure analysis
+  - Demonstration of scientific data workflow
+  - Comparison with standard GDAL Zarr driver
+- **Use Case**: Scientific data analysis and research workflows
 
-#### `visualize_zarr.ipynb`
+### Additional Notebooks
 
-- **Purpose**: Data visualization and analysis examples
+#### `05-GDAL-ZARR-Comparison.ipynb`
+
+- **Purpose**: Demonstrates standard GDAL ZARR driver functionality for comparison
 - **Features**:
-  - ZARR and EOPFZARR side-by-side comparison
-  - Data decimation and visualization
-  - Performance optimization techniques
-  - Matplotlib integration
-- **Use Case**: Visualizing geospatial ZARR data
+  - Basic GDAL ZARR driver usage
+  - Remote Sentinel-1 data access
+  - Subdataset exploration
+  - Metadata retrieval
+- **Use Case**: Comparison baseline and standard GDAL workflow reference
+
+#### `06-Data-Visualization.ipynb`
+
+- **Purpose**: Data visualization examples for ZARR datasets
+- **Features**:
+  - Plotting and visualization techniques
+  - Data exploration and analysis
+  - Visual comparison workflows
+- **Use Case**: Data analysis and presentation
+
 
 ## 🚀 Quick Start
 
@@ -190,19 +204,20 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 ### Scientific Data Analysis
 
 1. Start with `01-Basic-Functionality-Demo.ipynb`
-2. Use `zarr_rasterio_testing.ipynb` for data exploration
-3. Apply `visualize_zarr.ipynb` for visualization
+2. Use `05-GDAL-ZARR-Comparison.ipynb` for standard GDAL comparison
+3. Explore `04-Explore_sentinel2_EOPFZARR.ipynb` for real-world examples
+4. Apply `06-Data-Visualization.ipynb` for visualization
 
 ### Production Integration
 
 1. Review `02-Remote-Data-Access-Demo.ipynb` for remote data patterns
-2. Check `03-Rasterio-Compatibility-Demo.ipynb` for integration considerations
-3. Use `EOPF-Zarr-Test.ipynb` for deployment validation
+2. Check `04-Explore_sentinel2_EOPFZARR.ipynb` for integration considerations
+3. Use `03-EOPF-Zarr-Test.ipynb` for deployment validation
 
 ### Development and Testing
 
-1. Use `EOPF-Zarr-Test.ipynb` for environment setup
-2. Apply `zarr_rasterio_testing.ipynb` for systematic testing
+1. Use `03-EOPF-Zarr-Test.ipynb` for environment setup
+2. Apply `05-GDAL-ZARR-Comparison.ipynb` for baseline testing
 3. Reference all notebooks for comprehensive examples
 
 ## 📊 Compatibility Matrix
