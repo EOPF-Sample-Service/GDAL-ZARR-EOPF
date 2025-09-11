@@ -136,9 +136,30 @@ jobs:
       - name: Install deps (Linux)
         if: runner.os == 'Linux'
         run: |
+          # Add UbuntuGIS PPA for newer GDAL version
           sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends software-properties-common
+          sudo add-apt-repository ppa:ubuntugis/ppa -y
+          sudo apt-get update -qq
+          
+          # Check available GDAL versions
+          apt-cache madison gdal-bin | head -5
+          
+          # Install GDAL and build tools - try to get a stable 3.10/3.11 version
           sudo apt-get install -y --no-install-recommends \
             gdal-bin libgdal-dev cmake ninja-build build-essential
+            
+          # Verify GDAL version
+          GDAL_VERSION=$(gdal-config --version)
+          echo "GDAL version: $GDAL_VERSION"
+          
+          # Check if version meets requirements (3.10+ but prefer stable releases)
+          if dpkg --compare-versions "$GDAL_VERSION" lt "3.10"; then
+            echo "❌ GDAL version $GDAL_VERSION is too old (minimum 3.10 required)"
+            exit 1
+          else
+            echo "✅ GDAL version $GDAL_VERSION meets requirements"
+          fi
 
 
       - name: Install deps (macOS)

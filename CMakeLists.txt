@@ -31,9 +31,11 @@ if(GDAL_VERSION)
         add_definitions(-DGDAL_VERSION_NUM=${GDAL_VERSION_NUMBER})
     endif()
     
-    # Warn about potential version mismatches
-    if(GDAL_VERSION VERSION_LESS "3.8")
-        message(WARNING "GDAL version ${GDAL_VERSION} is older than recommended (3.8+). Some features may not work.")
+    # Check GDAL version compatibility - require 3.10+ but less than 3.12
+    if(GDAL_VERSION VERSION_LESS "3.10")
+        message(FATAL_ERROR "GDAL version ${GDAL_VERSION} is too old. Minimum required version is 3.10.0.")
+    elseif(GDAL_VERSION VERSION_GREATER_EQUAL "3.12")
+        message(WARNING "GDAL version ${GDAL_VERSION} is newer than tested. Recommended version range is 3.10.x - 3.11.x. Build may have compatibility issues.")
     else()
         message(STATUS "✅ GDAL version ${GDAL_VERSION} check passed - compatible for EOPF Zarr driver")
     endif()
