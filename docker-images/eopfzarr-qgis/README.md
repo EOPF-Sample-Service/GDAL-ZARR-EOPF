@@ -1,11 +1,11 @@
-# EOPF-Zarr QGIS Docker Container
+# EOPFZARR QGIS Docker Container
 
-A Docker container providing QGIS with EOPF-Zarr GDAL driver support, accessible via VNC web interface and Jupyter Lab. This container uses a pure conda-forge approach to ensure GDAL version compatibility.
+A Docker container providing QGIS with EOPFZARR GDAL driver support, accessible via VNC web interface and Jupyter Lab. This container uses a pure conda-forge approach to ensure GDAL version compatibility.
 
 ## 🌟 Features
 
 - **QGIS 3.44.2** with GDAL 3.11.3 from conda-forge
-- **EOPF-Zarr GDAL driver** for remote cloud-optimized geospatial data access
+- **EOPFZARR GDAL driver** for remote cloud-optimized geospatial data access
 - **VNC web interface** (noVNC) for remote QGIS access
 - **Enhanced clipboard support** for copy/paste between host and container
 - **JupyterLab** for Python geospatial analysis
@@ -117,7 +117,7 @@ docker run -d --name eopf-qgis-data \
 
 ```powershell
 # PowerShell build script
-Write-Host "🚀 Building EOPF-Zarr QGIS Container..." -ForegroundColor Green
+Write-Host "🚀 Building EOPFZARR QGIS Container..." -ForegroundColor Green
 docker build --cache-from yuvraj1989/eopf-qgis-conda:latest -t eopf-qgis-conda:latest .
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ Build completed successfully!" -ForegroundColor Green
@@ -145,11 +145,21 @@ fi
 
 ### Clipboard Functionality
 
-The container includes enhanced clipboard support:
+The container includes **enhanced multi-protocol clipboard support** for seamless copy/paste between your host system and QGIS:
 
-1. **Standard Copy/Paste**: Use `Ctrl+C` and `Ctrl+V`
-2. **Alternative Paste**: Try `Shift+Insert` for PRIMARY selection
-3. **noVNC Clipboard**: Use the clipboard icon in the noVNC sidebar
+1. **Standard Copy/Paste**: Use `Ctrl+C` and `Ctrl+V` - works bidirectionally
+2. **Primary Selection**: Try `Shift+Insert` for X11 PRIMARY selection paste
+3. **noVNC Clipboard**: Use the clipboard icon in the noVNC sidebar for additional clipboard access
+4. **Automatic Synchronization**: The container runs multiple clipboard bridges:
+   - `autocutsel` daemons for CLIPBOARD and PRIMARY selections
+   - `xclip` bridge for continuous synchronization between selections
+   - Full x11vnc clipboard integration
+
+**How to use:**
+- Copy text on your host (Windows/Mac/Linux) with `Ctrl+C`
+- Click in the VNC window to focus it
+- Paste in QGIS with `Ctrl+V`
+- Copy from QGIS and paste back to your host system
 
 ### Troubleshooting VNC
 
@@ -163,7 +173,7 @@ docker exec eopf-qgis-vnc bash -c "DISPLAY=:1 wmctrl -r 'QGIS' -b add,maximized_
 docker exec eopf-qgis-vnc bash -c "DISPLAY=:1 wmctrl -l"
 ```
 
-## 🧪 Testing EOPF-Zarr Driver
+## 🧪 Testing EOPFZARR Driver
 
 ### Verify Driver Installation
 
@@ -174,7 +184,7 @@ from osgeo import gdal
 
 # Check if EOPF-Zarr driver is available
 gdal.AllRegister()
-driver = gdal.GetDriverByName('EOPFZarr')
+driver = gdal.GetDriverByName('EOPFZARR')
 if driver:
     print("✅ EOPF-Zarr driver loaded successfully!")
     print(f"Driver description: {driver.GetDescription()}")
@@ -192,7 +202,7 @@ from osgeo import gdal
 url = "https://objects.eodc.eu/e05ab01a9d56408d82ac34695aae52a:20250912T094121_N0511_R036_T36WWE_20250912T112258.zarr/measurements/reflectance/r60m"
 
 # Test with GDAL
-dataset = gdal.Open(f"EOPFZarr:{url}")
+dataset = gdal.Open(f"EOPFZARR:{url}")
 if dataset:
     print(f"✅ Successfully opened dataset with {dataset.RasterCount} bands")
     print(f"Size: {dataset.RasterXSize}x{dataset.RasterYSize}")
@@ -294,7 +304,7 @@ LIBGL_ALWAYS_INDIRECT=1
 ### Common Issues
 
 1. **QGIS not starting**: Check X11 environment and try software rendering
-2. **Clipboard not working**: Restart autocutsel daemons or try Shift+Insert
+2. **Clipboard not working**: Enhanced clipboard with multiple protocols is active by default. If issues persist, try the noVNC clipboard button or `Shift+Insert`
 3. **VNC black screen**: Ensure x11vnc and Xvfb are running, maximize windows
 4. **Port conflicts**: Use different port mappings
 

@@ -1,4 +1,4 @@
-# EOPF-Zarr QGIS Docker Container - Pure Conda Build
+# EOPFZARR QGIS Docker Container - Pure Conda Build
 # This Dockerfile creates a QGIS environment with EOPF-Zarr GDAL driver support
 # Built using conda-forge packages to ensure GDAL version compatibility
 
@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     # VNC and GUI support
     xvfb \
     x11vnc \
+    tightvncserver \
     fluxbox \
     novnc \
     websockify \
@@ -95,7 +96,7 @@ RUN git clone --depth 1 https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.gi
 # Create start scripts for QGIS VNC demo
 RUN cat > /tmp/start-qgis-demo.sh << 'EOF'
 #!/bin/bash
-echo "🚀 Starting QGIS Demo Environment..."
+echo "Starting QGIS Demo Environment..."
 
 # Set up environment
 export DISPLAY=:1
@@ -121,18 +122,29 @@ sleep 3
 
 echo "✅ Window manager started"
 
-# Start VNC server with proper clipboard support
-x11vnc -display :1 -nopw -listen localhost -xkb -forever -shared -noxdamage -ncache 10 -nosel -noprimary &
+# Start VNC server with clipboard support
+x11vnc -display :1 \
+       -nopw -listen localhost \
+       -xkb -forever -shared \
+       -noxdamage -ncache 10 \
+       -bg &
+
+# Give x11vnc time to start
 sleep 3
 
 echo "✅ VNC server started"
 
-# Start clipboard synchronization daemon
-autocutsel -fork &
-autocutsel -selection PRIMARY -fork &
+# Sync X11 CLIPBOARD with Qt/GTK apps using autocutsel
+autocutsel -display :1 -fork &
+autocutsel -display :1 -selection CLIPBOARD -fork &
+
 sleep 1
 
-echo "✅ Clipboard synchronization started"
+# Start additional clipboard bridging with xclip monitoring
+nohup bash -c 'while true; do xclip -selection clipboard -o 2>/dev/null | xclip -selection primary -i 2>/dev/null; xclip -selection primary -o 2>/dev/null | xclip -selection clipboard -i 2>/dev/null; sleep 1; done' &
+sleep 1
+
+echo "✅ Enhanced clipboard synchronization started"
 
 # Start noVNC for web access
 websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
