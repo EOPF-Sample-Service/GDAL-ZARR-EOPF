@@ -157,9 +157,11 @@ The container includes **enhanced multi-protocol clipboard support** for seamles
 
 **How to use:**
 - Copy text on your host (Windows/Mac/Linux) with `Ctrl+C`
-- Click in the VNC window to focus it
+- Click in the VNC window to focus it and open the clipboard
+- Paste in clipboard in VNC with `Ctrl+V` or `Shift+Insert`
+- Again copy from the clipboard in VNC
 - Paste in QGIS with `Ctrl+V`
-- Copy from QGIS and paste back to your host system
+- Copy from QGIS and paste back to VNC Clipboard then to your host system
 
 ### Troubleshooting VNC
 
