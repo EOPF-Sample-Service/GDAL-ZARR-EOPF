@@ -2,7 +2,7 @@
 
 This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver functionality and compatibility testing.
 
-**📊 Current notebooks: 6 total (4 core + 2 additional)**
+**📊 Current notebooks: 7 total (4 core + 3 additional)**
 
 ## 📚 Available Notebooks
 
@@ -68,6 +68,17 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
   - Data exploration and analysis
   - Visual comparison workflows
 - **Use Case**: Data analysis and presentation
+
+#### `07-Sentinel-3-OLCI-Level-1-EFR.ipynb`
+
+- **Purpose**: Demonstrates Sentinel-3 OLCI data access and visualization using EOPFZARR driver
+- **Features**:
+  - GDAL native approach to Zarr subdatasets
+  - Xarray-style visualization with robust plotting
+  - Geographic coordinates access (latitude/longitude)
+  - Multi-product exploration (OLCI L1/L2, SLSTR products)
+  - Mirrors xarray-eopf functionality using GDAL
+- **Use Case**: Sentinel-3 ocean and land color instrument data analysis
 
 
 ## 🚀 Quick Start
