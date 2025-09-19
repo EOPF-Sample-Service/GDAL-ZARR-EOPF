@@ -201,7 +201,7 @@ import xarray as xr
 from osgeo import gdal
 
 # Example EOPF-Zarr URL (replace with actual data URL)
-url = "https://objects.eodc.eu/e05ab01a9d56408d82ac34695aae52a:20250912T094121_N0511_R036_T36WWE_20250912T112258.zarr/measurements/reflectance/r60m"
+url = "EOPFZARR:'/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac34695aae52a:20250912T094121_N0511_R036_T36WWE_20250912T112258.zarr/measurements/reflectance/r60m/b01'"
 
 # Test with GDAL
 dataset = gdal.Open(f"EOPFZARR:{url}")
