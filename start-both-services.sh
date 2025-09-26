@@ -43,12 +43,13 @@ sleep 1
 
 # Start QGIS in background
 echo "🗺️ Starting QGIS..."
-qgis --nologo &
+DISPLAY=:1 qgis --nologo &
 QGIS_PID=$!
 
 # Start JupyterLab
 echo "📊 Starting JupyterLab..."
 cd /home/jovyan
+mkdir -p work
 jupyter lab \
     --ip=0.0.0.0 \
     --port=8888 \
