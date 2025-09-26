@@ -37,7 +37,8 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
           
-          # Check if all changed files are documentation/notebooks
+          # Check if all changed files are documentation/notebooks or auxiliary files
+          # Auxiliary files include Docker configs and build scripts that don't affect core functionality or auxiliary files
           DOCS_ONLY=true
           for file in $CHANGED_FILES; do
             # Only consider these as documentation-only changes:
@@ -45,7 +46,9 @@ jobs:
             # - Markdown files (.md, .rst, .txt)
             # - Files in notebooks/ or docs/ directories
             # - README, CHANGELOG, LICENSE files
-            if [[ ! "$file" =~ \.(ipynb|md|rst|txt)$ ]] && [[ ! "$file" =~ ^(notebooks/|docs/) ]] && [[ ! "$file" =~ ^(README|CHANGELOG|LICENSE)$ ]]; then
+            # - Docker-related files (Dockerfile*, docker-compose*, .dockerignore, docker-images/)
+            # - Build scripts and auxiliary files (build-*, install-*, format-*, cleanup.sh)
+            if [[ ! "$file" =~ \.(ipynb|md|rst|txt)$ ]] && [[ ! "$file" =~ ^(notebooks/|docs/) ]] && [[ ! "$file" =~ ^(README|CHANGELOG|LICENSE)$ ]] && [[ ! "$file" =~ ^(Dockerfile|docker-compose|\.dockerignore) ]] && [[ ! "$file" =~ ^docker-images/ ]] && [[ ! "$file" =~ ^(build-|install-|format-|cleanup\.sh) ]]; then
               echo "Non-docs file changed: $file"
               DOCS_ONLY=false
               break
