@@ -92,7 +92,13 @@ class TestEOPFZarrIntegration:
     def test_data_reading(self):
         """Test reading data from remote EOPF-Zarr dataset (HTTPS)"""
         url = REMOTE_WITH_SUBDATASETS_ZARR
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        try:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        except RuntimeError as e:
+            if "404" in str(e) or "not accessible" in str(e).lower():
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            else:
+                raise
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         
@@ -190,7 +196,13 @@ class TestEOPFZarrIntegration:
     def test_metadata_retrieval(self):
         """Test EOPF metadata retrieval from remote HTTPS Zarr"""
         url = REMOTE_WITH_SUBDATASETS_ZARR
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        try:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        except RuntimeError as e:
+            if "404" in str(e) or "not accessible" in str(e).lower():
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            else:
+                raise
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test dataset metadata
@@ -387,7 +399,13 @@ class TestEOPFZarrIntegration:
     def test_block_reading_patterns(self):
         """Test different block reading patterns for memory efficiency (remote HTTPS)"""
         url = REMOTE_WITH_SUBDATASETS_ZARR
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        try:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        except RuntimeError as e:
+            if "404" in str(e) or "not accessible" in str(e).lower():
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            else:
+                raise
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
@@ -419,7 +437,13 @@ class TestEOPFZarrIntegration:
     def test_large_dataset_handling(self):
         """Test handling of large remote HTTPS Zarr datasets"""
         url = REMOTE_WITH_SUBDATASETS_ZARR
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        try:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        except RuntimeError as e:
+            if "404" in str(e) or "not accessible" in str(e).lower():
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            else:
+                raise
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test that we can handle large datasets without loading everything into memory
@@ -463,7 +487,13 @@ class TestEOPFZarrPerformance:
         url = REMOTE_WITH_SUBDATASETS_ZARR
         # Test that repeated dataset opens don't accumulate memory
         for i in range(10):
-            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            try:
+                ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            except RuntimeError as e:
+                if "404" in str(e) or "not accessible" in str(e).lower():
+                    pytest.skip(f"Remote Zarr data not accessible: {url}")
+                else:
+                    raise
             if ds is None:
                 pytest.skip(f"Remote Zarr data not accessible: {url}")
             # Read some data
@@ -489,7 +519,13 @@ class TestEOPFZarrCompatibility:
             REMOTE_WITH_SUBDATASETS_ZARR,
         ]
         for url in urls:
-            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            try:
+                ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+            except RuntimeError as e:
+                if "404" in str(e) or "not accessible" in str(e).lower():
+                    pytest.skip(f"Remote Zarr data not accessible: {url}")
+                else:
+                    raise
             if ds is None:
                 pytest.skip(f"Remote Zarr data not accessible: {url}")
             assert ds.RasterCount > 0, f"Dataset {url} should have bands"
@@ -506,7 +542,13 @@ class TestEOPFZarrCompatibility:
     def test_different_data_types(self):
         """Test handling of different data types (remote HTTPS)"""
         url = REMOTE_WITH_SUBDATASETS_ZARR
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        try:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        except RuntimeError as e:
+            if "404" in str(e) or "not accessible" in str(e).lower():
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            else:
+                raise
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
@@ -520,7 +562,13 @@ class TestEOPFZarrCompatibility:
     def test_chunk_size_variations(self):
         """Test handling of different chunk configurations (remote HTTPS)"""
         url = REMOTE_WITH_SUBDATASETS_ZARR
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        try:
+            ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        except RuntimeError as e:
+            if "404" in str(e) or "not accessible" in str(e).lower():
+                pytest.skip(f"Remote Zarr data not accessible: {url}")
+            else:
+                raise
         if ds is None:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         band = ds.GetRasterBand(1)
