@@ -6,7 +6,8 @@ echo "🚀 Starting EOPF-Zarr QGIS + JupyterLab Environment..."
 
 # Set environment variables
 export DISPLAY=:1
-export QT_QPA_PLATFORM=offscreen
+export QT_QPA_PLATFORM=xcb
+export XDG_RUNTIME_DIR=/tmp/runtime-jovyan
 
 # Start Xvfb (virtual framebuffer)
 echo "📺 Starting X server..."
@@ -43,7 +44,7 @@ sleep 1
 
 # Start QGIS in background
 echo "🗺️ Starting QGIS..."
-DISPLAY=:1 qgis --nologo &
+qgis --nologo &
 QGIS_PID=$!
 
 # Start JupyterLab
