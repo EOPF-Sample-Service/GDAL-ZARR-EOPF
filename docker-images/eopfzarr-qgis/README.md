@@ -14,15 +14,38 @@ A Docker container providing QGIS with EOPFZARR GDAL driver support, accessible 
 
 ## 🚀 Quick Start
 
-### Option A: Use Pre-built Image from Docker Hub
+### Option A: QGIS + VNC Only (Pre-built Image)
 
-Pull and run the container directly:
+Pull and run the container with QGIS and VNC interface:
 
 ```bash
-# Pull from Docker Hub and run with VNC interface
-docker run -d --name eopf-qgis-vnc -p 6080:6080 -p 8888:8888 \
+# Pull from Docker Hub and run with QGIS + VNC
+docker run -d --name eopf-qgis-vnc -p 6080:6080 \
   yuvraj1989/eopf-qgis-conda:latest /usr/local/bin/start-qgis-demo.sh
 ```
+
+**Access:**
+- **QGIS VNC Interface**: <http://localhost:6080/vnc.html>
+
+### Option A+: QGIS + VNC + JupyterLab (Both Services)
+
+To run both QGIS/VNC and JupyterLab simultaneously, use the custom startup script:
+
+```bash
+# Download the custom startup script
+curl -O https://raw.githubusercontent.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/main/start-both-services.sh
+chmod +x start-both-services.sh
+
+# Run with both services
+docker run -d --name eopf-full-demo \
+  -p 6080:6080 -p 8888:8888 \
+  -v $(pwd)/start-both-services.sh:/usr/local/bin/start-both-services.sh \
+  yuvraj1989/eopf-qgis-conda:latest /usr/local/bin/start-both-services.sh
+```
+
+**Access:**
+- **QGIS VNC Interface**: <http://localhost:6080/vnc.html>
+- **JupyterLab**: <http://localhost:8888>
 
 ### Option B: Build Locally
 
@@ -41,15 +64,6 @@ docker run -d --name eopf-qgis-vnc -p 6080:6080 -p 8888:8888 \
   eopf-qgis-conda /usr/local/bin/start-qgis-demo.sh
 ```
 
-### Access the Interface
-
-### Access the Interface
-
-Access QGIS via web browser:
-
-- **QGIS VNC Interface**: <http://localhost:6080/vnc.html>
-- **JupyterLab**: <http://localhost:8888>
-
 ### Alternative: JupyterLab Only
 
 Start the container with JupyterLab only:
@@ -62,8 +76,7 @@ docker run -d --name eopf-jupyter -p 8888:8888 yuvraj1989/eopf-qgis-conda:latest
 docker run -d --name eopf-jupyter -p 8888:8888 eopf-qgis-conda
 ```
 
-Access JupyterLab:
-
+**Access:**
 - **JupyterLab**: <http://localhost:8888>
 
 ### Docker Compose (Alternative)
@@ -94,14 +107,26 @@ docker-compose up -d
 
 ## 🔧 Advanced Usage
 
-### Manual VNC Startup
+### Manual JupyterLab Startup
 
-If you started with JupyterLab only and want to add VNC:
+If you started with QGIS only (Option A) and want to add JupyterLab:
 
 ```bash
-# Start VNC in existing container
-docker exec -d eopf-jupyter /usr/local/bin/start-qgis-demo.sh
+# Start JupyterLab in the running container
+docker exec -d eopf-qgis-vnc jupyter lab \
+  --ip=0.0.0.0 \
+  --port=8888 \
+  --no-browser \
+  --notebook-dir=/home/jovyan/work \
+  --ServerApp.token='' \
+  --ServerApp.password='' \
+  --ServerApp.allow_origin='*' \
+  --ServerApp.allow_remote_access=True
 ```
+
+**Access:**
+- **QGIS VNC**: <http://localhost:6080/vnc.html>
+- **JupyterLab**: <http://localhost:8888>
 
 ### Volume Mounting for Data Persistence
 
