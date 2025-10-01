@@ -810,9 +810,55 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds,
                 eopfName.Printf("EOPFZARR:%s", pszName);
             }
 
+            // Transform the description to use friendly names
+            // Description format from Zarr: "[1830x1830] /path/to/array (UInt16)"
+            // We want: "[1830x1830] path_to_array (UInt16)"
+            CPLDebug("EOPFZARR", "Processing subdataset description: '%s'", pszDesc);
+
+            CPLString friendlyDesc(pszDesc);
+
+            // Find the path part (starts after "] " and ends before " (")
+            const char* pathStart = strstr(pszDesc, "] ");
+            const char* pathEnd = strstr(pszDesc, " (");
+
+            if (pathStart && pathEnd && pathEnd > pathStart)
+            {
+                pathStart += 2;  // Skip "] "
+
+                // Extract just the path part
+                std::string pathPart(pathStart, pathEnd - pathStart);
+
+                // Remove leading slash if present
+                if (!pathPart.empty() && pathPart[0] == '/')
+                {
+                    pathPart = pathPart.substr(1);
+                }
+
+                // Replace slashes with underscores for friendly name
+                for (size_t i = 0; i < pathPart.length(); ++i)
+                {
+                    if (pathPart[i] == '/' || pathPart[i] == '\\')
+                    {
+                        pathPart[i] = '_';
+                    }
+                }
+
+                // Reconstruct description with friendly path
+                std::string dimensions(
+                    pszDesc, pathStart - pszDesc);  // Everything before path (includes "] ")
+                std::string datatype(pathEnd);      // Everything from " (" onwards
+                friendlyDesc.Printf(
+                    "%s%s%s", dimensions.c_str(), pathPart.c_str(), datatype.c_str());
+
+                CPLDebug("EOPFZARR",
+                         "Transformed description '%s' -> '%s'",
+                         pszDesc,
+                         friendlyDesc.c_str());
+            }
+
             // Set the metadata
             ds.SetMetadataItem(nameKey, eopfName);
-            ds.SetMetadataItem(descKey, pszDesc);
+            ds.SetMetadataItem(descKey, friendlyDesc);
             CPLDebug("EOPFZARR", "Set %s = %s", nameKey.c_str(), eopfName.c_str());
         }
     }

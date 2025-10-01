@@ -33,12 +33,15 @@ class EOPFZarrDataset : public GDALPamDataset
     ~EOPFZarrDataset();
 
     // Factory method
-    static EOPFZarrDataset* Create(GDALDataset* inner, GDALDriver* drv);
+    static EOPFZarrDataset* Create(GDALDataset* inner,
+                                   GDALDriver* drv,
+                                   const char* pszSubdatasetPath = nullptr);
 
     // Optimized metadata loading
     void LoadEOPFMetadata();
     void LoadGeospatialInfo() const;
     void ProcessCornerCoordinates() const;
+    void UpdateBandDescriptionsFromMetadata();
 
     char** GetFileList() override;
 

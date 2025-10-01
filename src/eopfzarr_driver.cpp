@@ -185,9 +185,59 @@ static bool ParseSubdatasetPath(const std::string& fullPath,
                 }
                 return true;
             }
-            // No subdataset part, just a quoted path
+            // No subdataset part after quote - but check if subdataset is embedded in path
+            // Example: '/path/to/file.zarr/measurements/reflectance/r60m/b01'
             else
             {
+                // Look for .zarr/ pattern which indicates a subdataset within the path
+                size_t zarrPos = mainPath.rfind(".zarr/");
+                if (zarrPos != std::string::npos)
+                {
+                    // Found .zarr/ - split the path there
+                    subdatasetPath = mainPath.substr(zarrPos + 6);  // Everything after ".zarr/"
+                    mainPath =
+                        mainPath.substr(0, zarrPos + 5);  // Everything up to and including ".zarr"
+
+                    CPLDebug("EOPFZARR",
+                             "ParseSubdatasetPath: Found embedded subdataset in quoted path - "
+                             "Main: %s, Subds: %s",
+                             mainPath.c_str(),
+                             subdatasetPath.c_str());
+
+                    // Only apply Windows path transformations to local paths, not URLs
+                    bool isUrl = IsUrlOrVirtualPath(mainPath);
+                    CPLDebug("EOPFZARR",
+                             "ParseSubdatasetPath: Path is URL/Virtual: %s",
+                             isUrl ? "YES" : "NO");
+
+                    if (!isUrl)
+                    {
+#ifdef _WIN32
+                        // Fix Windows paths
+                        for (size_t i = 0; i < mainPath.length(); ++i)
+                        {
+                            if (mainPath[i] == '/')
+                            {
+                                mainPath[i] = '\\';
+                            }
+                        }
+
+                        if (!mainPath.empty() && mainPath[0] == '\\' && mainPath.length() > 2 &&
+                            mainPath[1] != '\\' && mainPath[2] == ':')
+                        {
+                            mainPath = mainPath.substr(1);
+                        }
+
+                        if (!mainPath.empty() && mainPath.back() == '\\')
+                        {
+                            mainPath.pop_back();
+                        }
+#endif
+                    }
+                    return true;  // This IS a subdataset
+                }
+
+                // No .zarr/ found - this is just a plain zarr path without subdataset
                 CPLDebug("EOPFZARR",
                          "ParseSubdatasetPath: Found quoted path without subdataset - Main: %s",
                          mainPath.c_str());
@@ -231,6 +281,57 @@ static bool ParseSubdatasetPath(const std::string& fullPath,
     // Check for simple path with subdataset separator (e.g., EOPFZARR:path:subds)
     // This is complicated on Windows due to drive letters (C:) and URLs (https://)
     std::string tmpPath = pathWithoutPrefix;
+
+    // For URL/VSI paths, we need to handle them differently - look for .zarr/ or .zarr:
+    // instead of splitting on colons at the start (which would break URLs like https://)
+    if (IsUrlOrVirtualPath(tmpPath))
+    {
+        // Check for .zarr/ pattern (embedded path format)
+        size_t zarrSlashPos = tmpPath.rfind(".zarr/");
+        // Check for .zarr: pattern (colon separator format)
+        size_t zarrColonPos = tmpPath.rfind(".zarr:");
+
+        // Use whichever pattern we find (prefer slash if both exist)
+        size_t zarrPos = std::string::npos;
+        char separator = '\0';
+
+        if (zarrSlashPos != std::string::npos &&
+            (zarrColonPos == std::string::npos || zarrSlashPos > zarrColonPos))
+        {
+            zarrPos = zarrSlashPos;
+            separator = '/';
+        }
+        else if (zarrColonPos != std::string::npos)
+        {
+            zarrPos = zarrColonPos;
+            separator = ':';
+        }
+
+        if (zarrPos != std::string::npos)
+        {
+            // Found .zarr/ or .zarr: - split the path there
+            mainPath = tmpPath.substr(0, zarrPos + 5);     // Everything up to and including ".zarr"
+            subdatasetPath = tmpPath.substr(zarrPos + 6);  // Everything after ".zarr/" or ".zarr:"
+
+            CPLDebug("EOPFZARR",
+                     "ParseSubdatasetPath: Found subdataset in URL/VSI path (separator='%c') - "
+                     "Main: %s, Subds: %s",
+                     separator,
+                     mainPath.c_str(),
+                     subdatasetPath.c_str());
+            return true;  // This IS a subdataset
+        }
+
+        // No .zarr/ or .zarr: found - this is a plain zarr path without subdataset
+        mainPath = tmpPath;
+        subdatasetPath = "";
+        CPLDebug("EOPFZARR",
+                 "ParseSubdatasetPath: URL/VSI path without subdataset - Main: %s",
+                 mainPath.c_str());
+        return false;
+    }
+
+    // For non-URL paths, look for colon separator
     size_t colonPos = tmpPath.find(':');
 
     // Check if this looks like a URL scheme first
@@ -702,12 +803,12 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     }
 
     // Create our wrapper dataset
-    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDS, gEOPFDriver);
+    // Pass subdataset path so it can be set before metadata loading
+    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(
+        poUnderlyingDS, gEOPFDriver, isSubdataset ? subdatasetPath.c_str() : nullptr);
     if (poDS)
     {
         poDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
-        if (isSubdataset && !subdatasetPath.empty())
-            poDS->SetMetadataItem("SUBDATASET_PATH", subdatasetPath.c_str());
     }
     else
     {
