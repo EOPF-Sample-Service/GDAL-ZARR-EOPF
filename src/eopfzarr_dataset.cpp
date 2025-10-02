@@ -37,7 +37,16 @@ EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver*
             SetBand(i, new EOPFZarrRasterBand(this, poBand, i));
 
             // Copy band metadata and other properties if needed
-            GetRasterBand(i)->SetDescription(poBand->GetDescription());
+            const char* pszBandDesc = poBand->GetDescription();
+            CPLDebug("EOPFZARR",
+                     "Band %d original description from inner: '%s' (len=%d)",
+                     i,
+                     pszBandDesc ? pszBandDesc : "(null)",
+                     pszBandDesc ? (int) strlen(pszBandDesc) : 0);
+
+            // Set band description - use inner band's description if available
+            // (This will be updated later if we have SUBDATASET_PATH metadata)
+            GetRasterBand(i)->SetDescription(pszBandDesc);
 
             // You might need to copy other band properties like color interpretation,
             // no data value, color table, etc., depending on your requirements
@@ -99,7 +108,9 @@ static std::string ExtractRootPath(const std::string& description)
     }
 }
 
-EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner, GDALDriver* drv)
+EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner,
+                                         GDALDriver* drv,
+                                         const char* pszSubdatasetPath)
 {
     if (!inner)
         return nullptr;
@@ -108,7 +119,17 @@ EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner, GDALDriver* drv)
     {
         std::unique_ptr<EOPFZarrDataset> ds(
             new EOPFZarrDataset(std::unique_ptr<GDALDataset>(inner), drv));
-        ds->LoadEOPFMetadata();  // Always load metadata
+
+        // Set subdataset path metadata BEFORE loading other metadata
+        if (pszSubdatasetPath && strlen(pszSubdatasetPath) > 0)
+        {
+            ds->SetMetadataItem("SUBDATASET_PATH", pszSubdatasetPath);
+            CPLDebug("EOPFZARR", "Set SUBDATASET_PATH metadata: %s", pszSubdatasetPath);
+        }
+
+        ds->LoadEOPFMetadata();                    // Always load metadata
+        ds->UpdateBandDescriptionsFromMetadata();  // Set friendly band names AND dataset
+                                                   // description
         return ds.release();
     }
     catch (const std::exception& e)
@@ -548,6 +569,22 @@ char** EOPFZarrDataset::GetFileList()
 
 const char* EOPFZarrDataset::GetDescription() const
 {
+    // Check if a custom description was set (e.g., friendly name from subdataset path)
+    const char* pszBaseDesc = GDALDataset::GetDescription();
+
+    // If we have a custom description and it's different from the inner dataset's,
+    // use the custom one (this happens for subdatasets with friendly names)
+    if (pszBaseDesc && pszBaseDesc[0] != '\0')
+    {
+        const char* pszInnerDesc = mInner->GetDescription();
+        // If they're different, we've set a custom description
+        if (!pszInnerDesc || strcmp(pszBaseDesc, pszInnerDesc) != 0)
+        {
+            return pszBaseDesc;
+        }
+    }
+
+    // Otherwise, use the inner dataset's description
     return mInner->GetDescription();
 }
 
@@ -662,6 +699,69 @@ CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pIma
     CPLError(
         CE_Failure, CPLE_AppDefined, "EOPFZarrRasterBand::IReadBlock: No underlying raster band");
     return CE_Failure;
+}
+
+// Update band descriptions to use friendly names based on subdataset path
+void EOPFZarrDataset::UpdateBandDescriptionsFromMetadata()
+{
+    // Check if we have subdataset path metadata
+    const char* pszSubdatasetPath = GetMetadataItem("SUBDATASET_PATH");
+    if (!pszSubdatasetPath || strlen(pszSubdatasetPath) == 0)
+    {
+        CPLDebug("EOPFZARR", "No SUBDATASET_PATH metadata - keeping default band descriptions");
+        return;  // No subdataset path, keep defaults
+    }
+
+    // Generate a friendly name from the subdataset path
+    // Example: "measurements/reflectance/r60m/b01" -> "measurements_reflectance_r60m_b01"
+    std::string friendlyName = pszSubdatasetPath;
+
+    // Replace slashes with underscores
+    for (size_t i = 0; i < friendlyName.length(); ++i)
+    {
+        if (friendlyName[i] == '/' || friendlyName[i] == '\\')
+        {
+            friendlyName[i] = '_';
+        }
+    }
+
+    CPLDebug("EOPFZARR",
+             "Generated friendly name '%s' from subdataset path '%s'",
+             friendlyName.c_str(),
+             pszSubdatasetPath);
+
+    // Set the dataset description (used by QGIS for layer name in tree view)
+    // IMPORTANT: QGIS uses os.path.basename() on the description to derive the layer name,
+    // so we need to format it as a path-like string where the last component is the friendly name
+    std::string descriptionForQGIS = "EOPFZARR:/" + friendlyName;
+    SetDescription(descriptionForQGIS.c_str());
+    CPLDebug("EOPFZARR",
+             "Set dataset description to '%s' (for QGIS basename extraction)",
+             descriptionForQGIS.c_str());
+
+    // Update band descriptions
+    int nBands = GetRasterCount();
+    for (int i = 1; i <= nBands; i++)
+    {
+        GDALRasterBand* poBand = GetRasterBand(i);
+        if (poBand)
+        {
+            std::string bandDesc;
+            if (nBands == 1)
+            {
+                // Single band - use the friendly name as-is
+                bandDesc = friendlyName;
+            }
+            else
+            {
+                // Multiple bands - append band number
+                bandDesc = friendlyName + "_band" + std::to_string(i);
+            }
+
+            poBand->SetDescription(bandDesc.c_str());
+            CPLDebug("EOPFZARR", "Set band %d description to '%s'", i, bandDesc.c_str());
+        }
+    }
 }
 
 // Performance optimization helper methods
