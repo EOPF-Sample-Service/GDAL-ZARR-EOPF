@@ -56,7 +56,7 @@ The Docker image includes:
 - ✅ **JupyterLab environment** with all geospatial packages
 - ✅ **Network access** for remote Zarr datasets
 
-See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for detailed usage instructions.
+See [DOCKER_QUICKSTART.md](docker-images\eopfzarr-qgis\README.md) for detailed usage instructions.
 
 ## Usage
 
