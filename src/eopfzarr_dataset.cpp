@@ -455,19 +455,21 @@ char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
                         // If this is a NAME field, convert ZARR: to EOPFZARR:
                         if (strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
                         {
-                            // Simply replace ZARR: with EOPFZARR: while preserving the GDAL subdataset format
-                            // Original format: ZARR:"/vsicurl/https://...file.zarr":/subdataset/path
-                            // New format:      EOPFZARR:"/vsicurl/https://...file.zarr":/subdataset/path
+                            // Simply replace ZARR: with EOPFZARR: while preserving the GDAL
+                            // subdataset format Original format:
+                            // ZARR:"/vsicurl/https://...file.zarr":/subdataset/path New format:
+                            // EOPFZARR:"/vsicurl/https://...file.zarr":/subdataset/path
                             //
-                            // This follows the standard GDAL subdataset convention: DRIVER:"path":subdataset
-                            // which is properly understood by rasterio/rioxarray when re-opening subdatasets.
-                            
+                            // This follows the standard GDAL subdataset convention:
+                            // DRIVER:"path":subdataset which is properly understood by
+                            // rasterio/rioxarray when re-opening subdatasets.
+
                             CPLString eopfValue("EOPFZARR:");
                             std::string zarrPath = pszValue + 5;  // Skip "ZARR:"
                             eopfValue += zarrPath;
 
-                            CPLDebug("EOPFZARR", 
-                                     "Converted subdataset path from ZARR to EOPFZARR: %s", 
+                            CPLDebug("EOPFZARR",
+                                     "Converted subdataset path from ZARR to EOPFZARR: %s",
                                      eopfValue.c_str());
 
                             mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue);
