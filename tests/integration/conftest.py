@@ -44,13 +44,13 @@ def pytest_configure(config):
         print(f"📍 Using GDAL_DRIVER_PATH from environment: {os.environ['GDAL_DRIVER_PATH']}", file=sys.stderr)
 
 
-@pytest.fixture(scope="session")
-def rasterio_env_context():
+@pytest.fixture(scope="function", autouse=True)
+def rasterio_env():
     """
-    Provides a rasterio environment context manager for tests.
+    Function-scoped fixture that wraps each test with rasterio.env.Env context.
     
-    This mimics the approach from test_rasterio_eopfzarr_improved.py
-    to ensure GDAL configuration is properly set.
+    This ensures GDAL_DRIVER_PATH is properly configured for GDAL within each test.
+    This is CRITICAL for rioxarray tests to work correctly.
     """
     try:
         import rasterio.env
@@ -58,11 +58,13 @@ def rasterio_env_context():
         pytest.skip("rasterio not available")
     
     driver_path = os.environ.get('GDAL_DRIVER_PATH', '')
-    config = {
-        'GDAL_DRIVER_PATH': driver_path,
-    }
     
-    return rasterio.env.Env(**config)
+    if not driver_path:
+        pytest.skip("GDAL_DRIVER_PATH not set")
+    
+    # Enter the rasterio environment context for the test
+    with rasterio.env.Env(GDAL_DRIVER_PATH=driver_path):
+        yield
 
 
 @pytest.fixture(scope="session", autouse=True)
