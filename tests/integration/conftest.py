@@ -1,7 +1,8 @@
 """
 pytest configuration for integration tests.
 
-This conftest.py ensures the EOPFZARR driver is available before running tests.
+This conftest.py ensures the EOPFZARR driver is available before running tests,
+using the same approach as the rasterio tests (with rasterio.env.Env context).
 """
 
 import os
@@ -37,8 +38,31 @@ def pytest_configure(config):
             
             if any(os.path.exists(f) for f in driver_files):
                 os.environ["GDAL_DRIVER_PATH"] = path
-                print(f"Set GDAL_DRIVER_PATH to: {path}", file=sys.stderr)
+                print(f"📍 Auto-detected GDAL_DRIVER_PATH: {path}", file=sys.stderr)
                 break
+    else:
+        print(f"📍 Using GDAL_DRIVER_PATH from environment: {os.environ['GDAL_DRIVER_PATH']}", file=sys.stderr)
+
+
+@pytest.fixture(scope="session")
+def rasterio_env_context():
+    """
+    Provides a rasterio environment context manager for tests.
+    
+    This mimics the approach from test_rasterio_eopfzarr_improved.py
+    to ensure GDAL configuration is properly set.
+    """
+    try:
+        import rasterio.env
+    except ImportError:
+        pytest.skip("rasterio not available")
+    
+    driver_path = os.environ.get('GDAL_DRIVER_PATH', '')
+    config = {
+        'GDAL_DRIVER_PATH': driver_path,
+    }
+    
+    return rasterio.env.Env(**config)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -51,33 +75,38 @@ def check_eopfzarr_driver():
     """
     try:
         from osgeo import gdal
+        import rasterio.env
+        
         gdal.UseExceptions()
         
-        # Force GDAL to register all drivers
-        gdal.AllRegister()
-        
-        driver = gdal.GetDriverByName("EOPFZARR")
-        
-        if driver is None:
-            # List available drivers for debugging
-            driver_count = gdal.GetDriverCount()
-            available_drivers = [
-                gdal.GetDriver(i).GetDescription() 
-                for i in range(driver_count)
-            ]
+        # Create rasterio environment context to ensure driver is loaded
+        driver_path = os.environ.get('GDAL_DRIVER_PATH', '')
+        with rasterio.env.Env(GDAL_DRIVER_PATH=driver_path):
+            # Force GDAL to register all drivers
+            gdal.AllRegister()
             
-            error_msg = (
-                f"EOPFZARR driver not available!\n"
-                f"GDAL_DRIVER_PATH = {os.environ.get('GDAL_DRIVER_PATH', 'NOT SET')}\n"
-                f"Found {driver_count} drivers: {', '.join(available_drivers[:10])}..."
-            )
+            driver = gdal.GetDriverByName("EOPFZARR")
             
-            pytest.exit(error_msg, returncode=1)
-        
-        print(f"✓ EOPFZARR driver is available", file=sys.stderr)
+            if driver is None:
+                # List available drivers for debugging
+                driver_count = gdal.GetDriverCount()
+                available_drivers = [
+                    gdal.GetDriver(i).GetDescription() 
+                    for i in range(driver_count)
+                ]
+                
+                error_msg = (
+                    f"❌ EOPFZARR driver not available!\n"
+                    f"   GDAL_DRIVER_PATH = {os.environ.get('GDAL_DRIVER_PATH', 'NOT SET')}\n"
+                    f"   Found {driver_count} drivers: {', '.join(available_drivers[:10])}..."
+                )
+                
+                pytest.exit(error_msg, returncode=1)
+            
+            print(f"✅ EOPFZARR driver is available", file=sys.stderr)
         
     except ImportError as e:
-        pytest.exit(f"Failed to import GDAL: {e}", returncode=1)
+        pytest.exit(f"Failed to import required packages: {e}", returncode=1)
 
 
 def pytest_runtest_setup(item):
@@ -91,8 +120,12 @@ def pytest_runtest_setup(item):
         if driver_name:
             try:
                 from osgeo import gdal
-                driver = gdal.GetDriverByName(driver_name)
-                if driver is None:
-                    pytest.skip(f"Driver {driver_name} not available")
+                import rasterio.env
+                
+                driver_path = os.environ.get('GDAL_DRIVER_PATH', '')
+                with rasterio.env.Env(GDAL_DRIVER_PATH=driver_path):
+                    driver = gdal.GetDriverByName(driver_name)
+                    if driver is None:
+                        pytest.skip(f"Driver {driver_name} not available")
             except ImportError:
-                pytest.skip("GDAL not available")
+                pytest.skip("Required packages not available")
