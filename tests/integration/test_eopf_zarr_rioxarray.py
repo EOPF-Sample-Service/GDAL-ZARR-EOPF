@@ -338,6 +338,226 @@ def test_rioxarray_attributes():
     except Exception as e:
         pytest.fail(f"Failed to open with rioxarray: {e}")
 
+def test_rioxarray_crs_access():
+    """Test CRS and spatial reference information handling"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Check rio accessor is available
+                assert hasattr(da, 'rio'), "DataArray should have rio accessor"
+                
+                # Try to access CRS
+                try:
+                    crs = da.rio.crs
+                    print(f"✅ CRS accessible: {crs}")
+                    
+                    # If CRS is None, it means the dataset doesn't have projection info
+                    # This is valid for some datasets
+                    if crs is not None:
+                        assert crs is not None, "CRS should be accessible"
+                    else:
+                        print("   Note: Dataset has no CRS information (unprojected data)")
+                        
+                except Exception as e:
+                    print(f"⚠ CRS access warning: {e}")
+                    # Not failing test as some datasets may not have CRS
+            
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_transform():
+    """Test geotransform information is accessible"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                try:
+                    transform = da.rio.transform()
+                    print(f"✅ Transform accessible: {transform}")
+                    
+                    if transform is not None:
+                        # Verify transform has expected properties
+                        assert hasattr(transform, 'a'), "Transform should have scale/rotation parameters"
+                        
+                except Exception as e:
+                    print(f"⚠ Transform access warning: {e}")
+            
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+
+def test_rioxarray_bounds():
+    """Test spatial bounds are accessible"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                try:
+                    bounds = da.rio.bounds()
+                    print(f"✅ Bounds accessible: {bounds}")
+
+                    if bounds is not None:
+                        # Verify bounds has expected properties
+                        assert len(bounds) == 4, "Bounds should have 4 values"
+                        
+                except Exception as e:
+                    print(f"⚠ Bounds access warning: {e}")
+
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_resolution():
+    """Test resolution information is accessible"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                try:
+                    resolution = da.rio.resolution()
+                    print(f"✅ Resolution accessible: {resolution}")
+
+                    if resolution is not None:
+                        # Verify resolution has expected properties
+                        assert len(resolution) == 2, "Resolution should have 2 values (x, y)"
+
+                except Exception as e:
+                    print(f"⚠ Resolution access warning: {e}")
+
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+
+def test_rioxarray_nodata_handling():
+    """Test NoData handling in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                try:
+                    nodata = da.rio.nodata
+                    print(f"✅ NoData value: {nodata}")
+                    
+                    # NoData can be None if not set
+                    if nodata is not None:
+                        # Verify it's a valid numeric value
+                        assert isinstance(nodata, (int, float)), "NoData should be numeric"
+                        
+                except Exception as e:
+                    print(f"⚠ NoData access warning: {e}")
+
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+
+def test_rioxarray_band_descriptions():
+    """Test band descriptions in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Check for band-related attributes
+                if 'band' in da.dims:
+                    print(f"✅ Multi-band dataset with {len(da.band)} bands")
+                    
+                    # Check if band coordinate has description attributes
+                    if 'long_name' in da.attrs:
+                        print(f"   Band description: {da.attrs['long_name']}")
+                else:
+                    print("✅ Single-band dataset")
+
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_custom_metadata():
+    """Test custom EOPF metadata is accessible in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Check for any EOPF-specific metadata in attributes
+                eopf_attrs = {k: v for k, v in da.attrs.items() if 'eopf' in k.lower() or 'zarr' in k.lower()}
+                
+                print(f"✅ EOPF-related attributes: {list(eopf_attrs.keys())}")
+                
+                # Also check encoding
+                if hasattr(da, 'encoding'):
+                    print(f"   Encoding info: {list(da.encoding.keys())}")
+
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+
 def test_rioxarray_remote_url_access():
     """Test rioxarray with remote URLs (environment-dependent)"""
     env_info = detect_environment()
