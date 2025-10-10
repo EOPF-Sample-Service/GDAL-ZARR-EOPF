@@ -227,6 +227,22 @@ jobs:
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/OSGeo4W;C:/OSGeo4W/apps/gdal" -DGDAL_DIR="C:/OSGeo4W/apps/gdal/lib/cmake/gdal"
           cmake --build build --config Release --parallel
+      
+      # Install
+      - name: Install Driver (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          sudo cmake --install build --config Release
+          # Verify installation
+          find $(gdal-config --prefix)/lib -name "*EOPFZarr*" || echo "Warning: Driver not found in standard location"
+      
+      - name: Install Driver (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --install build --config Release --prefix "C:/OSGeo4W"
+          # Verify installation
+          Get-ChildItem -Path "C:/OSGeo4W" -Recurse -Filter "*EOPFZarr*" | Select-Object FullName
 
       # Testing
       - name: Unit Tests (C++)
@@ -282,7 +298,6 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Setting up environment variables..."
-          $env:GDAL_DRIVER_PATH = "$PWD\build\Release"
           $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
           $env:PROJ_LIB = "C:\OSGeo4W\share\proj"
           $env:PATH = "C:\OSGeo4W\bin;C:\OSGeo4W\apps\Python312;C:\OSGeo4W\apps\Python312\Scripts;" + $env:PATH
@@ -294,6 +309,9 @@ jobs:
           Write-Host "Verifying Python and GDAL..."
           & $pythonExe --version
           & $pythonExe -c "from osgeo import gdal; print(f'GDAL version: {gdal.VersionInfo()}')"
+          
+          Write-Host "Verifying EOPFZARR driver installation..."
+          & $pythonExe -c "from osgeo import gdal; gdal.AllRegister(); drv = gdal.GetDriverByName('EOPFZARR'); print(f'EOPFZARR driver: {drv.GetDescription() if drv else \"NOT FOUND\"}')"
           
           Write-Host "Installing required packages..."
           & $pythonExe -m pip install pytest rasterio numpy rioxarray
@@ -311,11 +329,11 @@ jobs:
           # Install Python packages including rasterio and rioxarray
           python -m pip install pytest numpy rasterio rioxarray
           
-          # Set environment for tests
-          export GDAL_DRIVER_PATH="$PWD/build"
-          
           # Verify installations
           python -c "from osgeo import gdal; import rasterio, rioxarray; print('GDAL, rasterio and rioxarray available')"
+          
+          # Verify EOPFZARR driver is installed
+          python -c "from osgeo import gdal; gdal.AllRegister(); drv = gdal.GetDriverByName('EOPFZARR'); print(f'EOPFZARR driver: {drv.GetDescription() if drv else \"NOT FOUND\"}')"
           
           # Run integration tests
           python -m pytest -c pytest.ini tests/integration/ -v --tb=short
@@ -328,7 +346,6 @@ jobs:
           python -m pip install pytest numpy rasterio rioxarray
           
           # Set environment variables for macOS
-          export GDAL_DRIVER_PATH="$PWD/build"
           export GDAL_DATA="$(brew --prefix)/share/gdal"
           export PROJ_LIB="$(brew --prefix)/share/proj"
           
@@ -338,6 +355,9 @@ jobs:
           
           # Verify GDAL Python bindings, rasterio, and rioxarray
           python -c "from osgeo import gdal; import rasterio, rioxarray; print('GDAL, rasterio and rioxarray available')"
+          
+          # Verify EOPFZARR driver is installed
+          python -c "from osgeo import gdal; gdal.AllRegister(); drv = gdal.GetDriverByName('EOPFZARR'); print(f'EOPFZARR driver: {drv.GetDescription() if drv else \"NOT FOUND\"}')"
           
           # Debug: List test files to ensure they exist
           echo "Integration test files:"
