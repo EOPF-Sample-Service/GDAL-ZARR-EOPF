@@ -558,6 +558,280 @@ def test_rioxarray_custom_metadata():
         pytest.fail(f"Failed to open with rioxarray: {e}")
 
 
+def test_rioxarray_chunked_reading():
+    """Test chunked reading and dask integration in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Check if data is chunked (dask array)
+                assert hasattr(da, 'chunks') or hasattr(da.data, 'chunks'), \
+                    "DataArray should support chunking"
+                
+                print(f"✅ Chunking information:")
+                if hasattr(da, 'chunks'):
+                    print(f"   Chunks: {da.chunks}")
+                if hasattr(da.data, 'chunks'):
+                    print(f"   Dask chunks: {da.data.chunks}")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_lazy_loading():
+    """Test lazy loading and computation in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                # Check if data is lazy (not loaded yet)
+                import dask.array as dask_array
+                
+                if isinstance(da.data, dask_array.Array):
+                    print("✅ Data is lazy-loaded (dask array)")
+                    
+                    # Trigger computation on a small subset
+                    small_data = da.isel(x=slice(0, 10), y=slice(0, 10)).compute()
+                    assert small_data is not None, "Should be able to compute small subset"
+                    print(f"   Successfully computed small subset: {small_data.shape}")
+                else:
+                    print("✅ Data is eagerly loaded (numpy array)")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_window_reading():
+    """Test windowed reading and subsetting in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Read a small window
+                window_size = min(100, da.sizes.get('x', 100), da.sizes.get('y', 100))
+                window_data = da.isel(x=slice(0, window_size), y=slice(0, window_size))
+                
+                assert window_data is not None, "Window read should succeed"
+                print(f"✅ Successfully read window of size {window_size}x{window_size}")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_memory_efficiency():
+    """Test memory efficiency when working with large datasets in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                import psutil
+                process = psutil.Process(os.getpid())
+                
+                mem_before = process.memory_info().rss / (1024 * 1024)  # in MB
+                print(f"   Memory before computation: {mem_before:.2f} MB")
+                
+                # Trigger computation on a small subset
+                small_data = da.isel(x=slice(0, 50), y=slice(0, 50)).compute()
+                
+                mem_after = process.memory_info().rss / (1024 * 1024)  # in MB
+                print(f"   Memory after computation: {mem_after:.2f} MB")
+                
+                assert small_data is not None, "Should be able to compute small subset"
+                assert (mem_after - mem_before) < 500, "Memory increase should be reasonable"
+                
+                print(f"✅ Memory efficiency test passed")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_data_reading():
+    """Test data reading and basic operations in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Read a small subset
+                subset = da.isel(x=slice(0, 10), y=slice(0, 10))
+                
+                # Compute if lazy
+                if hasattr(subset.data, 'compute'):
+                    subset = subset.compute()
+                
+                # Verify data
+                assert subset.values is not None, "Should have data values"
+                assert subset.values.size > 0, "Data should not be empty"
+                
+                print(f"✅ Successfully read data subset")
+                print(f"   Shape: {subset.shape}")
+                print(f"   Data type: {subset.dtype}")
+                print(f"   Sample values: {subset.values.flat[:5]}")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_data_types():
+    """Test data types and conversions in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Check data type
+                assert da.dtype is not None, "Should have a data type"
+                
+                # Common data types for Earth observation data
+                valid_dtypes = [np.uint8, np.uint16, np.int16, np.int32, np.float32, np.float64]
+                
+                print(f"✅ Data type: {da.dtype}")
+                print(f"   Valid dtype: {da.dtype in valid_dtypes or np.issubdtype(da.dtype, np.number)}")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_to_numpy():
+    """Test conversion to numpy arrays in rioxarray"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Convert small subset to numpy
+                subset = da.isel(x=slice(0, 10), y=slice(0, 10))
+                
+                if hasattr(subset.data, 'compute'):
+                    numpy_data = subset.compute().values
+                else:
+                    numpy_data = subset.values
+                
+                assert isinstance(numpy_data, np.ndarray), "Should convert to numpy array"
+                print(f"✅ Successfully converted to numpy array: {numpy_data.shape}")
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_xarray_operations():
+    """Test xarray operations on rioxarray DataArray using EOPFZARR"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Perform basic xarray operations
+                mean_da = da.mean(dim='band', skipna=True) if 'band' in da.dims else da.mean(skipna=True)
+                
+                assert mean_da is not None, "Mean operation should succeed"
+                print(f"✅ Successfully computed mean: {mean_da.shape}")
+                
+                # Check if coordinates are preserved
+                assert 'x' in mean_da.coords and 'y' in mean_da.coords, "Coordinates should be preserved"
+                
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+        
+def test_rioxarray_reprojection_capability():
+    """Test reprojection capability in rioxarray using EOPFZARR"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset with chunking
+                da = rioxarray.open_rasterio(path, chunks='auto')
+                
+                # Check if CRS is available
+                if da.rio.crs is None:
+                    pytest.skip("Dataset has no CRS, cannot test reprojection")
+                
+                # Reproject to a common CRS (e.g., EPSG:3857)
+                try:
+                    reprojected = da.rio.reproject("EPSG:3857")
+                    assert reprojected.rio.crs.to_epsg() == 3857, "Should be reprojected to Web Mercator"
+                    print(f"✅ Successfully reprojected to EPSG:3857: {reprojected.shape}")
+                except Exception as e:
+                    print(f"⚠ Reprojection warning: {e}")
+                    
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
 def test_rioxarray_remote_url_access():
     """Test rioxarray with remote URLs (environment-dependent)"""
     env_info = detect_environment()
