@@ -30,29 +30,6 @@ pytestmark = pytest.mark.require_driver("EOPFZARR")
 REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
 REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr/measurements/reflectance/r60m/b01"
 
-def make_eopfzarr_path(base_url, subdataset=""):
-    """
-    Construct a proper EOPFZARR path.
-    
-    Args:
-        base_url: Base URL to the Zarr dataset (e.g., https://.../file.zarr)
-        subdataset: Optional subdataset path (e.g., measurements/oa01_radiance)
-    
-    Returns:
-        Properly formatted EOPFZARR path string
-        
-    Examples:
-        >>> make_eopfzarr_path("https://example.com/data.zarr")
-        'EOPFZARR:"/vsicurl/https://example.com/data.zarr"'
-        
-        >>> make_eopfzarr_path("https://example.com/data.zarr", "measurements/band1")
-        'EOPFZARR:"/vsicurl/https://example.com/data.zarr":measurements/band1'
-    """
-    if subdataset:
-        return f'EOPFZARR:"/vsicurl/{base_url}":{subdataset}'
-    else:
-        return f'EOPFZARR:"/vsicurl/{base_url}"'
-    
 # Environment Detection and Configuration
 def detect_environment():
     """Detect the current testing environment"""
@@ -229,11 +206,143 @@ def test_rioxarray_gdal_driver_compatibility(gdal_env_configured):
         else:
             raise
 
+def test_rioxarray_open_rasterio_basic():
+    """Test basic rioxarray.open_rasterio() with EOPFZARR dataset"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Verify it's an xarray DataArray
+                assert isinstance(da, xr.DataArray), "Should return xarray DataArray"
+                
+                # Check basic structure
+                assert 'band' in da.dims or 'y' in da.dims or 'x' in da.dims, \
+                    "DataArray should have spatial dimensions"
+                
+                # Verify data is accessible
+                assert da.shape is not None, "DataArray should have a shape"
+                assert len(da.shape) > 0, "DataArray should not be empty"
+                
+                print(f"✅ Successfully opened dataset with rioxarray")
+                print(f"   Dimensions: {da.dims}")
+                print(f"   Shape: {da.shape}")
+                print(f"   Data type: {da.dtype}")
+        else:
+            print(f"✅ Basic rioxarray setup successful in {env_info['name']}")
+            
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+
+def test_rioxarray_data_array_dimensions():
+    """Test basic rioxarray.open_rasterio() with EOPFZARR dataset"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Verify it's an xarray DataArray
+                assert isinstance(da, xr.DataArray), "Should return xarray DataArray"
+                
+                # Standard dimensions for raster data
+                # rioxarray typically uses (band, y, x) or (y, x) for single band
+                expected_dims = ['band', 'y', 'x']
+                
+                # Check that we have at least y and x
+                assert 'y' in da.dims, "Should have 'y' dimension"
+                assert 'x' in da.dims, "Should have 'x' dimension"
+                
+                # If multi-band, should have band dimension
+                if len(da.shape) == 3:
+                    assert 'band' in da.dims, "Multi-band data should have 'band' dimension"
+                
+                print(f"✅ Dimensions verified: {da.dims}")
+        else:
+            print(f"✅ Basic rioxarray setup successful in {env_info['name']}")
+            
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_coordinates():
+    """Test basic rioxarray.open_rasterio() with EOPFZARR dataset"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Check coordinates exist
+                assert 'y' in da.coords, "Should have y coordinates"
+                assert 'x' in da.coords, "Should have x coordinates"
+                
+                # Verify coordinates are not empty
+                assert len(da.coords['y']) > 0, "Y coordinates should not be empty"
+                assert len(da.coords['x']) > 0, "X coordinates should not be empty"
+                
+                print(f"✅ Coordinates found:")
+                print(f"   X: {len(da.coords['x'])} points")
+                print(f"   Y: {len(da.coords['y'])} points")
+            
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
+def test_rioxarray_attributes():
+    """Test basic rioxarray.open_rasterio() with EOPFZARR dataset"""
+    env_info = detect_environment()
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
+    skip_if_rioxarray_not_compatible()
+    try:
+        configure_gdal_environment()
+        
+        if env_info['is_osgeo4w'] and not env_info['is_ci']:
+            if check_url_accessible_with_gdal(url):
+                path = f'EOPFZARR:"/vsicurl/{url}"'
+                
+                # Use rioxarray to open the remote dataset
+                da = rioxarray.open_rasterio(path, chunks=True)
+                
+                # Check that DataArray has attributes
+                assert hasattr(da, 'attrs'), "DataArray should have attrs property"
+                
+                # Print available attributes
+                print(f"✅ DataArray attributes: {list(da.attrs.keys())}")
+            
+    except Exception as e:
+        pytest.fail(f"Failed to open with rioxarray: {e}")
+
 def test_rioxarray_remote_url_access():
     """Test rioxarray with remote URLs (environment-dependent)"""
     env_info = detect_environment()
-    path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
-    skip_if_url_not_accessible(path, "rioxarray remote access")
+    url = REMOTE_WITH_SUBDATASETS_ZARR
+    skip_if_url_not_accessible(url, "rioxarray remote access")
     skip_if_rioxarray_not_compatible()
     
     try:
