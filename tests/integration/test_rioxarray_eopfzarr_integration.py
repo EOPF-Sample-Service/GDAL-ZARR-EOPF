@@ -57,16 +57,44 @@ pytestmark = pytest.mark.require_driver("EOPFZARR")
 # Sentinel-3 OLCI Level-1 EFR - Specific subdataset (FAST for rioxarray)
 # This URL points directly to a single measurement band, NOT the root dataset
 # The root dataset has 123 subdatasets which would cause slow rioxarray tests
-REMOTE_OLCI_SUBDATASET = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202508-s03olcefr/19/products/cpm_v256/S3B_OL_1_EFR____20250819T074058_20250819T074358_20250819T092155_0179_110_106_3420_ESA_O_NR_004.zarr/measurements/oa01_radiance"
+# 
+# Split into base URL + subdataset path for proper EOPFZARR path construction
+REMOTE_OLCI_BASE = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202508-s03olcefr/19/products/cpm_v256/S3B_OL_1_EFR____20250819T074058_20250819T074358_20250819T092155_0179_110_106_3420_ESA_O_NR_004.zarr"
+REMOTE_OLCI_SUBDATASET = "measurements/oa01_radiance"
 
 # Sentinel-2 MSI Level-1C - Root dataset (DO NOT USE with rioxarray - has 61 subdatasets!)
 REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
 
 
-def check_url_accessible(url):
+def make_eopfzarr_path(base_url, subdataset=""):
+    """
+    Construct a proper EOPFZARR path.
+    
+    Args:
+        base_url: Base URL to the Zarr dataset (e.g., https://.../file.zarr)
+        subdataset: Optional subdataset path (e.g., measurements/oa01_radiance)
+    
+    Returns:
+        Properly formatted EOPFZARR path string
+        
+    Examples:
+        >>> make_eopfzarr_path("https://example.com/data.zarr")
+        'EOPFZARR:"/vsicurl/https://example.com/data.zarr"'
+        
+        >>> make_eopfzarr_path("https://example.com/data.zarr", "measurements/band1")
+        'EOPFZARR:"/vsicurl/https://example.com/data.zarr":measurements/band1'
+    """
+    if subdataset:
+        return f'EOPFZARR:"/vsicurl/{base_url}":{subdataset}'
+    else:
+        return f'EOPFZARR:"/vsicurl/{base_url}"'
+
+
+def check_url_accessible(base_url, subdataset=""):
     """Check if a remote URL is accessible"""
     try:
-        ds = gdal.Open(f'EOPFZARR:"/vsicurl/{url}"')
+        path = make_eopfzarr_path(base_url, subdataset)
+        ds = gdal.Open(path)
         if ds is None:
             return False
         return True
@@ -74,10 +102,11 @@ def check_url_accessible(url):
         return False
 
 
-def skip_if_url_not_accessible(url, test_name=""):
+def skip_if_url_not_accessible(base_url, subdataset="", test_name=""):
     """Skip test if URL is not accessible"""
-    if not check_url_accessible(url):
-        pytest.skip(f"Remote Zarr data not accessible for {test_name}: {url}")
+    if not check_url_accessible(base_url, subdataset):
+        full_url = f"{base_url}/{subdataset}" if subdataset else base_url
+        pytest.skip(f"Remote Zarr data not accessible for {test_name}: {full_url}")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -102,10 +131,9 @@ class TestRioxarrayBasicOperations:
     
     def test_rioxarray_open_rasterio_basic(self):
         """Test basic rioxarray.open_rasterio() with EOPFZARR dataset"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray basic open test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray basic open test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         try:
             # Open with rioxarray
@@ -132,10 +160,9 @@ class TestRioxarrayBasicOperations:
     
     def test_rioxarray_data_array_dimensions(self):
         """Test that rioxarray DataArray has correct dimensions"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray dimensions test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray dimensions test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -155,10 +182,9 @@ class TestRioxarrayBasicOperations:
     
     def test_rioxarray_coordinates(self):
         """Test that coordinate systems are properly set up"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray coordinates test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray coordinates test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -176,10 +202,9 @@ class TestRioxarrayBasicOperations:
     
     def test_rioxarray_attributes(self):
         """Test that xarray attributes are preserved"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray attributes test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray attributes test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -195,10 +220,9 @@ class TestRioxarryCRSAndSpatialReference:
     
     def test_rioxarray_crs_access(self):
         """Test CRS information is accessible via rio accessor"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray CRS test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray CRS test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -223,10 +247,9 @@ class TestRioxarryCRSAndSpatialReference:
     
     def test_rioxarray_transform(self):
         """Test geotransform information is accessible"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray transform test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray transform test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -243,10 +266,9 @@ class TestRioxarryCRSAndSpatialReference:
     
     def test_rioxarray_bounds(self):
         """Test spatial bounds are accessible"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray bounds test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray bounds test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -263,10 +285,9 @@ class TestRioxarryCRSAndSpatialReference:
     
     def test_rioxarray_resolution(self):
         """Test resolution information is accessible"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray resolution test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray resolution test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -286,10 +307,9 @@ class TestRioxarrayMetadataPreservation:
     
     def test_rioxarray_nodata_handling(self):
         """Test nodata value handling"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray nodata test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray nodata test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -307,10 +327,9 @@ class TestRioxarrayMetadataPreservation:
     
     def test_rioxarray_band_descriptions(self):
         """Test band descriptions are preserved"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray band descriptions test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray band descriptions test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -326,10 +345,9 @@ class TestRioxarrayMetadataPreservation:
     
     def test_rioxarray_custom_metadata(self):
         """Test that custom EOPF metadata is accessible"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray custom metadata test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray custom metadata test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -348,10 +366,9 @@ class TestRioxarrayChunkingAndPerformance:
     
     def test_rioxarray_chunked_reading(self):
         """Test that rioxarray respects chunking from Zarr"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray chunking test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray chunking test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path, chunks='auto')
         
@@ -367,10 +384,9 @@ class TestRioxarrayChunkingAndPerformance:
     
     def test_rioxarray_lazy_loading(self):
         """Test lazy loading behavior"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray lazy loading test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray lazy loading test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         # Open with chunking enabled
         da = rioxarray.open_rasterio(path, chunks='auto')
@@ -390,10 +406,9 @@ class TestRioxarrayChunkingAndPerformance:
     
     def test_rioxarray_window_reading(self):
         """Test reading data in windows for memory efficiency"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray window reading test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray window reading test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -406,10 +421,9 @@ class TestRioxarrayChunkingAndPerformance:
     
     def test_rioxarray_memory_efficiency(self):
         """Test memory efficiency with repeated operations"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray memory efficiency test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray memory efficiency test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         # Open and close multiple times
         for i in range(3):
@@ -429,10 +443,9 @@ class TestRioxarrayDataAccess:
     
     def test_rioxarray_data_reading(self):
         """Test reading actual data values"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray data reading test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray data reading test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -454,10 +467,9 @@ class TestRioxarrayDataAccess:
     
     def test_rioxarray_data_types(self):
         """Test different data type handling"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray data types test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray data types test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -476,10 +488,9 @@ class TestRioxarrayIntegrationWorkflows:
     
     def test_rioxarray_to_numpy(self):
         """Test conversion to numpy array"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray to numpy test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray to numpy test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -496,10 +507,9 @@ class TestRioxarrayIntegrationWorkflows:
     
     def test_rioxarray_xarray_operations(self):
         """Test xarray operations on EOPFZARR data"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray xarray operations test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray xarray operations test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -520,10 +530,9 @@ class TestRioxarrayIntegrationWorkflows:
     
     def test_rioxarray_reprojection_capability(self):
         """Test that reprojection is possible (without actually doing it to save time)"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray reprojection test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray reprojection test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         da = rioxarray.open_rasterio(path)
         
@@ -547,10 +556,9 @@ class TestRioxarrayErrorHandling:
     
     def test_rioxarray_concurrent_access(self):
         """Test concurrent access to same dataset"""
-        url = REMOTE_OLCI_SUBDATASET
-        skip_if_url_not_accessible(url, "rioxarray concurrent access test")
+        skip_if_url_not_accessible(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET, "rioxarray concurrent access test")
         
-        path = f'EOPFZARR:"/vsicurl/{url}"'
+        path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
         
         # Open multiple times
         da1 = rioxarray.open_rasterio(path)
@@ -570,11 +578,12 @@ def test_manual_rioxarray_integration():
     print("Manual rioxarray Integration Test")
     print("="*60)
     
-    url = REMOTE_OLCI_SUBDATASET
-    path = f'EOPFZARR:"/vsicurl/{url}"'
+    path = make_eopfzarr_path(REMOTE_OLCI_BASE, REMOTE_OLCI_SUBDATASET)
     
     try:
-        print(f"\n1. Testing URL: {url}")
+        print(f"\n1. Testing: {REMOTE_OLCI_BASE}")
+        print(f"   Subdataset: {REMOTE_OLCI_SUBDATASET}")
+        print(f"   Path: {path}")
         
         # Test GDAL first
         print("\n2. Testing GDAL access...")
