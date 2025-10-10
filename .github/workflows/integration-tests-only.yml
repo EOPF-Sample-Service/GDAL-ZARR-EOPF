@@ -1,0 +1,137 @@
+name: Integration Tests Only
+
+# This workflow runs ONLY integration tests, skipping compilation and unit tests
+# Use this for faster feedback when working on integration test changes
+
+on:
+  workflow_dispatch:  # Manual trigger from GitHub Actions UI
+    inputs:
+      test_filter:
+        description: 'Test filter (pytest -k pattern)'
+        required: false
+        default: ''
+        type: string
+      verbose:
+        description: 'Verbose output (-v -s)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  integration-tests-windows:
+    name: Integration Tests - Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup GDAL with OSGeo4W
+        run: |
+          choco install osgeo4w --no-progress -y
+          
+      - name: Build EOPFZARR driver
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+      
+      - name: Install Python packages
+        run: |
+          C:\OSGeo4W\bin\python3.exe -m pip install --upgrade pip
+          C:\OSGeo4W\bin\python3.exe -m pip install pytest rioxarray xarray
+      
+      - name: Set GDAL_DRIVER_PATH
+        run: |
+          $env:GDAL_DRIVER_PATH = "$PWD\build\Release"
+          echo "GDAL_DRIVER_PATH=$env:GDAL_DRIVER_PATH" >> $env:GITHUB_ENV
+      
+      - name: Run integration tests
+        run: |
+          $testFilter = "${{ github.event.inputs.test_filter }}"
+          $verboseFlag = ""
+          if ("${{ github.event.inputs.verbose }}" -eq "true") {
+            $verboseFlag = "-v -s"
+          }
+          
+          if ($testFilter) {
+            C:\OSGeo4W\bin\python3.exe -m pytest tests\integration\test_rioxarray_eopfzarr_integration.py -k "$testFilter" $verboseFlag
+          } else {
+            C:\OSGeo4W\bin\python3.exe -m pytest tests\integration\test_rioxarray_eopfzarr_integration.py -v $verboseFlag
+          }
+
+  integration-tests-linux:
+    name: Integration Tests - Linux
+    runs-on: ubuntu-24.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install GDAL and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev python3-gdal cmake build-essential
+          
+      - name: Install Python packages
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest rioxarray xarray rasterio
+      
+      - name: Build EOPFZARR driver
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+      
+      - name: Run integration tests
+        env:
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+        run: |
+          TEST_FILTER="${{ github.event.inputs.test_filter }}"
+          VERBOSE_FLAG=""
+          if [ "${{ github.event.inputs.verbose }}" = "true" ]; then
+            VERBOSE_FLAG="-v -s"
+          fi
+          
+          if [ -n "$TEST_FILTER" ]; then
+            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -k "$TEST_FILTER" $VERBOSE_FLAG
+          else
+            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -v $VERBOSE_FLAG
+          fi
+
+  integration-tests-macos:
+    name: Integration Tests - macOS
+    runs-on: macos-13
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install GDAL and dependencies
+        run: |
+          brew install gdal cmake
+          
+      - name: Install Python packages
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest rioxarray xarray rasterio
+      
+      - name: Build EOPFZARR driver
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+      
+      - name: Run integration tests
+        env:
+          GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+        run: |
+          TEST_FILTER="${{ github.event.inputs.test_filter }}"
+          VERBOSE_FLAG=""
+          if [ "${{ github.event.inputs.verbose }}" = "true" ]; then
+            VERBOSE_FLAG="-v -s"
+          fi
+          
+          if [ -n "$TEST_FILTER" ]; then
+            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -k "$TEST_FILTER" $VERBOSE_FLAG
+          else
+            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -v $VERBOSE_FLAG
+          fi

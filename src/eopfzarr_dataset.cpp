@@ -455,56 +455,22 @@ char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
                         // If this is a NAME field, convert ZARR: to EOPFZARR:
                         if (strstr(pszKey, "_NAME") && STARTS_WITH_CI(pszValue, "ZARR:"))
                         {
+                            // Simply replace ZARR: with EOPFZARR: while preserving the GDAL
+                            // subdataset format Original format:
+                            // ZARR:"/vsicurl/https://...file.zarr":/subdataset/path New format:
+                            // EOPFZARR:"/vsicurl/https://...file.zarr":/subdataset/path
+                            //
+                            // This follows the standard GDAL subdataset convention:
+                            // DRIVER:"path":subdataset which is properly understood by
+                            // rasterio/rioxarray when re-opening subdatasets.
+
                             CPLString eopfValue("EOPFZARR:");
                             std::string zarrPath = pszValue + 5;  // Skip "ZARR:"
+                            eopfValue += zarrPath;
 
-                            // Check if this is a URL path that needs special handling
-                            if (zarrPath.find("/vsicurl/http") != std::string::npos)
-                            {
-                                // For URLs, we need to combine the quoted path with subdataset path
-                                // Format: ZARR:"/vsicurl/https://...file.zarr":/subdataset/path
-                                // Should become:
-                                // EOPFZARR:"/vsicurl/https://...file.zarr/subdataset/path"
-
-                                size_t firstQuote = zarrPath.find('\"');
-                                size_t secondQuote = zarrPath.find('\"', firstQuote + 1);
-                                size_t colonAfterQuote = zarrPath.find(':', secondQuote + 1);
-
-                                if (firstQuote != std::string::npos &&
-                                    secondQuote != std::string::npos &&
-                                    colonAfterQuote != std::string::npos &&
-                                    colonAfterQuote == secondQuote + 1)
-                                {
-                                    // Extract the quoted URL and the subdataset path
-                                    std::string quotedUrl =
-                                        zarrPath.substr(firstQuote, secondQuote - firstQuote + 1);
-                                    std::string subdatasetPath =
-                                        zarrPath.substr(colonAfterQuote + 1);
-
-                                    // Remove leading slash from subdataset path if present
-                                    if (!subdatasetPath.empty() && subdatasetPath[0] == '/')
-                                    {
-                                        subdatasetPath = subdatasetPath.substr(1);
-                                    }
-
-                                    // Remove the closing quote, add subdataset path, then add
-                                    // closing quote
-                                    quotedUrl.pop_back();  // Remove closing quote
-                                    quotedUrl += "/" + subdatasetPath + "\"";
-
-                                    eopfValue += quotedUrl;
-                                }
-                                else
-                                {
-                                    // Fallback to original format if parsing fails
-                                    eopfValue += zarrPath;
-                                }
-                            }
-                            else
-                            {
-                                // For local files, keep the original format
-                                eopfValue += zarrPath;
-                            }
+                            CPLDebug("EOPFZARR",
+                                     "Converted subdataset path from ZARR to EOPFZARR: %s",
+                                     eopfValue.c_str());
 
                             mSubdatasets = CSLSetNameValue(mSubdatasets, pszKey, eopfValue);
                         }

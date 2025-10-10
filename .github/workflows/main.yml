@@ -296,10 +296,10 @@ jobs:
           & $pythonExe -c "from osgeo import gdal; print(f'GDAL version: {gdal.VersionInfo()}')"
           
           Write-Host "Installing required packages..."
-          & $pythonExe -m pip install pytest rasterio numpy
+          & $pythonExe -m pip install pytest rasterio numpy rioxarray
           
           Write-Host "Verifying package installation..."
-          & $pythonExe -c "import pytest, rasterio, numpy; print('All packages imported successfully')"
+          & $pythonExe -c "import pytest, rasterio, numpy, rioxarray; print('All packages imported successfully')"
           
           Write-Host "Running integration tests..."
           & $pythonExe -m pytest -c pytest.ini tests/integration/ -v --tb=short
@@ -308,14 +308,14 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          # Install Python packages including rasterio
-          python -m pip install pytest numpy rasterio
+          # Install Python packages including rasterio and rioxarray
+          python -m pip install pytest numpy rasterio rioxarray
           
-          # Set environment for tests
+          # Set environment for tests (conftest.py also does auto-detection)
           export GDAL_DRIVER_PATH="$PWD/build"
           
           # Verify installations
-          python -c "from osgeo import gdal; import rasterio; print('GDAL and rasterio available')"
+          python -c "from osgeo import gdal; import rasterio, rioxarray; print('GDAL, rasterio and rioxarray available')"
           
           # Run integration tests
           python -m pytest -c pytest.ini tests/integration/ -v --tb=short
@@ -324,10 +324,10 @@ jobs:
       - name: Integration Tests (Python) - macOS
         if: runner.os == 'macOS'
         run: |
-          # Install pytest, numpy, and rasterio
-          python -m pip install pytest numpy rasterio
+          # Install pytest, numpy, rasterio, and rioxarray
+          python -m pip install pytest numpy rasterio rioxarray
           
-          # Set environment variables for macOS
+          # Set environment variables for macOS (conftest.py also does auto-detection)
           export GDAL_DRIVER_PATH="$PWD/build"
           export GDAL_DATA="$(brew --prefix)/share/gdal"
           export PROJ_LIB="$(brew --prefix)/share/proj"
@@ -336,8 +336,8 @@ jobs:
           export PATH="$(brew --prefix)/bin:$PATH"
           export DYLD_LIBRARY_PATH="$(brew --prefix)/lib:$DYLD_LIBRARY_PATH"
           
-          # Verify GDAL Python bindings and rasterio
-          python -c "from osgeo import gdal; import rasterio; print('GDAL and rasterio available')"
+          # Verify GDAL Python bindings, rasterio, and rioxarray
+          python -c "from osgeo import gdal; import rasterio, rioxarray; print('GDAL, rasterio and rioxarray available')"
           
           # Debug: List test files to ensure they exist
           echo "Integration test files:"
