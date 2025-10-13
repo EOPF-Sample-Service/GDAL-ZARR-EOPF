@@ -2,7 +2,7 @@
 
 This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver functionality and compatibility testing.
 
-**📊 Current notebooks: 7 total (4 core + 3 additional)**
+**📊 Current notebooks: 9 total (4 core + 5 additional)**
 
 ## 📚 Available Notebooks
 
@@ -81,9 +81,34 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
 - **Use Case**: Sentinel-3 ocean and land color instrument data analysis
 
 
-## 🚀 Quick Start
+#### `08-EOPFZARR-with-Rioxarray.ipynb`
 
-### 📦 Installation Options
+- **Purpose**: Demonstrates how to use the EOPFZARR GDAL driver with rioxarray to work with EOPF Zarr datasets
+- **Features**:
+  - Open EOPFZarr subdatasets with `rioxarray.open_rasterio()`  
+  - Automatic CRS (Coordinate Reference System) handling
+  - Spatial bounds and transformations
+  - Lazy loading with Dask for efficient memory usage
+  - Full xarray functionality (slicing, computations, plotting)
+- **Use Case**: NDVI calculation and visualization from Sentinel-3 OLCI data
+
+#### `09-EOPFZARR-with-Rasterio.ipynb`
+
+- **Purpose**: Demonstrates how to use the EOPFZARR GDAL driver with rasterio to work with EOPF Zarr datasets
+- **Features**:
+  - Open EOPF Zarr datasets with `rasterio.open()`
+  - List and access subdatasets  
+  - Read geospatial metadata (CRS, transform, bounds)
+  - Efficient windowed reading
+  - NumPy array integration
+  - Fast and lightweight (no eager subdataset loading like rioxarray)
+- **Use Case**: NDVI calculation and visualization from Sentinel-3 OLCI data
+
+
+
+## Quick Start
+
+### Installation Options
 
 #### Option 1: Docker Environment (Recommended)
 
@@ -167,7 +192,7 @@ export GDAL_DRIVER_PATH=$PWD/build
 - **Docker Quick Start**: [../DOCKER_QUICKSTART.md](../DOCKER_QUICKSTART.md)
 - **Troubleshooting**: [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
 
-## 📖 Usage Examples
+## Usage Examples
 
 ### Basic EOPFZARR Usage
 
@@ -186,12 +211,48 @@ ds = gdal.Open('EOPFZARR:"/vsicurl/https://example.com/data.zarr"')
 ```python
 import rasterio
 
-# Use ZARR scheme for rasterio compatibility
-with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
+# Direct access to datasets
+with rasterio.open('EOPFZARR:"/vsicurl/https://example.com/data.zarr"') as src:
+    data = src.read(1)
+    
+# Access subdatasets (note the colon separator)
+with rasterio.open('EOPFZARR:"/vsicurl/https://example.com/data.zarr":measurements/band') as src:
     data = src.read(1)
 ```
 
-## 🔧 Key Findings and Best Practices
+### Working with Rioxarray
+
+```python
+import rioxarray
+
+# Direct access to subdatasets
+path = 'EOPFZARR:"/vsicurl/https://example.com/data.zarr":measurements/band'
+da = rioxarray.open_rasterio(path)
+
+# Full xarray functionality available
+subset = da.isel(x=slice(0, 100), y=slice(0, 100))
+result = subset.compute()
+```
+
+## 🌍 Data Sources
+
+The notebooks use publicly accessible Earth Observation data:
+
+- **Sentinel-2 MSI L1C**: Multispectral optical imagery
+  - Provider: European Space Agency (ESA) via Copernicus Data Space
+  - Access: Public S3-compatible object storage
+  
+- **Sentinel-3 OLCI**: Ocean and Land Color Instrument data
+  - Provider: European Space Agency (ESA) via Copernicus Data Space
+  - Products: Level-1 EFR (Earth Observation Full Resolution)
+  - Access: Public HTTPS endpoints
+
+- **Custom Test Data**: Small synthetic datasets for testing
+  - Generated within notebooks for demonstration purposes
+
+All remote data URLs in notebooks point to publicly accessible endpoints and require no authentication.
+
+## Key Findings and Best Practices
 
 ### Path Formatting
 
@@ -201,8 +262,9 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 
 ### Rasterio Compatibility
 
-- ✅ **EOPFZARR driver**: Full rasterio support
-
+- ✅ **EOPFZARR driver**: Full rasterio support with correct path format
+- ✅ **Rioxarray**: Full support using `EOPFZARR:"path":subdataset` format
+- ⚠️ **Path format**: Use `EOPFZARR:"/vsicurl/url":subdataset` for subdatasets (colon-separated)
 
 ### Performance Tips
 
@@ -210,19 +272,38 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 - Enable caching for repeated access to remote data
 - Use subdataset URLs for direct array access
 
-## 🎯 Common Use Cases
+## 📖 Recommended Learning Path
+
+### For Beginners
+1. **`01-Basic-Functionality-Demo.ipynb`** - Start here to understand the basics
+2. **`02-Remote-Data-Access-Demo.ipynb`** - Learn remote data access patterns
+3. **`04-Explore_sentinel2_EOPFZARR.ipynb`** - Real-world Sentinel-2 examples
+4. **`06-Data-Visualization.ipynb`** - Visualization techniques
+
+### For Python Library Users
+1. **`09-EOPFZARR-with-Rasterio.ipynb`** - Rasterio integration (fast, lightweight)
+2. **`08-EOPFZARR-with-Rioxarray.ipynb`** - Rioxarray integration (xarray ecosystem)
+3. **`07-Sentinel-3-OLCI-Level-1-EFR.ipynb`** - Advanced Sentinel-3 analysis
+
+### For Developers
+1. **`03-EOPF-Zarr-Test.ipynb`** - Environment setup and validation
+2. **`05-GDAL-ZARR-Comparison.ipynb`** - Compare with standard GDAL Zarr driver
+3. All other notebooks - Reference implementations
+
+## Common Use Cases
 
 ### Scientific Data Analysis
 
 1. Start with `01-Basic-Functionality-Demo.ipynb`
 2. Use `05-GDAL-ZARR-Comparison.ipynb` for standard GDAL comparison
-3. Explore `04-Explore_sentinel2_EOPFZARR.ipynb` for real-world examples
+3. Explore `04-Explore_sentinel2_EOPFZARR.ipynb` or `07-Sentinel-3-OLCI-Level-1-EFR.ipynb` for real-world examples
 4. Apply `06-Data-Visualization.ipynb` for visualization
+5. Use `08-EOPFZARR-with-Rioxarray.ipynb` for xarray-based workflows
 
 ### Production Integration
 
 1. Review `02-Remote-Data-Access-Demo.ipynb` for remote data patterns
-2. Check `04-Explore_sentinel2_EOPFZARR.ipynb` for integration considerations
+2. Check `09-EOPFZARR-with-Rasterio.ipynb` for efficient integration
 3. Use `03-EOPF-Zarr-Test.ipynb` for deployment validation
 
 ### Development and Testing
@@ -233,11 +314,13 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 
 ## 📊 Compatibility Matrix
 
-| Operation | GDAL + EOPFZARR | GDAL + ZARR | Rasterio + ZARR | Rasterio + EOPFZARR |
-|-----------|------------------|-------------|------------------|---------------------|
-| Local data | ✅ Full support | ✅ Full support | ✅ Full support | ✅ URL scheme issue |
-| Remote data | ✅ Full support | ✅ Full support | ✅ Full support | ✅ URL scheme issue |
-| Subdatasets | ✅ Full support | ✅ Full support | ✅ Full support | ✅ URL scheme issue |
+| Operation | GDAL + EOPFZARR | Rasterio + EOPFZARR | Rioxarray + EOPFZARR |
+|-----------|------------------|---------------------|----------------------|
+| Local data | ✅ Full support | ✅ Full support | ✅ Full support |
+| Remote data | ✅ Full support | ✅ Full support | ✅ Full support |
+| Subdatasets | ✅ Full support | ✅ Full support | ✅ Full support (use proper format) |
+| CRS/Transform | ✅ Full support | ✅ Full support | ✅ Full support |
+| Lazy loading | N/A | ✅ Full support | ✅ Full support (with Dask) |
 
 ## 🐛 Troubleshooting
 
@@ -249,10 +332,11 @@ with rasterio.open('ZARR:"/vsicurl/https://example.com/data.zarr"') as src:
 - Check `GDAL_DRIVER_PATH` environment variable
 - Verify with `gdal.GetDriverByName('EOPFZARR')`
 
-#### "No such file or directory" with rasterio
+#### Subdataset path format errors
 
-- This is expected - rasterio doesn't recognize EOPFZARR scheme
-- Use ZARR scheme or GDAL directly
+- Use colon separator: `EOPFZARR:"base/path":subdataset`
+- NOT slash: `EOPFZARR:"base/path/subdataset"` ❌
+- See notebooks 08 and 09 for correct examples
 
 #### Remote data access fails
 
