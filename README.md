@@ -127,7 +127,6 @@ da.rio.to_raster('output.tif')
 
 **See Examples:**
 - Comprehensive notebook: `notebooks/08-EOPFZARR-with-Rioxarray.ipynb`
-- Test script: `test_rioxarray_functionality2.py`
 
 ## Configuration
 
