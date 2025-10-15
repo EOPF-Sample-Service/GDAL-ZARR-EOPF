@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Apple Silicon (arm64) support in GitHub Actions CI/CD pipeline
+- Separate build artifacts for macOS Intel (x86_64) and Apple Silicon (arm64)
+- Architecture-specific artifact naming: `gdal_EOPFZarr-macOS-x86_64` and `gdal_EOPFZarr-macOS-arm64`
+
+### Changed
+
+- GitHub Actions now builds on both `macos-13` (Intel) and `macos-14` (Apple Silicon)
+- Improved artifact upload specificity with platform-specific steps
+- Enhanced error detection with `if-no-files-found: error` for all artifacts
+
 ### Planning
 
 - Future enhancements and improvements
