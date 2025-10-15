@@ -127,7 +127,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macos-13]
+        os: [ubuntu-24.04, windows-latest, macos-13, macos-14]
+        include:
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -364,15 +369,29 @@ jobs:
           gdalinfo --formats | findstr "EOPFZARR"
 
       # Upload Artifacts
-      - name: Upload Build Artifact
+      - name: Upload Build Artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdal_EOPFZarr-${{ runner.os }}-${{ matrix.arch }}
+          path: build/gdal_EOPFZarr.dylib
+          if-no-files-found: error
+
+      - name: Upload Build Artifact (Linux)
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: gdal_EOPFZarr-${{ runner.os }}
-          path: |
-            build/gdal_EOPFZarr.so
-            build/gdal_EOPFZarr.dylib
-            build/Release/gdal_EOPFZarr.dll
-          if-no-files-found: ignore
+          path: build/gdal_EOPFZarr.so
+          if-no-files-found: error
+
+      - name: Upload Build Artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdal_EOPFZarr-${{ runner.os }}
+          path: build/Release/gdal_EOPFZarr.dll
+          if-no-files-found: error
 
   package-release:
     name: Package Release Artifacts
