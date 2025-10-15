@@ -98,6 +98,37 @@ sub_ds = gdal.Open('EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/
 array = sub_ds.ReadAsArray()
 ```
 
+### Using with rioxarray
+
+rioxarray extends xarray with rasterio (GDAL) capabilities for seamless geospatial data handling:
+
+```python
+import rioxarray
+
+# Open EOPF Zarr subdataset
+da = rioxarray.open_rasterio('EOPFZARR:/path/to/data.zarr:measurements/band')
+
+# Access geospatial metadata
+print(da.rio.crs)       # Coordinate Reference System
+print(da.rio.bounds())  # Bounding box coordinates
+print(da.rio.transform())  # Affine transform
+
+# Reproject to different CRS
+da_reproj = da.rio.reproject('EPSG:3857')
+
+# Clip to area of interest
+from shapely.geometry import box
+bbox = box(minx, miny, maxx, maxy)
+da_clipped = da.rio.clip([bbox], crs=da.rio.crs)
+
+# Write to GeoTIFF
+da.rio.to_raster('output.tif')
+```
+
+**See Examples:**
+- Comprehensive notebook: `notebooks/08-EOPFZARR-with-Rioxarray.ipynb`
+- Test script: `test_rioxarray_functionality2.py`
+
 ## Configuration
 
 ### Subdataset Access Formats
