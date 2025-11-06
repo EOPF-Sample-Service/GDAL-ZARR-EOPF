@@ -377,7 +377,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                      "proj:bbox not found for EPSG:%d, will check for geographic bbox",
                      nEPSG);
         }
-        
+
         // If proj:bbox was found and processed, return early
         if (foundProjBbox)
         {
@@ -456,7 +456,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
     if (!hasBounds && stacDiscovery.IsValid())
     {
         CPLJSONArray geoBbox;
-        
+
         // First check for bbox directly under stac_discovery (EOPF Zarr structure)
         geoBbox = stacDiscovery.GetArray("bbox");
         if (!geoBbox.IsValid() || geoBbox.Size() < 4)
@@ -468,14 +468,14 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                 geoBbox = properties.GetArray("bbox");
             }
         }
-        
+
         if (geoBbox.IsValid() && geoBbox.Size() >= 4)
         {
             double bbox0 = geoBbox[0].ToDouble();
             double bbox1 = geoBbox[1].ToDouble();
             double bbox2 = geoBbox[2].ToDouble();
             double bbox3 = geoBbox[3].ToDouble();
-            
+
             // STAC standard is [west, south, east, north] = [minLon, minLat, maxLon, maxLat]
             // But EOPF Zarr may use [east, south, west, north] = [maxLon, minLat, minLon, maxLat]
             // Detect this by checking if bbox[0] > bbox[2]
@@ -489,7 +489,10 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                 CPLDebug("EOPFZARR",
                          "Detected non-standard bbox ordering [east,south,west,north]: "
                          "[%.8f,%.8f,%.8f,%.8f]",
-                         bbox0, bbox1, bbox2, bbox3);
+                         bbox0,
+                         bbox1,
+                         bbox2,
+                         bbox3);
             }
             else
             {
@@ -499,7 +502,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                 maxX = bbox2;
                 maxY = bbox3;
             }
-            
+
             // For UTM products: geographic bbox cannot be used directly as projected coordinates
             // Skip geotransform; CRS is already set so GDAL can handle transformations when needed
             if (isUTM)
@@ -553,7 +556,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
             hasBounds = true;
             isUTM = false;  // Defaulting to geographic
             nEPSG = 4326;   // Assuming WGS84 for these defaults
-            
+
             // Ensure WGS84 projection is set
             OGRSpatialReference srs_default_geo;
             srs_default_geo.SetWellKnownGeogCS("WGS84");
