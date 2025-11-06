@@ -235,6 +235,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
     
     # No GDAL linking needed for this simple test
     
+    # 2c. BBox ordering unit tests (no GDAL dependency) - Issue #135
+    add_executable(test_bbox_ordering_unit
+        tests/test_bbox_ordering_unit.cpp
+    )
+    
+    # No GDAL linking needed for this simple test
+    
     # ===== GDAL INTEGRATION TESTS (Require OSGeo4W) =====
     
     # 3. Driver integration tests
@@ -300,6 +307,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
              
     add_test(NAME unit_path_parsing_simple 
              COMMAND test_path_parsing_unit)
+             
+    add_test(NAME unit_bbox_ordering 
+             COMMAND test_bbox_ordering_unit)
              
     add_test(NAME sample_data_structure
              COMMAND test_sample_data_structure)
