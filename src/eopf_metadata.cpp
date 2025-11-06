@@ -370,31 +370,20 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
         }
         else
         {
-            CPLDebug(
-                "EOPFZARR", "proj:bbox not found for EPSG:%d, using default UTM values", nEPSG);
-            double gt[6] = {500000.0, 30.0, 0.0, 5000000.0, 0.0, -30.0};
-            ds.SetGeoTransform(gt);  // Apply geotransform to dataset
-
-            CPLString transformStr;
-            for (int i = 0; i < 6; ++i)
-            {
-                if (i > 0)
-                    transformStr += ",";
-                transformStr += CPLString().Printf("%.12f", gt[i]);
-            }
-            ds.SetMetadataItem("geo_transform", transformStr.c_str());  // Keep for metadata
+            // No proj:bbox found for UTM product
+            // Don't set default values - let it fall through to process geographic bbox
+            // The geographic bbox will be processed below and can be used with the UTM CRS
             CPLDebug("EOPFZARR",
-                     "Set hardcoded UTM Zone 32N geotransform and applied: %s",
-                     transformStr.c_str());
-
-            ds.SetMetadataItem("utm_easting_min", "500000.00000000");
-            ds.SetMetadataItem("utm_easting_max", "515360.00000000");    // Example based on 512*30m
-            ds.SetMetadataItem("utm_northing_min", "4984640.00000000");  // Example based on 512*30m
-            ds.SetMetadataItem("utm_northing_max", "5000000.00000000");
+                     "proj:bbox not found for EPSG:%d, will check for geographic bbox",
+                     nEPSG);
         }
-        // Geographic bbox handling (remains the same as your original code)
-        // ...
-        return;  // Return after handling UTM case
+        
+        // If proj:bbox was found and processed, return early
+        if (foundProjBbox)
+        {
+            return;  // Return after successfully handling UTM case with proj:bbox
+        }
+        // Otherwise, fall through to process geographic bbox below
     }
 
     // -----------------------------------
@@ -466,20 +455,71 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
     // Or if this is meant for truly geographic (e.g. EPSG:4326) datasets.
     if (!hasBounds && stacDiscovery.IsValid())
     {
-        const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
-        if (properties.IsValid())
+        CPLJSONArray geoBbox;
+        
+        // First check for bbox directly under stac_discovery (EOPF Zarr structure)
+        geoBbox = stacDiscovery.GetArray("bbox");
+        if (!geoBbox.IsValid() || geoBbox.Size() < 4)
         {
-            CPLJSONArray geoBbox = properties.GetArray("bbox");  // STAC bbox (lon,lat,lon,lat)
-            if (geoBbox.IsValid() && geoBbox.Size() >= 4)
+            // Fallback to STAC standard location (properties.bbox)
+            const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+            if (properties.IsValid())
             {
-                minX = geoBbox[0].ToDouble();  // minLon
-                minY = geoBbox[1].ToDouble();  // minLat
-                maxX = geoBbox[2].ToDouble();  // maxLon
-                maxY = geoBbox[3].ToDouble();  // maxLat
-                hasBounds = true;
-                isUTM = false;  // Explicitly not UTM if we are using STAC geographic bbox
+                geoBbox = properties.GetArray("bbox");
+            }
+        }
+        
+        if (geoBbox.IsValid() && geoBbox.Size() >= 4)
+        {
+            double bbox0 = geoBbox[0].ToDouble();
+            double bbox1 = geoBbox[1].ToDouble();
+            double bbox2 = geoBbox[2].ToDouble();
+            double bbox3 = geoBbox[3].ToDouble();
+            
+            // STAC standard is [west, south, east, north] = [minLon, minLat, maxLon, maxLat]
+            // But EOPF Zarr may use [east, south, west, north] = [maxLon, minLat, minLon, maxLat]
+            // Detect this by checking if bbox[0] > bbox[2]
+            if (bbox0 > bbox2)
+            {
+                // Non-standard ordering detected
+                minX = bbox2;  // minLon from position 2
+                minY = bbox1;  // minLat from position 1
+                maxX = bbox0;  // maxLon from position 0
+                maxY = bbox3;  // maxLat from position 3
                 CPLDebug("EOPFZARR",
-                         "Using STAC geographic bbox: [%.8f,%.8f,%.8f,%.8f]",
+                         "Detected non-standard bbox ordering [east,south,west,north]: "
+                         "[%.8f,%.8f,%.8f,%.8f]",
+                         bbox0, bbox1, bbox2, bbox3);
+            }
+            else
+            {
+                // Standard STAC ordering
+                minX = bbox0;
+                minY = bbox1;
+                maxX = bbox2;
+                maxY = bbox3;
+            }
+            
+            // For UTM products: geographic bbox cannot be used directly as projected coordinates
+            // Skip geotransform; CRS is already set so GDAL can handle transformations when needed
+            if (isUTM)
+            {
+                CPLDebug("EOPFZARR",
+                         "Geographic bbox found for UTM product (EPSG:%d): [%.8f,%.8f,%.8f,%.8f] - "
+                         "CRS set but skipping geotransform (would need coordinate transformation)",
+                         nEPSG,
+                         minX,
+                         minY,
+                         maxX,
+                         maxY);
+                // Leave hasBounds=false to skip geotransform setting
+            }
+            else
+            {
+                // Geographic coordinate system - can use bbox directly
+                hasBounds = true;
+                CPLDebug("EOPFZARR",
+                         "Using geographic bbox (corrected): [%.8f,%.8f,%.8f,%.8f]",
                          minX,
                          minY,
                          maxX,
@@ -490,39 +530,31 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
 
 
     // If no bounds found after all attempts, create default bounds
+    // BUT: For UTM products without proj:bbox, do NOT create default bounds
+    // as they would be incorrectly transformed from geographic to UTM
     if (!hasBounds)
     {
-        minX = 10.0;  // longitude
-        minY = 40.0;  // latitude
-        maxX = 15.0;  // longitude
-        maxY = 45.0;  // latitude
-        hasBounds = true;
-
-        // Debug: Show the values before condition check
-        CPLDebug("EOPFZARR",
-                 "Creating default bounds: nEPSG=%d, isUTM=%s",
-                 nEPSG,
-                 isUTM ? "true" : "false");
-
-        // Check if we already have a valid UTM projection from CRS inference
+        // Check if this is a UTM product without bounds
         if (nEPSG != 0 && isUTM)
         {
-            // Preserve the already-inferred UTM projection
+            // UTM product without proj:bbox - CRS is already set, skip geotransform
             CPLDebug("EOPFZARR",
-                     "No specific bounds found, using default geographic bounds but preserving UTM "
-                     "projection (EPSG:%d): [%.8f,%.8f,%.8f,%.8f]",
-                     nEPSG,
-                     minX,
-                     minY,
-                     maxX,
-                     maxY);
+                     "UTM product (EPSG:%d) without proj:bbox - CRS set, no geotransform",
+                     nEPSG);
+            // Leave hasBounds=false to skip geotransform setting below
         }
         else
         {
-            // Fallback to WGS84 if no UTM projection was inferred
+            // Create default geographic bounds for non-UTM products
+            minX = 10.0;  // longitude
+            minY = 40.0;  // latitude
+            maxX = 15.0;  // longitude
+            maxY = 45.0;  // latitude
+            hasBounds = true;
             isUTM = false;  // Defaulting to geographic
             nEPSG = 4326;   // Assuming WGS84 for these defaults
-            // Ensure WGS84 projection is set if we fall here
+            
+            // Ensure WGS84 projection is set
             OGRSpatialReference srs_default_geo;
             srs_default_geo.SetWellKnownGeogCS("WGS84");
             srs_default_geo.SetAuthority("GEOGCS", "EPSG", 4326);
@@ -534,7 +566,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
             ds.SetMetadataItem("proj:epsg", "4326");
             CPLFree(pszDefaultWKT);
             CPLDebug("EOPFZARR",
-                     "No specific bounds found, created default geographic bounds (EPSG:4326): "
+                     "No bounds found, created default geographic bounds (EPSG:4326): "
                      "[%.8f,%.8f,%.8f,%.8f]",
                      minX,
                      minY,
