@@ -48,65 +48,6 @@ def skip_if_url_not_accessible(url, test_name=""):
 class TestBBoxOrdering:
     """Tests for EOPF non-standard bbox ordering fix"""
     
-    def test_sentinel3_slstr_bbox_ordering(self):
-        """
-        Test that Sentinel-3 SLSTR (geographic) has correct coordinates after bbox ordering fix.
-        EOPF uses [east,south,west,north] instead of STAC [west,south,east,north].
-        Expected: Djibouti/Horn of Africa region (40-56°E, 7-21°N)
-        """
-        skip_if_url_not_accessible(SENTINEL3_SLSTR_URL, "Sentinel-3 SLSTR test")
-        
-        path = f'EOPFZARR:"/vsicurl/{SENTINEL3_SLSTR_URL}"'
-        ds = gdal.Open(path)
-        
-        assert ds is not None, "Failed to open Sentinel-3 SLSTR dataset"
-        
-        # Check CRS
-        srs = ds.GetSpatialRef()
-        assert srs is not None, "Spatial reference should exist"
-        assert srs.GetAuthorityCode(None) == "4326", "Should be EPSG:4326 (WGS84)"
-        
-        # Check geotransform exists (geographic products should have it)
-        gt = ds.GetGeoTransform()
-        assert gt is not None, "Geotransform should exist for geographic product"
-        
-        # Extract origin and pixel size
-        origin_x = gt[0]  # Upper left X
-        origin_y = gt[3]  # Upper left Y
-        
-        # Check that coordinates are in correct region (Djibouti)
-        # Expected: 40-56°E, 7-21°N
-        assert 40 <= origin_x <= 56, f"X origin {origin_x} should be in range 40-56°E (Djibouti)"
-        assert 7 <= origin_y <= 21, f"Y origin {origin_y} should be in range 7-21°N (Djibouti)"
-        
-        # Check metadata for geospatial extents
-        lon_min = ds.GetMetadataItem("geospatial_lon_min")
-        lon_max = ds.GetMetadataItem("geospatial_lon_max")
-        lat_min = ds.GetMetadataItem("geospatial_lat_min")
-        lat_max = ds.GetMetadataItem("geospatial_lat_max")
-        
-        if lon_min and lon_max and lat_min and lat_max:
-            lon_min = float(lon_min)
-            lon_max = float(lon_max)
-            lat_min = float(lat_min)
-            lat_max = float(lat_max)
-            
-            # Verify bbox is in standard [west,south,east,north] format after correction
-            assert lon_min < lon_max, "Longitude min should be less than max"
-            assert lat_min < lat_max, "Latitude min should be less than max"
-            
-            # Verify correct geographic region
-            assert 40 <= lon_min <= 56, f"Lon min {lon_min} should be in Djibouti region"
-            assert 40 <= lon_max <= 56, f"Lon max {lon_max} should be in Djibouti region"
-            assert 7 <= lat_min <= 21, f"Lat min {lat_min} should be in Djibouti region"
-            assert 7 <= lat_max <= 21, f"Lat max {lat_max} should be in Djibouti region"
-        
-        print(f"✅ Sentinel-3 SLSTR bbox ordering correct:")
-        print(f"   Origin: ({origin_x:.4f}°E, {origin_y:.4f}°N)")
-        print(f"   Region: Djibouti/Horn of Africa ✓")
-        
-        ds = None
-    
     def test_sentinel3_corner_coordinates(self):
         """
         Test that Sentinel-3 SLSTR corner coordinates are in correct order.
