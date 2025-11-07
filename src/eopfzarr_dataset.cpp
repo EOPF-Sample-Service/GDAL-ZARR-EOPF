@@ -421,14 +421,13 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     // IMPORTANT: We need to open the ROOT dataset to enumerate all subdatasets
     // because mInner points to a leaf subdataset (like s7_bt_in) which has no subdatasets.
     // Only the root dataset contains the full subdataset list.
-    
+
     std::string rootEOPFPath = "EOPFZARR:\"" + rootPath + "\"";
     CPLDebug("EOPFZARR", "Opening root dataset: %s", rootEOPFPath.c_str());
-    
-    GDALDataset* rootDS = GDALDataset::FromHandle(
-        GDALOpenEx(rootEOPFPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, 
-                   nullptr, nullptr, nullptr));
-    
+
+    GDALDataset* rootDS = GDALDataset::FromHandle(GDALOpenEx(
+        rootEOPFPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
+
     if (!rootDS)
     {
         CPLDebug("EOPFZARR", "Failed to open root dataset for geolocation array search");
@@ -439,8 +438,9 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
     if (papszSubdatasets)
     {
-        CPLDebug("EOPFZARR", "Searching root subdatasets for lat/lon in group: %s", groupPath.c_str());
-        
+        CPLDebug(
+            "EOPFZARR", "Searching root subdatasets for lat/lon in group: %s", groupPath.c_str());
+
         for (int i = 0; papszSubdatasets[i] != nullptr; i++)
         {
             char* pszKey = nullptr;
@@ -503,7 +503,7 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     {
         CPLDebug("EOPFZARR", "No subdatasets found in root dataset");
     }
-    
+
     // Close the root dataset - we're done with it
     GDALClose(rootDS);
 
