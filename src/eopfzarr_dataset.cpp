@@ -418,10 +418,29 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     std::string latPath, lonPath;
     bool foundLat = false, foundLon = false;
 
-    // Check if latitude/longitude arrays exist as subdatasets
-    char** papszSubdatasets = mInner->GetMetadata("SUBDATASETS");
+    // IMPORTANT: We need to open the ROOT dataset to enumerate all subdatasets
+    // because mInner points to a leaf subdataset (like s7_bt_in) which has no subdatasets.
+    // Only the root dataset contains the full subdataset list.
+    
+    std::string rootEOPFPath = "EOPFZARR:\"" + rootPath + "\"";
+    CPLDebug("EOPFZARR", "Opening root dataset: %s", rootEOPFPath.c_str());
+    
+    GDALDataset* rootDS = GDALDataset::FromHandle(
+        GDALOpenEx(rootEOPFPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, 
+                   nullptr, nullptr, nullptr));
+    
+    if (!rootDS)
+    {
+        CPLDebug("EOPFZARR", "Failed to open root dataset for geolocation array search");
+        return;
+    }
+
+    // Get all subdatasets from the root dataset
+    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
     if (papszSubdatasets)
     {
+        CPLDebug("EOPFZARR", "Searching root subdatasets for lat/lon in group: %s", groupPath.c_str());
+        
         for (int i = 0; papszSubdatasets[i] != nullptr; i++)
         {
             char* pszKey = nullptr;
@@ -431,13 +450,32 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
             {
                 std::string subdataset(pszValue);
 
+                // Extract the path component after the colon
+                // EOPFZARR:"url":/path/to/array -> /path/to/array
+                size_t colonPos = subdataset.rfind("\":");
+                std::string arrayPath;
+                if (colonPos != std::string::npos)
+                {
+                    arrayPath = subdataset.substr(colonPos + 2);
+                }
+                else
+                {
+                    arrayPath = subdataset;
+                }
+
+                // Check if this subdataset is in the same group path
+                if (arrayPath.find(groupPath) != 0)
+                {
+                    continue;  // Not in our group, skip
+                }
+
                 // Check for latitude arrays
                 for (int j = 0; latNames[j] != nullptr && !foundLat; j++)
                 {
                     std::string latPattern = groupPath + "/" + latNames[j];
-                    if (subdataset.find(latPattern) != std::string::npos)
+                    if (arrayPath == latPattern || arrayPath.find(latPattern + "/") == 0)
                     {
-                        latPath = latPattern;
+                        latPath = arrayPath;
                         foundLat = true;
                         CPLDebug("EOPFZARR", "Found latitude array: %s", latPath.c_str());
                     }
@@ -447,9 +485,9 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
                 for (int j = 0; lonNames[j] != nullptr && !foundLon; j++)
                 {
                     std::string lonPattern = groupPath + "/" + lonNames[j];
-                    if (subdataset.find(lonPattern) != std::string::npos)
+                    if (arrayPath == lonPattern || arrayPath.find(lonPattern + "/") == 0)
                     {
-                        lonPath = lonPattern;
+                        lonPath = arrayPath;
                         foundLon = true;
                         CPLDebug("EOPFZARR", "Found longitude array: %s", lonPath.c_str());
                     }
@@ -461,6 +499,13 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
                 break;
         }
     }
+    else
+    {
+        CPLDebug("EOPFZARR", "No subdatasets found in root dataset");
+    }
+    
+    // Close the root dataset - we're done with it
+    GDALClose(rootDS);
 
     // If we found both lat and lon arrays, set up GEOLOCATION metadata
     if (foundLat && foundLon)
