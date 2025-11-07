@@ -41,6 +41,7 @@ class EOPFZarrDataset : public GDALPamDataset
     void LoadEOPFMetadata();
     void LoadGeospatialInfo() const;
     void ProcessCornerCoordinates() const;
+    void ProcessGeolocationArrays();
     void UpdateBandDescriptionsFromMetadata();
 
     char** GetFileList() override;
