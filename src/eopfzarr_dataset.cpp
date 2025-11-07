@@ -280,6 +280,9 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
     // Process corner coordinates with caching
     ProcessCornerCoordinates();
 
+    // Process geolocation arrays after geotransform is set
+    const_cast<EOPFZarrDataset*>(this)->ProcessGeolocationArrays();
+
     mGeospatialInfoProcessed = true;
 }
 
@@ -368,6 +371,195 @@ void EOPFZarrDataset::ProcessCornerCoordinates() const
             hasUtmCorners ? utmMaxX : lonMax,
             hasUtmCorners ? utmMinY : latMin,
             hasUtmCorners ? utmMaxY : latMax);
+    }
+}
+
+void EOPFZarrDataset::ProcessGeolocationArrays()
+{
+    EOPF_PERF_TIMER("EOPFZarrDataset::ProcessGeolocationArrays");
+
+    // Skip if this is a subdataset (geolocation should only be on measurement subdatasets)
+    const char* pszSubdatasetPath = GetMetadataItem("SUBDATASET_PATH");
+    if (!pszSubdatasetPath || strlen(pszSubdatasetPath) == 0)
+    {
+        CPLDebug("EOPFZARR", "ProcessGeolocationArrays: Skipping root dataset");
+        return;
+    }
+
+    // Get the root path for constructing subdataset names
+    std::string description = mInner->GetDescription();
+    std::string rootPath = ExtractRootPath(description);
+
+    // Check if we have lat/lon subdatasets in the same group
+    // For EOPF Zarr, lat/lon are typically in the same directory as the measurement data
+    // Example: measurements/inadir/s7_bt_in and measurements/inadir/latitude,
+    // measurements/inadir/longitude
+
+    std::string subdatasetPathStr(pszSubdatasetPath);
+    std::string groupPath;
+
+    // Extract the group path (everything except the last component)
+    size_t lastSlash = subdatasetPathStr.find_last_of("/\\");
+    if (lastSlash != std::string::npos)
+    {
+        groupPath = subdatasetPathStr.substr(0, lastSlash);
+    }
+    else
+    {
+        groupPath = subdatasetPathStr;
+    }
+
+    CPLDebug("EOPFZARR", "ProcessGeolocationArrays: Group path = %s", groupPath.c_str());
+
+    // Try common lat/lon coordinate array names
+    const char* latNames[] = {"latitude", "lat", nullptr};
+    const char* lonNames[] = {"longitude", "lon", nullptr};
+
+    std::string latPath, lonPath;
+    bool foundLat = false, foundLon = false;
+
+    // IMPORTANT: We need to open the ROOT dataset to enumerate all subdatasets
+    // because mInner points to a leaf subdataset (like s7_bt_in) which has no subdatasets.
+    // Only the root dataset contains the full subdataset list.
+
+    std::string rootEOPFPath = "EOPFZARR:\"" + rootPath + "\"";
+    CPLDebug("EOPFZARR", "Opening root dataset: %s", rootEOPFPath.c_str());
+
+    GDALDataset* rootDS = GDALDataset::FromHandle(GDALOpenEx(
+        rootEOPFPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
+
+    if (!rootDS)
+    {
+        CPLDebug("EOPFZARR", "Failed to open root dataset for geolocation array search");
+        return;
+    }
+
+    // Get all subdatasets from the root dataset
+    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
+    if (papszSubdatasets)
+    {
+        CPLDebug(
+            "EOPFZARR", "Searching root subdatasets for lat/lon in group: %s", groupPath.c_str());
+
+        for (int i = 0; papszSubdatasets[i] != nullptr; i++)
+        {
+            char* pszKey = nullptr;
+            const char* pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
+
+            if (pszKey && pszValue && strstr(pszKey, "_NAME"))
+            {
+                std::string subdataset(pszValue);
+
+                // Extract the path component after the colon
+                // EOPFZARR:"url":/path/to/array -> /path/to/array
+                size_t colonPos = subdataset.rfind("\":");
+                std::string arrayPath;
+                if (colonPos != std::string::npos)
+                {
+                    arrayPath = subdataset.substr(colonPos + 2);
+                }
+                else
+                {
+                    arrayPath = subdataset;
+                }
+
+                // Check if this subdataset is in the same group path
+                if (arrayPath.find(groupPath) != 0)
+                {
+                    continue;  // Not in our group, skip
+                }
+
+                // Check for latitude arrays
+                for (int j = 0; latNames[j] != nullptr && !foundLat; j++)
+                {
+                    std::string latPattern = groupPath + "/" + latNames[j];
+                    if (arrayPath == latPattern || arrayPath.find(latPattern + "/") == 0)
+                    {
+                        latPath = arrayPath;
+                        foundLat = true;
+                        CPLDebug("EOPFZARR", "Found latitude array: %s", latPath.c_str());
+                    }
+                }
+
+                // Check for longitude arrays
+                for (int j = 0; lonNames[j] != nullptr && !foundLon; j++)
+                {
+                    std::string lonPattern = groupPath + "/" + lonNames[j];
+                    if (arrayPath == lonPattern || arrayPath.find(lonPattern + "/") == 0)
+                    {
+                        lonPath = arrayPath;
+                        foundLon = true;
+                        CPLDebug("EOPFZARR", "Found longitude array: %s", lonPath.c_str());
+                    }
+                }
+            }
+            CPLFree(pszKey);
+
+            if (foundLat && foundLon)
+                break;
+        }
+    }
+    else
+    {
+        CPLDebug("EOPFZARR", "No subdatasets found in root dataset");
+    }
+
+    // Close the root dataset - we're done with it
+    GDALClose(rootDS);
+
+    // If we found both lat and lon arrays, set up GEOLOCATION metadata
+    if (foundLat && foundLon)
+    {
+        CPLDebug("EOPFZARR", "Setting up GEOLOCATION metadata domain");
+
+        // Construct EOPFZARR subdataset paths for lat/lon arrays
+        std::string latDataset = "EOPFZARR:\"" + rootPath + "\":/" + latPath;
+        std::string lonDataset = "EOPFZARR:\"" + rootPath + "\":/" + lonPath;
+
+        // Set GEOLOCATION metadata following GDAL conventions
+        // See: https://gdal.org/tutorials/geolocation.html
+        SetMetadataItem("X_DATASET", lonDataset.c_str(), "GEOLOCATION");
+        SetMetadataItem("X_BAND", "1", "GEOLOCATION");
+        SetMetadataItem("Y_DATASET", latDataset.c_str(), "GEOLOCATION");
+        SetMetadataItem("Y_BAND", "1", "GEOLOCATION");
+
+        // Pixel/line offsets and steps
+        // Assuming full resolution (step=1, offset=0)
+        SetMetadataItem("PIXEL_OFFSET", "0", "GEOLOCATION");
+        SetMetadataItem("LINE_OFFSET", "0", "GEOLOCATION");
+        SetMetadataItem("PIXEL_STEP", "1", "GEOLOCATION");
+        SetMetadataItem("LINE_STEP", "1", "GEOLOCATION");
+
+        // Set the SRS - for lat/lon arrays, this is WGS84
+        const char* WGS84_WKT =
+            "GEOGCS[\"WGS 84\","
+            "DATUM[\"WGS_1984\","
+            "SPHEROID[\"WGS 84\",6378137,298.257223563,"
+            "AUTHORITY[\"EPSG\",\"7030\"]],"
+            "AUTHORITY[\"EPSG\",\"6326\"]],"
+            "PRIMEM[\"Greenwich\",0,"
+            "AUTHORITY[\"EPSG\",\"8901\"]],"
+            "UNIT[\"degree\",0.0174532925199433,"
+            "AUTHORITY[\"EPSG\",\"9122\"]],"
+            "AXIS[\"Latitude\",NORTH],"
+            "AXIS[\"Longitude\",EAST],"
+            "AUTHORITY[\"EPSG\",\"4326\"]]";
+
+        SetMetadataItem("SRS", WGS84_WKT, "GEOLOCATION");
+
+        CPLDebug("EOPFZARR",
+                 "Geolocation arrays configured:\n"
+                 "  X_DATASET (lon): %s\n"
+                 "  Y_DATASET (lat): %s",
+                 lonDataset.c_str(),
+                 latDataset.c_str());
+    }
+    else
+    {
+        CPLDebug("EOPFZARR",
+                 "No geolocation arrays found (lat=%s, lon=%s)",
+                 foundLat ? "found" : "not found",
+                 foundLon ? "found" : "not found");
     }
 }
 
