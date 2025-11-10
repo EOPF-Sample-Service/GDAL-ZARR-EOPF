@@ -8,7 +8,8 @@ A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Z
 ## Features
 
 - **QGIS integration** - Works with "Add Raster Layer"
-- **Geospatial intelligence** - Automatic CRS and geotransform detection  
+- **Geospatial intelligence** - Automatic CRS and geotransform detection
+- **Geolocation arrays** - Native support for satellite swath data with pixel-accurate georeferencing
 - **Performance optimized** - Caching, lazy loading, block prefetching
 - **Cloud native** - HTTP/HTTPS and virtual file system support
 - **Cross-platform** - Windows, macOS, Linux
@@ -127,6 +128,25 @@ da.rio.to_raster('output.tif')
 
 **See Examples:**
 - Comprehensive notebook: `notebooks/08-EOPFZARR-with-Rioxarray.ipynb`
+
+### Working with Swath Data (Sentinel-3, etc.)
+
+For satellite swath data with geolocation arrays, use `gdalwarp -geoloc` to get accurate georeferencing:
+
+```bash
+# Get pixel-accurate warped output from swath data
+gdalwarp -geoloc -t_srs EPSG:4326 -tr 0.01 0.01 \
+  "EOPFZARR:/path/to/sentinel3.zarr:measurements/inadir/s7_bt_in" \
+  output_true_geometry.tif
+```
+
+**In QGIS:**
+1. Load EOPFZARR layer (shows stretched initially)
+2. `Raster → Projections → Warp (Reproject)`
+3. In "Additional command-line parameters": add `-geoloc`
+4. Run to get TRUE curved swath geometry
+
+**See:** `notebooks/10-Sentinel3-SLSTR-L1-RBT-GDAL.ipynb` for detailed examples
 
 ## Configuration
 
