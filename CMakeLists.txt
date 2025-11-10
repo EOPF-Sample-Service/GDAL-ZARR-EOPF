@@ -294,6 +294,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
         GDAL::GDAL
     )
     
+    # 9. Geolocation arrays test (Issue #137)
+    add_executable(test_geolocation_arrays
+        tests/test_geolocation_arrays.cpp
+    )
+    
+    target_link_libraries(test_geolocation_arrays PRIVATE 
+        GDAL::GDAL
+    )
+    
     # ===== CTEST REGISTRATION =====
     
     # ===== CORE TESTS (Always Work) =====
@@ -327,8 +336,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
              COMMAND test_subdataset_formats)
              
     add_test(NAME real_data_integration
-             COMMAND test_real_data_integration)    # Set environment for GDAL-dependent tests (may fail in dev environment)
-    set_tests_properties(integration_driver compatibility_urls subdataset_formats real_data_integration PROPERTIES
+             COMMAND test_real_data_integration)
+             
+    add_test(NAME geolocation_arrays
+             COMMAND test_geolocation_arrays)    
+    
+    # Set environment for GDAL-dependent tests (may fail in dev environment)
+    set_tests_properties(integration_driver compatibility_urls subdataset_formats real_data_integration geolocation_arrays PROPERTIES
         ENVIRONMENT "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR}")
     
     # Core test suite summary (tests that should always pass)
@@ -345,7 +359,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR BUILD_TESTING)
              -E echo "✅ Full EOPF-Zarr test suite completed (some may require environment setup)")
     
     set_tests_properties(full_test_summary PROPERTIES
-        DEPENDS "basic_functionality;unit_path_parsing;unit_path_parsing_simple;sample_data_structure;integration_driver;compatibility_urls;subdataset_formats;real_data_integration")
+        DEPENDS "basic_functionality;unit_path_parsing;unit_path_parsing_simple;sample_data_structure;integration_driver;compatibility_urls;subdataset_formats;real_data_integration;geolocation_arrays")
     
     # ===== STATUS MESSAGES =====
     
