@@ -10,6 +10,60 @@ configure_file(
     "${CMAKE_CURRENT_BINARY_DIR}/include/eopfzarr_config.h"
 )
 
+# ========================================================================
+# Compiler Configuration & Code Quality
+# ========================================================================
+
+# Options for sanitizers and static analysis
+option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
+option(ENABLE_CLANG_TIDY "Enable Clang-Tidy static analysis" OFF)
+option(ENABLE_WERROR "Treat warnings as errors" OFF)
+
+# Compiler warnings
+if(MSVC)
+    add_compile_options(/W4 /permissive-)
+    if(ENABLE_WERROR)
+        add_compile_options(/WX)
+    endif()
+else()
+    add_compile_options(
+        -Wall 
+        -Wextra 
+        -Wpedantic 
+        -Wshadow 
+        -Wunused
+        -Wconversion
+        -Wsign-conversion
+        -Wcast-align
+        -Wformat=2
+    )
+    if(ENABLE_WERROR)
+        add_compile_options(-Werror)
+    endif()
+endif()
+
+# Sanitizers (GCC/Clang only)
+if(ENABLE_SANITIZERS)
+    if(MSVC)
+        message(WARNING "Sanitizers not yet configured for MSVC in this build")
+    else()
+        message(STATUS "Enabling AddressSanitizer and UndefinedBehaviorSanitizer")
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
+
+# Clang-Tidy
+if(ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+    if(CLANG_TIDY_EXE)
+        message(STATUS "Found clang-tidy: ${CLANG_TIDY_EXE}")
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    else()
+        message(WARNING "clang-tidy requested but not found")
+    endif()
+endif()
+
 # Find GDAL using the modern imported target
 find_package(GDAL REQUIRED)
 
