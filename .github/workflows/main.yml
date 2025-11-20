@@ -363,6 +363,64 @@ jobs:
           $env:PATH = "C:\OSGeo4W\bin;" + $env:PATH
           gdalinfo --formats | findstr "EOPFZARR"
 
+  sanitizer_test:
+    name: Sanitizers (ASan/UBSan)
+    runs-on: ubuntu-24.04
+    needs: [check-changes, lint]
+    if: needs.check-changes.outputs.docs-only != 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable -y
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin cmake ninja-build build-essential
+          
+      - name: Configure with Sanitizers
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_SANITIZERS=ON \
+            -DENABLE_WERROR=OFF
+            
+      - name: Build
+        run: cmake --build build
+        
+      - name: Run Tests with Sanitizers
+        run: |
+          cd build
+          # Run only core tests that don't require external data/network for stability
+          ctest -C Debug --output-on-failure -R "basic_functionality|unit_path_parsing|sample_data_structure"
+
+  clang_tidy_check:
+    name: Static Analysis (Clang-Tidy)
+    runs-on: ubuntu-24.04
+    needs: [check-changes, lint]
+    if: needs.check-changes.outputs.docs-only != 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable -y
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin cmake ninja-build build-essential clang-tidy
+          
+      - name: Configure with Clang-Tidy
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_CLANG_TIDY=ON \
+            -DENABLE_WERROR=OFF
+            
+      - name: Build (triggers clang-tidy)
+        run: cmake --build build
+
       # Upload Artifacts
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
