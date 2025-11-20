@@ -127,7 +127,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macos-13]
+        os: [ubuntu-24.04, windows-latest, macos-14]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -216,10 +216,16 @@ jobs:
           arch: x64
 
       # Configure & Build
-      - name: Configure & Build (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Configure & Build (Linux)
+        if: runner.os == 'Linux'
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      - name: Configure & Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
           cmake --build build --parallel
 
       - name: Configure & Build (Windows)
