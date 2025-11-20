@@ -29,8 +29,8 @@ pytestmark = pytest.mark.require_driver("EOPFZARR")
 
 
 # Remote Zarr test data URLs (publicly accessible)
-REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202511-s02msil1c-eu/20/products/cpm_v262/S2C_MSIL1C_20251120T105351_N0511_R051_T32VPN_20251120T111609.zarr"
-REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202511-s02msil1c-eu/20/products/cpm_v262/S2C_MSIL1C_20251120T105351_N0511_R051_T32VPN_20251120T111609.zarr/measurements/reflectance/r60m/b01"
+REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
+REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr/measurements/reflectance/r60m/b01"
 
 
 
@@ -179,9 +179,7 @@ class TestEOPFZarrIntegration:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test geotransform
         gt = ds.GetGeoTransform()
-        # Skip if default geotransform (some Zarr datasets may not have geospatial info)
-        if gt == (0, 1, 0, 0, 0, 1) or gt == (0.0, 1.0, 0.0, 0.0, 0.0, 1.0):
-            pytest.skip("Dataset has default geotransform (no geospatial info)")
+        assert gt != (0, 1, 0, 0, 0, 1), "Default geotransform detected"
         assert len(gt) == 6, "Invalid geotransform format"
         assert gt[1] != 0 and gt[5] != 0, "Zero pixel size in geotransform"
         # Test spatial reference
@@ -229,7 +227,7 @@ class TestEOPFZarrIntegration:
     def test_network_access(self):
         """Test network dataset access via VSI and HTTPS URLs - This is the most critical test"""
         # Test the specific EODC URL - this is our primary use case
-        eodc_url = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202511-s02msil1c-eu/20/products/cpm_v262/S2C_MSIL1C_20251120T105351_N0511_R051_T32VPN_20251120T111609.zarr"
+        eodc_url = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
         
         print(f"Testing EODC URL: {eodc_url}")
         
