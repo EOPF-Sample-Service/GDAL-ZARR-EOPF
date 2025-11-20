@@ -294,8 +294,20 @@ jobs:
           $env:PATH = "C:\OSGeo4W\bin;C:\OSGeo4W\apps\Python312;C:\OSGeo4W\apps\Python312\Scripts;" + $env:PATH
           $env:PYTHONPATH = "C:\OSGeo4W\apps\Python312\Lib\site-packages"
           
+          # Enable verbose curl/GDAL debugging to diagnose URL access issues
+          $env:CPL_CURL_VERBOSE = "YES"
+          $env:CPL_DEBUG = "ON"
+          $env:GDAL_HTTP_UNSAFESSL = "YES"
+          
           # Use OSGeo4W Python directly
           $pythonExe = "C:\OSGeo4W\apps\Python312\python3.exe"
+          
+          Write-Host "=== GDAL Configuration ==="
+          gdalinfo --version
+          gdalinfo --formats | Select-String -Pattern "curl" -CaseSensitive:$false
+          
+          Write-Host "=== Testing /vsicurl/ access ==="
+          & $pythonExe -c "from osgeo import gdal; ds = gdal.Open('/vsicurl/https://www.google.com'); print('vsicurl works:' + str(ds is None))"
           
           Write-Host "Verifying Python and GDAL..."
           & $pythonExe --version
@@ -319,6 +331,20 @@ jobs:
           
           # Set environment for tests (conftest.py also does auto-detection)
           export GDAL_DRIVER_PATH="$PWD/build"
+          
+          # Enable verbose curl/GDAL debugging to diagnose URL access issues
+          export CPL_CURL_VERBOSE=YES
+          export CPL_DEBUG=ON
+          export GDAL_HTTP_UNSAFESSL=YES
+          
+          # Verify GDAL HTTP capabilities
+          echo "=== GDAL Configuration ==="
+          gdal-config --version
+          gdal-config --formats | grep -i curl || echo "Warning: CURL support may not be available"
+          
+          # Test /vsicurl/ access
+          echo "=== Testing /vsicurl/ access ==="
+          python -c "from osgeo import gdal; ds = gdal.Open('/vsicurl/https://www.google.com'); print('vsicurl works:' + str(ds is None))" || echo "vsicurl test failed"
           
           # Verify installations
           python -c "from osgeo import gdal; import rasterio, rioxarray; print('GDAL, rasterio and rioxarray available')"
