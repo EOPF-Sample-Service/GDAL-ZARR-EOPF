@@ -646,10 +646,10 @@ EOPFZarrRasterBandPerf::EOPFZarrRasterBandPerf(EOPFZarrDatasetPerf* poDS,
     nRasterYSize = poUnderlyingBand->GetYSize();
 
     // Copy block size
-    int nBlockXSize, nBlockYSize;
-    poUnderlyingBand->GetBlockSize(&nBlockXSize, &nBlockYSize);
-    this->nBlockXSize = nBlockXSize;
-    this->nBlockYSize = nBlockYSize;
+    int nBlockX, nBlockY;
+    poUnderlyingBand->GetBlockSize(&nBlockX, &nBlockY);
+    this->nBlockXSize = nBlockX;
+    this->nBlockYSize = nBlockY;
 }
 
 EOPFZarrRasterBandPerf::~EOPFZarrRasterBandPerf()
@@ -713,12 +713,12 @@ bool EOPFZarrRasterBandPerf::ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nB
 void EOPFZarrRasterBandPerf::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff)
 {
     // Prefetch right and down blocks (common access patterns)
-    int nBlocksPerRow, nBlocksPerCol;
-    GetBlockSize(&nBlocksPerRow, &nBlocksPerCol);  // This gets block size, not count
+    int nBlocksX, nBlocksY;
+    GetBlockSize(&nBlocksX, &nBlocksY);  // This gets block size, not count
 
     // Calculate total blocks
-    int totalBlocksX = (nRasterXSize + nBlocksPerRow - 1) / nBlocksPerRow;
-    int totalBlocksY = (nRasterYSize + nBlocksPerCol - 1) / nBlocksPerCol;
+    int totalBlocksX = (nRasterXSize + nBlocksX - 1) / nBlocksX;
+    int totalBlocksY = (nRasterYSize + nBlocksY - 1) / nBlocksY;
 
     // Prefetch adjacent blocks
     std::vector<std::pair<int, int>> prefetchBlocks = {
@@ -732,8 +732,7 @@ void EOPFZarrRasterBandPerf::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYO
         if (block.first < totalBlocksX && block.second < totalBlocksY)
         {
             // Prefetch by reading into a dummy buffer (GDAL will cache it)
-            int blockSizeBytes =
-                GDALGetDataTypeSizeBytes(eDataType) * nBlocksPerRow * nBlocksPerCol;
+            int blockSizeBytes = GDALGetDataTypeSizeBytes(eDataType) * nBlocksX * nBlocksY;
             void* dummyBuffer = CPLMalloc(blockSizeBytes);
             CPLErr err = m_poUnderlyingBand->ReadBlock(block.first, block.second, dummyBuffer);
             CPLFree(dummyBuffer);
