@@ -91,7 +91,7 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
     if (epsg.empty() && stacDiscovery.IsValid())
     {
         // Try to get the full STAC item
-        const CPLJSONObject& bbox = stacDiscovery.GetObj("bbox");
+        // const CPLJSONObject& bbox = stacDiscovery.GetObj("bbox");
         const CPLJSONObject& stacExtensions = stacDiscovery.GetObj("stac_extensions");
         const CPLJSONObject& geometry = stacDiscovery.GetObj("geometry");
 
@@ -783,7 +783,7 @@ static bool LoadZMetadata(const std::string& rootPath, CPLJSONDocument& doc)
 /* ------------------------------------------------------------------ */
 void EOPF::DiscoverSubdatasets(GDALDataset& ds,
                                const std::string& rootPath,
-                               const CPLJSONObject& metadata)
+                               const CPLJSONObject& /* metadata */)
 {
     // Open the Zarr dataset to get subdatasets
     CPLString zarrPath;
