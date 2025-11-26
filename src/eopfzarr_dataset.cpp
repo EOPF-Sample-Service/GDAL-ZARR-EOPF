@@ -175,7 +175,11 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
     double cachedTransform[6];
     if (mCache.GetCachedGeoTransform(cachedTransform))
     {
+#if GDAL_VERSION_NUM >= 312
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(GDALGeoTransform(cachedTransform));
+#else
         const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(cachedTransform);
+#endif
         mGeospatialInfoProcessed = true;
         return;
     }
@@ -209,7 +213,11 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
             for (int i = 0; i < 6; i++)
                 adfGeoTransform[i] = CPLAtof(tokens[i].c_str());
 
+#if GDAL_VERSION_NUM >= 312
+            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(GDALGeoTransform(adfGeoTransform));
+#else
             const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(adfGeoTransform);
+#endif
             mCache.SetCachedGeoTransform(adfGeoTransform);
 
             CPLDebug("EOPFZARR",
@@ -362,9 +370,16 @@ void EOPFZarrDataset::ProcessCornerCoordinates() const
 
     // If we have corner coordinates but no geotransform, calculate one
     double existingTransform[6];
+#if GDAL_VERSION_NUM >= 312
+    GDALGeoTransform geoTransformObj(existingTransform);
+    if (const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::GetGeoTransform(geoTransformObj) !=
+            CE_None &&
+        (hasUtmCorners || hasGeographicCorners))
+#else
     if (const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::GetGeoTransform(existingTransform) !=
             CE_None &&
         (hasUtmCorners || hasGeographicCorners))
+#endif
     {
         const_cast<EOPFZarrDataset*>(this)->CacheGeotransformFromCorners(
             hasUtmCorners ? utmMinX : lonMin,
@@ -564,7 +579,7 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
 }
 
 #if GDAL_VERSION_NUM >= 312
-CPLErr EOPFZarrDataset::GetGeoTransform(double padfTransform[6])
+CPLErr EOPFZarrDataset::GetGeoTransform(GDALGeoTransform& padfTransform) const
 #else
 CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
 #endif
@@ -585,7 +600,7 @@ CPLErr EOPFZarrDataset::SetSpatialRef(const OGRSpatialReference* poSRS)
 }
 
 #if GDAL_VERSION_NUM >= 312
-CPLErr EOPFZarrDataset::SetGeoTransform(double padfTransform[6])
+CPLErr EOPFZarrDataset::SetGeoTransform(const GDALGeoTransform& padfTransform)
 #else
 CPLErr EOPFZarrDataset::SetGeoTransform(double* padfTransform)
 #endif
@@ -987,7 +1002,11 @@ void EOPFZarrDataset::CacheGeotransformFromCorners(double minX,
         adfGeoTransform[5] =
             -std::fabs((maxY - minY) / height);  // n-s pixel resolution (negative value)
 
+#if GDAL_VERSION_NUM >= 312
+        GDALPamDataset::SetGeoTransform(GDALGeoTransform(adfGeoTransform));
+#else
         GDALPamDataset::SetGeoTransform(adfGeoTransform);
+#endif
         mCache.SetCachedGeoTransform(adfGeoTransform);
 
         CPLDebug("EOPFZARR",

@@ -55,10 +55,10 @@ class EOPFZarrDataset : public GDALPamDataset
     // but you may want to delegate to inner dataset first
     CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
 
-    // GDAL 3.12+ changed GeoTransform methods to use double[] instead of double*
+    // GDAL 3.12+ changed GeoTransform methods to use GDALGeoTransform reference
 #if GDAL_VERSION_NUM >= 312
-    CPLErr SetGeoTransform(double padfTransform[6]) override;
-    CPLErr GetGeoTransform(double padfTransform[6]) override;
+    CPLErr SetGeoTransform(const GDALGeoTransform& padfTransform) override;
+    CPLErr GetGeoTransform(GDALGeoTransform& padfTransform) const override;
 #else
     CPLErr SetGeoTransform(double* padfTransform) override;
     CPLErr GetGeoTransform(double* padfTransform) override;

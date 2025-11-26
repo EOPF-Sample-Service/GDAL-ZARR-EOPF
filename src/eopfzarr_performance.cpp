@@ -463,7 +463,7 @@ void EOPFZarrDatasetPerf::LoadGeospatialInfo() const
 }
 
 #if GDAL_VERSION_NUM >= 312
-CPLErr EOPFZarrDatasetPerf::GetGeoTransform(double padfTransform[6])
+CPLErr EOPFZarrDatasetPerf::GetGeoTransform(GDALGeoTransform& padfTransform) const
 #else
 CPLErr EOPFZarrDatasetPerf::GetGeoTransform(double* padfTransform)
 #endif
@@ -501,7 +501,7 @@ CPLErr EOPFZarrDatasetPerf::SetSpatialRef(const OGRSpatialReference* poSRS)
 }
 
 #if GDAL_VERSION_NUM >= 312
-CPLErr EOPFZarrDatasetPerf::SetGeoTransform(double padfTransform[6])
+CPLErr EOPFZarrDatasetPerf::SetGeoTransform(const GDALGeoTransform& padfTransform)
 #else
 CPLErr EOPFZarrDatasetPerf::SetGeoTransform(double* padfTransform)
 #endif
