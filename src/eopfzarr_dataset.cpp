@@ -176,9 +176,11 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
     if (mCache.GetCachedGeoTransform(cachedTransform))
     {
 #if GDAL_VERSION_NUM >= 312
-        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(GDALGeoTransform(cachedTransform));
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+            GDALGeoTransform(cachedTransform));
 #else
-        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(cachedTransform);
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+            cachedTransform);
 #endif
         mGeospatialInfoProcessed = true;
         return;
@@ -214,9 +216,11 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
                 adfGeoTransform[i] = CPLAtof(tokens[i].c_str());
 
 #if GDAL_VERSION_NUM >= 312
-            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(GDALGeoTransform(adfGeoTransform));
+            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+                GDALGeoTransform(adfGeoTransform));
 #else
-            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(adfGeoTransform);
+            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+                adfGeoTransform);
 #endif
             mCache.SetCachedGeoTransform(adfGeoTransform);
 
