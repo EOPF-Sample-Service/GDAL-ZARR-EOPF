@@ -462,7 +462,11 @@ void EOPFZarrDatasetPerf::LoadGeospatialInfo() const
     mGeospatialInfoProcessed = true;
 }
 
+#if GDAL_VERSION_NUM >= 312
+CPLErr EOPFZarrDatasetPerf::GetGeoTransform(double padfTransform[6])
+#else
 CPLErr EOPFZarrDatasetPerf::GetGeoTransform(double* padfTransform)
+#endif
 {
     EOPF_PERF_TIMER("EOPFZarrDatasetPerf::GetGeoTransform");
 
@@ -496,7 +500,11 @@ CPLErr EOPFZarrDatasetPerf::SetSpatialRef(const OGRSpatialReference* poSRS)
     return err;
 }
 
+#if GDAL_VERSION_NUM >= 312
+CPLErr EOPFZarrDatasetPerf::SetGeoTransform(double padfTransform[6])
+#else
 CPLErr EOPFZarrDatasetPerf::SetGeoTransform(double* padfTransform)
+#endif
 {
     CPLErr err = mInner->SetGeoTransform(padfTransform);
     if (err == CE_None)

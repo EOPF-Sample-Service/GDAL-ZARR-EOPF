@@ -563,7 +563,11 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     }
 }
 
+#if GDAL_VERSION_NUM >= 312
+CPLErr EOPFZarrDataset::GetGeoTransform(double padfTransform[6])
+#else
 CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
+#endif
 {
     CPLErr eErr = GDALPamDataset::GetGeoTransform(padfTransform);
     if (eErr == CE_None)
@@ -580,7 +584,11 @@ CPLErr EOPFZarrDataset::SetSpatialRef(const OGRSpatialReference* poSRS)
     return CE_None;
 }
 
+#if GDAL_VERSION_NUM >= 312
+CPLErr EOPFZarrDataset::SetGeoTransform(double padfTransform[6])
+#else
 CPLErr EOPFZarrDataset::SetGeoTransform(double* padfTransform)
+#endif
 {
     CPLDebug("EOPFZARR",
              "SetGeoTransform called, but EOPFZarrDataset is read-only for GeoTransform. Ignored.");

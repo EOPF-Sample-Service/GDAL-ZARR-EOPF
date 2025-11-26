@@ -142,9 +142,15 @@ class EOPFZarrDatasetPerf : public GDALPamDataset
     void LoadGeospatialInfo() const;
 
     // GDALDataset interface - optimized implementations
+    // GDAL 3.12+ changed GeoTransform methods to use double[] instead of double*
+#if GDAL_VERSION_NUM >= 312
+    CPLErr GetGeoTransform(double padfTransform[6]) override;
+    CPLErr SetGeoTransform(double padfTransform[6]) override;
+#else
     CPLErr GetGeoTransform(double* padfTransform) override;
-    CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
     CPLErr SetGeoTransform(double* padfTransform) override;
+#endif
+    CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
     const OGRSpatialReference* GetSpatialRef() const override;
     char** GetMetadata(const char* pszDomain = "") override;
     char** GetFileList() override;

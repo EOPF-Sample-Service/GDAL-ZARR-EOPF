@@ -54,9 +54,17 @@ class EOPFZarrDataset : public GDALPamDataset
     char* mProjectionRef = nullptr;
     // but you may want to delegate to inner dataset first
     CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
+
+    // GDAL 3.12+ changed GeoTransform methods to use double[] instead of double*
+#if GDAL_VERSION_NUM >= 312
+    CPLErr SetGeoTransform(double padfTransform[6]) override;
+    CPLErr GetGeoTransform(double padfTransform[6]) override;
+#else
     CPLErr SetGeoTransform(double* padfTransform) override;
-    const OGRSpatialReference* GetSpatialRef() const override;
     CPLErr GetGeoTransform(double* padfTransform) override;
+#endif
+
+    const OGRSpatialReference* GetSpatialRef() const override;
 
     // Required PAM methods
     const char* GetDescription() const override;
