@@ -179,8 +179,7 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
         const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
             GDALGeoTransform(cachedTransform));
 #else
-        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
-            cachedTransform);
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(cachedTransform);
 #endif
         mGeospatialInfoProcessed = true;
         return;
@@ -219,8 +218,7 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
             const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
                 GDALGeoTransform(adfGeoTransform));
 #else
-            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
-                adfGeoTransform);
+            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(adfGeoTransform);
 #endif
             mCache.SetCachedGeoTransform(adfGeoTransform);
 
