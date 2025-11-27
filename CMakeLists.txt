@@ -239,11 +239,12 @@ endif()
 
 # Test for GDALGeoTransform class (GDAL 3.12+)
 check_cxx_source_compiles("
-#include <gdal_priv.h>
-int main() {
-    GDALGeoTransform gt;
-    return 0;
-}
+#include <gdal_pam.h>
+class Test : public GDALPamDataset {
+public:
+    CPLErr SetGeoTransform(const GDALGeoTransform& gt) override { return CE_None; }
+};
+int main() { return 0; }
 " HAVE_GDAL_GEOTRANSFORM)
 
 if(HAVE_GDAL_GEOTRANSFORM)
