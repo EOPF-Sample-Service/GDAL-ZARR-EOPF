@@ -336,7 +336,7 @@ jobs:
           & $pythonExe -c "from osgeo import gdal; print(f'GDAL version: {gdal.VersionInfo()}')"
           
           Write-Host "Installing required packages..."
-          & $pythonExe -m pip install pytest rasterio numpy rioxarray
+          & $pythonExe -m pip install "numpy<2.0" pytest rasterio rioxarray
           
           Write-Host "Verifying package installation..."
           & $pythonExe -c "import pytest, rasterio, numpy, rioxarray; print('All packages imported successfully')"
