@@ -3,11 +3,33 @@
 on:
   push:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'notebooks/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - 'docker-images/**'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'notebooks/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - 'docker-images/**'
   workflow_dispatch:
   release:
     types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write

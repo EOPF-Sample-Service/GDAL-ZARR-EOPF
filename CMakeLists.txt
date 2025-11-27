@@ -123,6 +123,68 @@ message(STATUS "GDAL libraries: ${GDAL_LIBRARIES}")
 
 # Version already defined above - no need for duplicate
 
+# Check for GDALPamDataset XML initialization compatibility
+include(CheckCXXSourceCompiles)
+
+# Set up include directories for the test
+set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
+
+# Test for const CPLXMLNode in XMLInit
+check_cxx_source_compiles("
+#include <gdal_pam.h>
+class Test : public GDALPamDataset {
+protected:
+    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
+};
+int main() { return 0; }
+" GDAL_HAS_CONST_XML_NODE)
+
+if(GDAL_HAS_CONST_XML_NODE)
+    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
+    add_definitions(-DGDAL_HAS_CONST_XML_NODE)
+else()
+    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
+endif()
+
+# Test for RefUnderlyingRasterBand signature
+check_cxx_source_compiles("
+#include <gdal_proxy.h>
+class Test : public GDALProxyRasterBand {
+public:
+    GDALRasterBand* RefUnderlyingRasterBand(bool bForceOpen = true) const override { return nullptr; }
+};
+int main() { return 0; }
+" GDAL_HAS_CONST_REF_UNDERLYING)
+
+if(GDAL_HAS_CONST_REF_UNDERLYING)
+    message(STATUS "GDAL RefUnderlyingRasterBand uses const method with bool parameter")
+    add_definitions(-DGDAL_HAS_CONST_REF_UNDERLYING)
+else()
+    message(STATUS "GDAL RefUnderlyingRasterBand uses non-const method without parameters")
+endif()
+
+# Test for GDALGeoTransform class (GDAL 3.12+)
+check_cxx_source_compiles("
+#include <gdal_pam.h>
+class Test : public GDALPamDataset {
+public:
+    CPLErr SetGeoTransform(const GDALGeoTransform& gt) override { return CE_None; }
+};
+int main() { return 0; }
+" HAVE_GDAL_GEOTRANSFORM)
+
+if(HAVE_GDAL_GEOTRANSFORM)
+    message(STATUS "GDALGeoTransform class available")
+    add_definitions(-DHAVE_GDAL_GEOTRANSFORM)
+else()
+    message(STATUS "GDALGeoTransform class NOT available")
+endif()
+
+# Reset CMAKE_REQUIRED variables
+unset(CMAKE_REQUIRED_INCLUDES)
+unset(CMAKE_REQUIRED_LIBRARIES)
+
 # Main driver library (MODULE)
 add_library(gdal_EOPFZarr MODULE
     src/eopfzarr_driver.cpp
@@ -196,67 +258,7 @@ else()
              COMMAND bash -c "GDAL_DRIVER_PATH=${CMAKE_BINARY_DIR} gdalinfo --formats | grep -q EOPFZARR")
 endif()
 
-# Check for GDALPamDataset XML initialization compatibility
-include(CheckCXXSourceCompiles)
 
-# Set up include directories for the test
-set(CMAKE_REQUIRED_INCLUDES ${GDAL_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${GDAL_LIBRARIES})
-
-# Test for const CPLXMLNode in XMLInit
-check_cxx_source_compiles("
-#include <gdal_pam.h>
-class Test : public GDALPamDataset {
-protected:
-    CPLErr XMLInit(const CPLXMLNode* psTree, const char* pszUnused) override { return CE_None; }
-};
-int main() { return 0; }
-" GDAL_HAS_CONST_XML_NODE)
-
-if(GDAL_HAS_CONST_XML_NODE)
-    message(STATUS "GDAL XMLInit uses const CPLXMLNode*")
-    add_definitions(-DGDAL_HAS_CONST_XML_NODE)
-else()
-    message(STATUS "GDAL XMLInit uses non-const CPLXMLNode*")
-endif()
-
-# Test for RefUnderlyingRasterBand signature
-check_cxx_source_compiles("
-#include <gdal_proxy.h>
-class Test : public GDALProxyRasterBand {
-public:
-    GDALRasterBand* RefUnderlyingRasterBand(bool bForceOpen = true) const override { return nullptr; }
-};
-int main() { return 0; }
-" GDAL_HAS_CONST_REF_UNDERLYING)
-
-if(GDAL_HAS_CONST_REF_UNDERLYING)
-    message(STATUS "GDAL RefUnderlyingRasterBand uses const method with bool parameter")
-    add_definitions(-DGDAL_HAS_CONST_REF_UNDERLYING)
-else()
-    message(STATUS "GDAL RefUnderlyingRasterBand uses non-const method without parameters")
-endif()
-
-# Test for GDALGeoTransform class (GDAL 3.12+)
-check_cxx_source_compiles("
-#include <gdal_pam.h>
-class Test : public GDALPamDataset {
-public:
-    CPLErr SetGeoTransform(const GDALGeoTransform& gt) override { return CE_None; }
-};
-int main() { return 0; }
-" HAVE_GDAL_GEOTRANSFORM)
-
-if(HAVE_GDAL_GEOTRANSFORM)
-    message(STATUS "GDALGeoTransform class available")
-    add_definitions(-DHAVE_GDAL_GEOTRANSFORM)
-else()
-    message(STATUS "GDALGeoTransform class NOT available")
-endif()
-
-# Reset CMAKE_REQUIRED variables
-unset(CMAKE_REQUIRED_INCLUDES)
-unset(CMAKE_REQUIRED_LIBRARIES)
 
 # ========================================================================
 # Core Unit Testing Framework (Essential Tests Only)
