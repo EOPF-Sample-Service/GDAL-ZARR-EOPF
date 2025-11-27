@@ -462,21 +462,13 @@ void EOPFZarrDatasetPerf::LoadGeospatialInfo() const
     mGeospatialInfoProcessed = true;
 }
 
-#if GDAL_VERSION_NUM >= 312
-CPLErr EOPFZarrDatasetPerf::GetGeoTransform(GDALGeoTransform& padfTransform) const
-#else
 CPLErr EOPFZarrDatasetPerf::GetGeoTransform(double* padfTransform)
-#endif
 {
     EOPF_PERF_TIMER("EOPFZarrDatasetPerf::GetGeoTransform");
 
     if (mCache.HasCachedGeoTransform())
     {
-#if GDAL_VERSION_NUM >= 312
-        if (mCache.GetCachedGeoTransform(padfTransform.data()))
-#else
         if (mCache.GetCachedGeoTransform(padfTransform))
-#endif
         {
             return CE_None;
         }
@@ -485,11 +477,7 @@ CPLErr EOPFZarrDatasetPerf::GetGeoTransform(double* padfTransform)
     CPLErr err = mInner->GetGeoTransform(padfTransform);
     if (err == CE_None)
     {
-#if GDAL_VERSION_NUM >= 312
-        mCache.SetCachedGeoTransform(padfTransform.data());
-#else
         mCache.SetCachedGeoTransform(padfTransform);
-#endif
     }
 
     return err;
@@ -508,20 +496,12 @@ CPLErr EOPFZarrDatasetPerf::SetSpatialRef(const OGRSpatialReference* poSRS)
     return err;
 }
 
-#if GDAL_VERSION_NUM >= 312
-CPLErr EOPFZarrDatasetPerf::SetGeoTransform(const GDALGeoTransform& padfTransform)
-#else
 CPLErr EOPFZarrDatasetPerf::SetGeoTransform(double* padfTransform)
-#endif
 {
     CPLErr err = mInner->SetGeoTransform(padfTransform);
     if (err == CE_None)
     {
-#if GDAL_VERSION_NUM >= 312
-        mCache.SetCachedGeoTransform(padfTransform.data());
-#else
         mCache.SetCachedGeoTransform(padfTransform);
-#endif
     }
     return err;
 }
