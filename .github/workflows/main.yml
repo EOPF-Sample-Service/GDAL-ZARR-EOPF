@@ -182,8 +182,8 @@ jobs:
           GDAL_VERSION=$(gdal-config --version)
           echo "Installing GDAL Python bindings for version: $GDAL_VERSION"
           
-          # Method 1: Try pip install with version matching
-          pip install GDAL==$GDAL_VERSION || {
+          # Method 1: Try pip install with version matching (allow compatible releases like post1)
+          pip install "GDAL~=$GDAL_VERSION" || {
             echo "Direct pip install failed, trying manual compilation method..."
             
             # Method 2: Manual compilation approach

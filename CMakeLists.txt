@@ -237,6 +237,22 @@ else()
     message(STATUS "GDAL RefUnderlyingRasterBand uses non-const method without parameters")
 endif()
 
+# Test for GDALGeoTransform class (GDAL 3.12+)
+check_cxx_source_compiles("
+#include <gdal_priv.h>
+int main() {
+    GDALGeoTransform gt;
+    return 0;
+}
+" HAVE_GDAL_GEOTRANSFORM)
+
+if(HAVE_GDAL_GEOTRANSFORM)
+    message(STATUS "GDALGeoTransform class available")
+    add_definitions(-DHAVE_GDAL_GEOTRANSFORM)
+else()
+    message(STATUS "GDALGeoTransform class NOT available")
+endif()
+
 # Reset CMAKE_REQUIRED variables
 unset(CMAKE_REQUIRED_INCLUDES)
 unset(CMAKE_REQUIRED_LIBRARIES)
