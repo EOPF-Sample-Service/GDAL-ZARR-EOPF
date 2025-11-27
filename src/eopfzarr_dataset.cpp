@@ -214,7 +214,12 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
             for (int i = 0; i < 6; i++)
                 adfGeoTransform[i] = CPLAtof(tokens[i].c_str());
 
+#ifdef HAVE_GDAL_GEOTRANSFORM
+            const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+                GDALGeoTransform(adfGeoTransform));
+#else
             const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(adfGeoTransform);
+#endif
             mCache.SetCachedGeoTransform(adfGeoTransform);
 
             CPLDebug("EOPFZARR",
