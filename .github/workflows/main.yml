@@ -3,11 +3,33 @@
 on:
   push:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'notebooks/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - 'docker-images/**'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'notebooks/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - 'docker-images/**'
   workflow_dispatch:
   release:
     types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -182,8 +204,8 @@ jobs:
           GDAL_VERSION=$(gdal-config --version)
           echo "Installing GDAL Python bindings for version: $GDAL_VERSION"
           
-          # Method 1: Try pip install with version matching
-          pip install GDAL==$GDAL_VERSION || {
+          # Method 1: Try pip install with version matching (allow compatible releases like post1)
+          pip install "GDAL~=$GDAL_VERSION" || {
             echo "Direct pip install failed, trying manual compilation method..."
             
             # Method 2: Manual compilation approach
@@ -314,7 +336,7 @@ jobs:
           & $pythonExe -c "from osgeo import gdal; print(f'GDAL version: {gdal.VersionInfo()}')"
           
           Write-Host "Installing required packages..."
-          & $pythonExe -m pip install pytest rasterio numpy rioxarray
+          & $pythonExe -m pip install "numpy<2.0" pytest rasterio rioxarray
           
           Write-Host "Verifying package installation..."
           & $pythonExe -c "import pytest, rasterio, numpy, rioxarray; print('All packages imported successfully')"

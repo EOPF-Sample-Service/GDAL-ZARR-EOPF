@@ -143,7 +143,7 @@ class EOPFZarrDatasetPerf : public GDALPamDataset
 
     // GDALDataset interface - optimized implementations
     // GDAL 3.12+ changed GeoTransform methods to use GDALGeoTransform reference
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
     CPLErr GetGeoTransform(GDALGeoTransform& padfTransform) const override;
     CPLErr SetGeoTransform(const GDALGeoTransform& padfTransform) override;
 #else

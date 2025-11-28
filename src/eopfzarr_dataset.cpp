@@ -175,7 +175,7 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
     double cachedTransform[6];
     if (mCache.GetCachedGeoTransform(cachedTransform))
     {
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
         const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
             GDALGeoTransform(cachedTransform));
 #else
@@ -214,7 +214,7 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
             for (int i = 0; i < 6; i++)
                 adfGeoTransform[i] = CPLAtof(tokens[i].c_str());
 
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
             const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
                 GDALGeoTransform(adfGeoTransform));
 #else
@@ -372,7 +372,7 @@ void EOPFZarrDataset::ProcessCornerCoordinates() const
 
     // If we have corner coordinates but no geotransform, calculate one
     double existingTransform[6];
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
     GDALGeoTransform geoTransformObj(existingTransform);
     if (const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::GetGeoTransform(geoTransformObj) !=
             CE_None &&
@@ -580,7 +580,7 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     }
 }
 
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
 CPLErr EOPFZarrDataset::GetGeoTransform(GDALGeoTransform& padfTransform) const
 #else
 CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
@@ -601,7 +601,7 @@ CPLErr EOPFZarrDataset::SetSpatialRef(const OGRSpatialReference* poSRS)
     return CE_None;
 }
 
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
 CPLErr EOPFZarrDataset::SetGeoTransform(const GDALGeoTransform& padfTransform)
 #else
 CPLErr EOPFZarrDataset::SetGeoTransform(double* padfTransform)
@@ -1004,7 +1004,7 @@ void EOPFZarrDataset::CacheGeotransformFromCorners(double minX,
         adfGeoTransform[5] =
             -std::fabs((maxY - minY) / height);  // n-s pixel resolution (negative value)
 
-#if GDAL_VERSION_NUM >= 312
+#ifdef HAVE_GDAL_GEOTRANSFORM
         GDALPamDataset::SetGeoTransform(GDALGeoTransform(adfGeoTransform));
 #else
         GDALPamDataset::SetGeoTransform(adfGeoTransform);
