@@ -23,6 +23,7 @@ class EOPFZarrDataset : public GDALPamDataset
     mutable OGRSpatialReference* mCachedSpatialRef = nullptr;
     mutable char** m_papszDefaultDomainFilteredMetadata = nullptr;
     bool m_bPamInitialized;
+    bool m_bIsRemoteDataset;  // Track if dataset is remote (for PAM save suppression)
 
     // Performance optimization flags
     mutable bool mMetadataLoaded;
@@ -35,7 +36,8 @@ class EOPFZarrDataset : public GDALPamDataset
     // Factory method
     static EOPFZarrDataset* Create(GDALDataset* inner,
                                    GDALDriver* drv,
-                                   const char* pszSubdatasetPath = nullptr);
+                                   const char* pszSubdatasetPath = nullptr,
+                                   bool bIsRemoteDataset = false);
 
     // Optimized metadata loading
     void LoadEOPFMetadata();

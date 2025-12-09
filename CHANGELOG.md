@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable Warning Suppression** ([#172](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues/172))
+  - Added `EOPFZARR_SUPPRESS_AUX_WARNING` configuration option to control `.aux.xml` save warnings
+  - Default behavior: warnings are suppressed for remote datasets (improves user experience)
+  - Users can enable warnings with `EOPFZARR_SUPPRESS_AUX_WARNING=NO` for debugging
+  - Available via configuration option, open option (`SUPPRESS_AUX_WARNING`), or environment variable
+
 ### Planning
 
 - Future enhancements and improvements

@@ -709,17 +709,33 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         }
     }
 
-    // Create option list without EOPF_PROCESS
+    // Create option list without EOPF_PROCESS and SUPPRESS_AUX_WARNING
+    // (we handle these internally)
     char** papszOpenOptions = nullptr;
+    const char* pszSuppressAuxWarning = nullptr;
     for (char** papszIter = poOpenInfo->papszOpenOptions; papszIter && *papszIter; ++papszIter)
     {
         char* pszKey = nullptr;
         const char* pszValue = CPLParseNameValue(*papszIter, &pszKey);
-        if (pszKey && !EQUAL(pszKey, "EOPF_PROCESS"))
+        if (pszKey)
         {
-            papszOpenOptions = CSLSetNameValue(papszOpenOptions, pszKey, pszValue);
+            if (EQUAL(pszKey, "SUPPRESS_AUX_WARNING"))
+            {
+                pszSuppressAuxWarning = pszValue;
+            }
+            else if (!EQUAL(pszKey, "EOPF_PROCESS"))
+            {
+                papszOpenOptions = CSLSetNameValue(papszOpenOptions, pszKey, pszValue);
+            }
         }
         CPLFree(pszKey);
+    }
+
+    // If SUPPRESS_AUX_WARNING was provided as open option, set it as config option
+    // so that EOPFZarrDataset::Create can pick it up
+    if (pszSuppressAuxWarning)
+    {
+        CPLSetThreadLocalConfigOption("EOPFZARR_SUPPRESS_AUX_WARNING", pszSuppressAuxWarning);
     }
 
     // Use GDALOpenEx to open the dataset
@@ -802,10 +818,15 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         return nullptr;
     }
 
+    // Detect if this is a remote dataset (for PAM save warning suppression)
+    bool bIsRemoteDataset = IsUrlOrVirtualPath(mainPath);
+    CPLDebug("EOPFZARR", "Dataset is %s", bIsRemoteDataset ? "REMOTE" : "LOCAL");
+
     // Create our wrapper dataset
     // Pass subdataset path so it can be set before metadata loading
+    // Pass remote flag to control PAM save behavior
     EOPFZarrDataset* poDS = EOPFZarrDataset::Create(
-        poUnderlyingDS, gEOPFDriver, isSubdataset ? subdatasetPath.c_str() : nullptr);
+        poUnderlyingDS, gEOPFDriver, isSubdataset ? subdatasetPath.c_str() : nullptr, bIsRemoteDataset);
     if (poDS)
     {
         poDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
@@ -851,11 +872,16 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
     driver->SetMetadataItem(GDAL_DMD_SUBDATASETS, "YES");
 
-    // Add our own EOPF_PROCESS option
+    // Add our own EOPF_PROCESS option and SUPPRESS_AUX_WARNING option
     const char* pszOptions =
         "<OpenOptionList>"
         "  <Option name='EOPF_PROCESS' type='boolean' default='NO' description='Enable EOPF "
         "features'>"
+        "    <Value>YES</Value>"
+        "    <Value>NO</Value>"
+        "  </Option>"
+        "  <Option name='SUPPRESS_AUX_WARNING' type='boolean' default='YES' description='Suppress "
+        "auxiliary file (.aux.xml) save warnings for remote datasets'>"
         "    <Value>YES</Value>"
         "    <Value>NO</Value>"
         "  </Option>"

@@ -211,3 +211,55 @@ This will show detailed information about:
 - Geospatial coordinate detection
 - Geolocation array detection
 - Performance optimizations
+
+## Configuration Options
+
+### Suppressing Auxiliary File Warnings
+
+When opening remote datasets, GDAL's PAM (Persistent Auxiliary Metadata) system may try to save `.aux.xml` files alongside the data, which fails for remote URLs and produces a warning:
+
+```
+Warning 1: Unable to save auxiliary information in ZARR:"/vsicurl/https://...".aux.xml.
+```
+
+By default, the EOPFZARR driver **suppresses this warning** for remote datasets. You can control this behavior:
+
+**Using Configuration Option:**
+```python
+from osgeo import gdal
+
+# Default: warnings are suppressed (same as YES)
+gdal.SetConfigOption('EOPFZARR_SUPPRESS_AUX_WARNING', 'YES')
+
+# To see warnings (for debugging):
+gdal.SetConfigOption('EOPFZARR_SUPPRESS_AUX_WARNING', 'NO')
+```
+
+**Using Open Options:**
+```python
+# Suppress warnings (default)
+ds = gdal.OpenEx(path, open_options=['SUPPRESS_AUX_WARNING=YES'])
+
+# Show warnings (for debugging)
+ds = gdal.OpenEx(path, open_options=['SUPPRESS_AUX_WARNING=NO'])
+```
+
+**Environment Variable:**
+```bash
+# Show warnings
+export EOPFZARR_SUPPRESS_AUX_WARNING=NO
+gdalinfo "EOPFZARR:/vsicurl/https://..."
+
+# Suppress warnings (default)
+export EOPFZARR_SUPPRESS_AUX_WARNING=YES
+```
+
+### Other Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `EOPFZARR_SUPPRESS_AUX_WARNING` | `YES` | Suppress `.aux.xml` save warnings for remote datasets |
+| `EOPF_SHOW_ZARR_ERRORS` | `NO` | Show underlying Zarr driver errors |
+| `EOPF_ENABLE_PERFORMANCE_TIMERS` | `NO` | Enable performance timing output |
+| `CPL_DEBUG=EOPFZARR` | - | Enable debug logging |
+

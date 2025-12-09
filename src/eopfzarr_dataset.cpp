@@ -16,6 +16,7 @@ EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver*
       mCachedSpatialRef(nullptr),
       m_papszDefaultDomainFilteredMetadata(nullptr),
       m_bPamInitialized(false),
+      m_bIsRemoteDataset(false),
       mMetadataLoaded(false),
       mGeospatialInfoProcessed(false)
 {
@@ -110,7 +111,8 @@ static std::string ExtractRootPath(const std::string& description)
 
 EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner,
                                          GDALDriver* drv,
-                                         const char* pszSubdatasetPath)
+                                         const char* pszSubdatasetPath,
+                                         bool bIsRemoteDataset)
 {
     if (!inner)
         return nullptr;
@@ -119,6 +121,23 @@ EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner,
     {
         std::unique_ptr<EOPFZarrDataset> ds(
             new EOPFZarrDataset(std::unique_ptr<GDALDataset>(inner), drv));
+
+        // Track if this is a remote dataset
+        ds->m_bIsRemoteDataset = bIsRemoteDataset;
+
+        // If remote dataset and warning suppression is enabled (default: YES),
+        // set GPF_NOSAVE to prevent PAM from trying to save .aux.xml
+        if (bIsRemoteDataset)
+        {
+            const char* pszSuppressAuxWarning = 
+                CPLGetConfigOption("EOPFZARR_SUPPRESS_AUX_WARNING", "YES");
+            if (CPLTestBool(pszSuppressAuxWarning))
+            {
+                // GPF_NOSAVE = 4 - prevents PAM from saving auxiliary files
+                ds->nPamFlags |= 4;  // GPF_NOSAVE
+                CPLDebug("EOPFZARR", "Remote dataset detected - PAM save disabled");
+            }
+        }
 
         // Set subdataset path metadata BEFORE loading other metadata
         if (pszSubdatasetPath && strlen(pszSubdatasetPath) > 0)
