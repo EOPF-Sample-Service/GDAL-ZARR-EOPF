@@ -233,11 +233,45 @@ if(WIN32)
         set(GDAL_PLUGINS_DIR "$ENV{PROGRAMDATA}/GDAL/plugins")
     endif()
 else()
-    set(GDAL_PLUGINS_DIR "${CMAKE_INSTALL_PREFIX}/lib/gdalplugins" CACHE PATH "Directory where GDAL plugins are installed")
+    # Try to get the actual GDAL plugins directory
+    execute_process(
+        COMMAND gdal-config --plugindir
+        OUTPUT_VARIABLE GDAL_PLUGINDIR_FROM_CONFIG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GDAL_PLUGINDIR_FROM_CONFIG)
+        set(GDAL_PLUGINS_DIR "${GDAL_PLUGINDIR_FROM_CONFIG}" CACHE PATH "Directory where GDAL plugins are installed")
+    else()
+        set(GDAL_PLUGINS_DIR "${CMAKE_INSTALL_PREFIX}/lib/gdalplugins" CACHE PATH "Directory where GDAL plugins are installed")
+    endif()
 endif()
+
+message(STATUS "GDAL plugins will be installed to: ${GDAL_PLUGINS_DIR}")
 
 install(TARGETS gdal_EOPFZarr 
     LIBRARY DESTINATION ${GDAL_PLUGINS_DIR}
+)
+
+# Option to auto-install after build (requires sudo on Linux)
+option(AUTO_INSTALL "Automatically install driver after build" OFF)
+if(AUTO_INSTALL)
+    add_custom_command(TARGET gdal_EOPFZarr POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:gdal_EOPFZarr> ${GDAL_PLUGINS_DIR}/
+        COMMENT "Installing EOPFZARR driver to ${GDAL_PLUGINS_DIR}"
+    )
+endif()
+
+# Print helpful install instructions
+add_custom_target(install_info ALL
+    COMMAND ${CMAKE_COMMAND} -E echo ""
+    COMMAND ${CMAKE_COMMAND} -E echo "=== EOPFZARR Driver Built Successfully ==="
+    COMMAND ${CMAKE_COMMAND} -E echo "To install system-wide, run:"
+    COMMAND ${CMAKE_COMMAND} -E echo "  sudo cmake --install ."
+    COMMAND ${CMAKE_COMMAND} -E echo "Or manually copy:"
+    COMMAND ${CMAKE_COMMAND} -E echo "  sudo cp $<TARGET_FILE:gdal_EOPFZarr> ${GDAL_PLUGINS_DIR}/"
+    COMMAND ${CMAKE_COMMAND} -E echo ""
+    DEPENDS gdal_EOPFZarr
 )
 
 enable_testing()
