@@ -825,8 +825,10 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     // Create our wrapper dataset
     // Pass subdataset path so it can be set before metadata loading
     // Pass remote flag to control PAM save behavior
-    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(
-        poUnderlyingDS, gEOPFDriver, isSubdataset ? subdatasetPath.c_str() : nullptr, bIsRemoteDataset);
+    EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDS,
+                                                    gEOPFDriver,
+                                                    isSubdataset ? subdatasetPath.c_str() : nullptr,
+                                                    bIsRemoteDataset);
     if (poDS)
     {
         poDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");

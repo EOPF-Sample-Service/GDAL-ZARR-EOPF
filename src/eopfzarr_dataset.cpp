@@ -129,7 +129,7 @@ EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner,
         // set GPF_NOSAVE to prevent PAM from trying to save .aux.xml
         if (bIsRemoteDataset)
         {
-            const char* pszSuppressAuxWarning = 
+            const char* pszSuppressAuxWarning =
                 CPLGetConfigOption("EOPFZARR_SUPPRESS_AUX_WARNING", "YES");
             if (CPLTestBool(pszSuppressAuxWarning))
             {
