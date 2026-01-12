@@ -1,4 +1,4 @@
-﻿name: Build, Test & Release EOPFZarr Plugin
+name: Build, Test & Release EOPFZarr Plugin
 
 on:
   push:
@@ -493,7 +493,7 @@ jobs:
     if: github.event_name == 'release' && github.event.action == 'published' && needs.check-changes.outputs.docs-only != 'true'
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
       - name: Display downloaded artifacts structure
