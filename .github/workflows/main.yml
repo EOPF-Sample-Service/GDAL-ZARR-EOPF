@@ -1,4 +1,4 @@
-﻿name: Build, Test & Release EOPFZarr Plugin
+name: Build, Test & Release EOPFZarr Plugin
 
 on:
   push:
@@ -134,7 +134,7 @@ jobs:
             xargs clang-format --style=file --dry-run --Werror || \
             (echo "Code formatting check failed. Please run 'clang-format -i' on your changes." && exit 1)
       - name: Upload cppcheck report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: cppcheck-report
@@ -477,7 +477,7 @@ jobs:
 
       # Upload Artifacts
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gdal_EOPFZarr-${{ runner.os }}
           path: |
