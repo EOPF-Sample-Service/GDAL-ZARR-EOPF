@@ -1,4 +1,4 @@
-﻿name: Build, Test & Release EOPFZarr Plugin
+name: Build, Test & Release EOPFZarr Plugin
 
 on:
   push:
@@ -226,7 +226,7 @@ jobs:
           
       - name: Install deps (Windows)
         if: runner.os == 'Windows'
-        uses: echoix/setup-OSGeo4W@v0.2.0
+        uses: echoix/setup-OSGeo4W@v0.3.0
         with:
           packages: gdal-devel cmake ninja python3-core python3-pip python3-gdal python3-numpy python3-pytest
           root: C:\OSGeo4W
