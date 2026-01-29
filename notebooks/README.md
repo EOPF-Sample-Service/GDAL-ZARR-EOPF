@@ -2,7 +2,7 @@
 
 This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver functionality and compatibility testing.
 
-**📊 Current notebooks: 9 total (4 core + 5 additional)**
+**📊 Current notebooks: 11 total (4 core + 7 additional)**
 
 ## 📚 Available Notebooks
 
@@ -97,12 +97,32 @@ This folder contains Jupyter notebooks demonstrating the EOPF-Zarr GDAL driver f
 - **Purpose**: Demonstrates how to use the EOPFZARR GDAL driver with rasterio to work with EOPF Zarr datasets
 - **Features**:
   - Open EOPF Zarr datasets with `rasterio.open()`
-  - List and access subdatasets  
+  - List and access subdatasets
   - Read geospatial metadata (CRS, transform, bounds)
   - Efficient windowed reading
   - NumPy array integration
   - Fast and lightweight (no eager subdataset loading like rioxarray)
 - **Use Case**: NDVI calculation and visualization from Sentinel-3 OLCI data
+
+#### `10-Sentinel-3-Multi-Product-Demo.ipynb`
+
+- **Purpose**: Demonstrates working with multiple Sentinel-3 products
+- **Features**:
+  - Multi-product exploration (OLCI L1/L2, SLSTR products)
+  - Product structure comparison
+  - Data discovery and navigation
+- **Use Case**: Exploring different Sentinel-3 product types
+
+#### `11-Sentinel-1-GRD-Demo.ipynb`
+
+- **Purpose**: Demonstrates accessing Sentinel-1 Ground Range Detected (GRD) SAR data
+- **Features**:
+  - Sentinel-1 product structure exploration
+  - SAR amplitude (GRD) data access and visualization
+  - Ground Control Point (GCP) array inspection
+  - Understanding sparse geolocation grids
+  - Current driver capabilities and limitations with GCP-based data
+- **Use Case**: SAR data analysis and understanding Sentinel-1 geolocation differences from optical sensors
 
 
 
@@ -238,10 +258,16 @@ result = subset.compute()
 
 The notebooks use publicly accessible Earth Observation data:
 
+- **Sentinel-1 SAR**: Synthetic Aperture Radar data
+  - Provider: European Space Agency (ESA) via EODC
+  - Products: GRD (Ground Range Detected) - Extra Wide mode
+  - Access: Public HTTPS endpoints
+  - Features: SAR backscatter with Ground Control Points (GCPs)
+
 - **Sentinel-2 MSI L1C**: Multispectral optical imagery
   - Provider: European Space Agency (ESA) via Copernicus Data Space
   - Access: Public S3-compatible object storage
-  
+
 - **Sentinel-3 OLCI**: Ocean and Land Color Instrument data
   - Provider: European Space Agency (ESA) via Copernicus Data Space
   - Products: Level-1 EFR (Earth Observation Full Resolution)
@@ -284,6 +310,7 @@ All remote data URLs in notebooks point to publicly accessible endpoints and req
 1. **`09-EOPFZARR-with-Rasterio.ipynb`** - Rasterio integration (fast, lightweight)
 2. **`08-EOPFZARR-with-Rioxarray.ipynb`** - Rioxarray integration (xarray ecosystem)
 3. **`07-Sentinel-3-OLCI-Level-1-EFR.ipynb`** - Advanced Sentinel-3 analysis
+4. **`11-Sentinel-1-GRD-Demo.ipynb`** - SAR data access and GCP handling
 
 ### For Developers
 1. **`03-EOPF-Zarr-Test.ipynb`** - Environment setup and validation
