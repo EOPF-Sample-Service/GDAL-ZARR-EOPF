@@ -102,7 +102,7 @@ class TestUTMWithoutProjBbox:
         srs = ds.GetSpatialRef()
         assert srs is not None, "Spatial reference should exist"
         epsg_code = srs.GetAuthorityCode(None)
-        assert epsg_code == "32625", f"Should be EPSG:32625 (UTM Zone 25N), got {epsg_code}"
+        assert epsg_code == "32634", f"Should be EPSG:32634 (UTM Zone 34N), got {epsg_code}"
         
         # Check geotransform
         gt = ds.GetGeoTransform()
@@ -123,7 +123,7 @@ class TestUTMWithoutProjBbox:
                 assert origin_x < 10_000_000, \
                     f"UTM easting {origin_x} is invalid (bug: treating degrees as meters)"
                 
-                # Check if coordinates are in valid UTM range
+                # Check if coordinates are in valid UTM range 
                 if 166_000 <= origin_x <= 834_000:
                     print(f"✅ Valid UTM coordinates: ({origin_x:.0f}m E, {origin_y:.0f}m N)")
                 else:
@@ -133,7 +133,7 @@ class TestUTMWithoutProjBbox:
         
         # Check that metadata EPSG is correct
         epsg_meta = ds.GetMetadataItem("EPSG")
-        assert epsg_meta == "32625", f"Metadata EPSG should be 32625, got {epsg_meta}"
+        assert epsg_meta == "32634", f"Metadata EPSG should be 32634, got {epsg_meta}"
         
         # Verify no invalid metadata from bug
         utm_east_min = ds.GetMetadataItem("utm_easting_min")
