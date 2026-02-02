@@ -22,8 +22,8 @@ except ImportError:
 pytestmark = pytest.mark.require_driver("EOPFZARR")
 
 # Test URLs from Issue #135
-SENTINEL3_SLSTR_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202510-s03slsrbt-global/19/products/cpm_v256/S3A_SL_1_RBT____20251019T064521_20251019T064821_20251019T085627_0179_131_348_2700_PS1_O_NR_004.zarr"
-SENTINEL2_UTM_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202511-s02msil2a-eu/05/products/cpm_v262/S2B_MSIL2A_20251105T141259_N0511_R053_T25WFR_20251105T161519.zarr"
+SENTINEL3_SLSTR_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202601-s03slsrbt-eu/18/products/cpm_v262/S3A_SL_1_RBT____20260118T234920_20260118T235220_20260119T021734_0180_135_116_1080_PS1_O_NR_004.zarr"
+SENTINEL2_UTM_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
 
 
 def check_url_accessible(url, timeout=10):
