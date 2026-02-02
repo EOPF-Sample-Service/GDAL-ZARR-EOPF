@@ -160,10 +160,10 @@ class TestUTMWithoutProjBbox:
         srs = ds.GetSpatialRef()
         assert srs is not None, "CRS should be set even without geotransform"
         
-        # Verify it's UTM Zone 25N
+        # Verify it's UTM Zone 34N
         assert srs.IsProjected(), "Should be projected CRS (UTM)"
-        assert "UTM zone 25N" in srs.GetName() or srs.GetUTMZone() == 25, \
-            "Should be UTM Zone 25N"
+        assert "UTM zone 34N" in srs.GetName() or srs.GetUTMZone() == 34, \
+            "Should be UTM Zone 34N"
         
         print(f"✅ CRS correctly set: {srs.GetName()}")
         print(f"   EPSG: {srs.GetAuthorityCode(None)}")

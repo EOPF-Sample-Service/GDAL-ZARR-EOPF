@@ -177,6 +177,7 @@ class TestEOPFZarrIntegration:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test geotransform
         gt = ds.GetGeoTransform()
+        gt = tuple(map(lambda x: int(x), gt))
         assert gt != (0, 1, 0, 0, 0, 1), "Default geotransform detected"
         assert len(gt) == 6, "Invalid geotransform format"
         assert gt[1] != 0 and gt[5] != 0, "Zero pixel size in geotransform"
