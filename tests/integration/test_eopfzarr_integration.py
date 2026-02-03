@@ -29,10 +29,8 @@ pytestmark = pytest.mark.require_driver("EOPFZARR")
 
 
 # Remote Zarr test data URLs (publicly accessible)
-REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
-REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr/measurements/reflectance/r60m/b01"
-
-
+REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
+REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr/measurements/reflectance/r60m/b01"
 
 # No-op: All tests use remote data, so no test data generation is needed
 @pytest.fixture(scope="session", autouse=True)
@@ -179,6 +177,7 @@ class TestEOPFZarrIntegration:
             pytest.skip(f"Remote Zarr data not accessible: {url}")
         # Test geotransform
         gt = ds.GetGeoTransform()
+        gt = tuple(map(lambda x: int(x), gt))
         assert gt != (0, 1, 0, 0, 0, 1), "Default geotransform detected"
         assert len(gt) == 6, "Invalid geotransform format"
         assert gt[1] != 0 and gt[5] != 0, "Zero pixel size in geotransform"
@@ -227,7 +226,7 @@ class TestEOPFZarrIntegration:
     def test_network_access(self):
         """Test network dataset access via VSI and HTTPS URLs - This is the most critical test"""
         # Test the specific EODC URL - this is our primary use case
-        eodc_url = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr"
+        eodc_url = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
         
         print(f"Testing EODC URL: {eodc_url}")
         

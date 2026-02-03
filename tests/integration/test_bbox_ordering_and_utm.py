@@ -22,8 +22,8 @@ except ImportError:
 pytestmark = pytest.mark.require_driver("EOPFZARR")
 
 # Test URLs from Issue #135
-SENTINEL3_SLSTR_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202510-s03slsrbt-global/19/products/cpm_v256/S3A_SL_1_RBT____20251019T064521_20251019T064821_20251019T085627_0179_131_348_2700_PS1_O_NR_004.zarr"
-SENTINEL2_UTM_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202511-s02msil2a-eu/05/products/cpm_v262/S2B_MSIL2A_20251105T141259_N0511_R053_T25WFR_20251105T161519.zarr"
+SENTINEL3_SLSTR_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202601-s03slsrbt-eu/18/products/cpm_v262/S3A_SL_1_RBT____20260118T234920_20260118T235220_20260119T021734_0180_135_116_1080_PS1_O_NR_004.zarr"
+SENTINEL2_UTM_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
 
 
 def check_url_accessible(url, timeout=10):
@@ -102,7 +102,7 @@ class TestUTMWithoutProjBbox:
         srs = ds.GetSpatialRef()
         assert srs is not None, "Spatial reference should exist"
         epsg_code = srs.GetAuthorityCode(None)
-        assert epsg_code == "32625", f"Should be EPSG:32625 (UTM Zone 25N), got {epsg_code}"
+        assert epsg_code == "32634", f"Should be EPSG:32634 (UTM Zone 34N), got {epsg_code}"
         
         # Check geotransform
         gt = ds.GetGeoTransform()
@@ -123,7 +123,7 @@ class TestUTMWithoutProjBbox:
                 assert origin_x < 10_000_000, \
                     f"UTM easting {origin_x} is invalid (bug: treating degrees as meters)"
                 
-                # Check if coordinates are in valid UTM range
+                # Check if coordinates are in valid UTM range 
                 if 166_000 <= origin_x <= 834_000:
                     print(f"✅ Valid UTM coordinates: ({origin_x:.0f}m E, {origin_y:.0f}m N)")
                 else:
@@ -133,7 +133,7 @@ class TestUTMWithoutProjBbox:
         
         # Check that metadata EPSG is correct
         epsg_meta = ds.GetMetadataItem("EPSG")
-        assert epsg_meta == "32625", f"Metadata EPSG should be 32625, got {epsg_meta}"
+        assert epsg_meta == "32634", f"Metadata EPSG should be 32634, got {epsg_meta}"
         
         # Verify no invalid metadata from bug
         utm_east_min = ds.GetMetadataItem("utm_easting_min")
@@ -160,10 +160,10 @@ class TestUTMWithoutProjBbox:
         srs = ds.GetSpatialRef()
         assert srs is not None, "CRS should be set even without geotransform"
         
-        # Verify it's UTM Zone 25N
+        # Verify it's UTM Zone 34N
         assert srs.IsProjected(), "Should be projected CRS (UTM)"
-        assert "UTM zone 25N" in srs.GetName() or srs.GetUTMZone() == 25, \
-            "Should be UTM Zone 25N"
+        assert "UTM zone 34N" in srs.GetName() or srs.GetUTMZone() == 34, \
+            "Should be UTM Zone 34N"
         
         print(f"✅ CRS correctly set: {srs.GetName()}")
         print(f"   EPSG: {srs.GetAuthorityCode(None)}")
