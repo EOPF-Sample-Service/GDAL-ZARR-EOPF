@@ -256,6 +256,13 @@ void EOPFZarrDataset::LoadGeospatialInfo() const
         }
     }
 
+    // For subdatasets, override root-level geotransform with per-resolution x/y coordinate arrays
+    const char* pszSubPath = const_cast<EOPFZarrDataset*>(this)->GetMetadataItem("SUBDATASET_PATH");
+    if (pszSubPath && strlen(pszSubPath) > 0)
+    {
+        const_cast<EOPFZarrDataset*>(this)->LoadGeoTransformFromCoordinateArrays();
+    }
+
     // Check for spatial reference (projection) in metadata (with fast path)
     const char* pszSpatialRef = nullptr;
     if (!TryFastPathMetadata("spatial_ref", &pszSpatialRef))
@@ -1039,6 +1046,157 @@ void EOPFZarrDataset::CacheGeotransformFromCorners(double minX,
                  adfGeoTransform[4],
                  adfGeoTransform[5]);
     }
+}
+
+bool EOPFZarrDataset::LoadGeoTransformFromCoordinateArrays()
+{
+    const char* pszSubdatasetPath = GetMetadataItem("SUBDATASET_PATH");
+    if (!pszSubdatasetPath || strlen(pszSubdatasetPath) == 0)
+        return false;
+
+    // Extract group path (e.g., "measurements/reflectance/r60m" from
+    // "measurements/reflectance/r60m/b09")
+    std::string subdatasetPathStr(pszSubdatasetPath);
+    size_t lastSlash = subdatasetPathStr.find_last_of("/\\");
+    if (lastSlash == std::string::npos)
+        return false;
+    std::string groupPath = subdatasetPathStr.substr(0, lastSlash);
+
+    // Get root path from inner dataset description
+    std::string description = mInner->GetDescription();
+    std::string rootPath = ExtractRootPath(description);
+
+    // Construct paths to x and y coordinate arrays
+    std::string xPath = rootPath + "/" + groupPath + "/x";
+    std::string yPath = rootPath + "/" + groupPath + "/y";
+
+    // Open x and y arrays via the ZARR driver
+    std::string xZarrPath = "ZARR:\"" + rootPath + "\":/" + groupPath + "/x";
+    std::string yZarrPath = "ZARR:\"" + rootPath + "\":/" + groupPath + "/y";
+
+    CPLDebug("EOPFZARR",
+             "LoadGeoTransformFromCoordinateArrays: trying x=%s, y=%s",
+             xZarrPath.c_str(),
+             yZarrPath.c_str());
+
+    GDALDataset* xDS =
+        GDALDataset::FromHandle(GDALOpenEx(xZarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY,
+                                           nullptr, nullptr, nullptr));
+    if (!xDS)
+    {
+        CPLDebug("EOPFZARR", "LoadGeoTransformFromCoordinateArrays: failed to open x array");
+        return false;
+    }
+
+    GDALDataset* yDS =
+        GDALDataset::FromHandle(GDALOpenEx(yZarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY,
+                                           nullptr, nullptr, nullptr));
+    if (!yDS)
+    {
+        GDALClose(xDS);
+        CPLDebug("EOPFZARR", "LoadGeoTransformFromCoordinateArrays: failed to open y array");
+        return false;
+    }
+
+    GDALRasterBand* xBand = xDS->GetRasterBand(1);
+    GDALRasterBand* yBand = yDS->GetRasterBand(1);
+    if (!xBand || !yBand)
+    {
+        GDALClose(xDS);
+        GDALClose(yDS);
+        return false;
+    }
+
+    // Read first 2 values from each 1D coordinate array to get origin and step
+    // x/y arrays are 1D (either Nx1 or 1xN depending on driver layout)
+    int xWidth = xDS->GetRasterXSize();
+    int xHeight = xDS->GetRasterYSize();
+    int nXLen = (xWidth > xHeight) ? xWidth : xHeight;
+
+    int yWidth = yDS->GetRasterXSize();
+    int yHeight = yDS->GetRasterYSize();
+    int nYLen = (yWidth > yHeight) ? yWidth : yHeight;
+
+    if (nXLen < 2 || nYLen < 2)
+    {
+        GDALClose(xDS);
+        GDALClose(yDS);
+        CPLDebug("EOPFZARR",
+                 "LoadGeoTransformFromCoordinateArrays: coordinate arrays too short (%d, %d)",
+                 nXLen,
+                 nYLen);
+        return false;
+    }
+
+    float xVals[2], yVals[2];
+    CPLErr xErr, yErr;
+
+    // Read first 2 pixels — for 1D arrays the ZARR driver exposes them as a single row
+    if (xWidth >= 2)
+        xErr = xBand->RasterIO(GF_Read, 0, 0, 2, 1, xVals, 2, 1, GDT_Float32, 0, 0, nullptr);
+    else
+        xErr = xBand->RasterIO(GF_Read, 0, 0, 1, 2, xVals, 1, 2, GDT_Float32, 0, 0, nullptr);
+
+    if (yWidth >= 2)
+        yErr = yBand->RasterIO(GF_Read, 0, 0, 2, 1, yVals, 2, 1, GDT_Float32, 0, 0, nullptr);
+    else
+        yErr = yBand->RasterIO(GF_Read, 0, 0, 1, 2, yVals, 1, 2, GDT_Float32, 0, 0, nullptr);
+
+    GDALClose(xDS);
+    GDALClose(yDS);
+
+    if (xErr != CE_None || yErr != CE_None)
+    {
+        CPLDebug("EOPFZARR",
+                 "LoadGeoTransformFromCoordinateArrays: RasterIO failed (x=%d, y=%d)",
+                 (int)xErr,
+                 (int)yErr);
+        return false;
+    }
+
+    double stepX = (double)(xVals[1] - xVals[0]);  // pixel width (positive, e.g. 10 or 60)
+    double stepY = (double)(yVals[1] - yVals[0]);  // pixel height (negative for north-up)
+
+    // xVals[0]/yVals[0] are pixel centers; origin (UL corner) is offset by half a pixel
+    double originX = (double)xVals[0] - stepX / 2.0;
+    double originY = (double)yVals[0] - stepY / 2.0;
+
+    CPLDebug("EOPFZARR",
+             "LoadGeoTransformFromCoordinateArrays: x[0]=%.2f step=%.2f, y[0]=%.2f step=%.2f "
+             "-> origin=(%.2f, %.2f)",
+             (double)xVals[0],
+             stepX,
+             (double)yVals[0],
+             stepY,
+             originX,
+             originY);
+
+    double adfGeoTransform[6] = {originX, stepX, 0.0, originY, 0.0, stepY};
+
+#ifdef HAVE_GDAL_GEOTRANSFORM
+    GDALPamDataset::SetGeoTransform(GDALGeoTransform(adfGeoTransform));
+#else
+    GDALPamDataset::SetGeoTransform(adfGeoTransform);
+#endif
+    mCache.SetCachedGeoTransform(adfGeoTransform);
+
+    // Update geo_transform metadata string to match
+    CPLString transformStr;
+    for (int i = 0; i < 6; ++i)
+    {
+        if (i > 0)
+            transformStr += ",";
+        transformStr += CPLString().Printf("%.12f", adfGeoTransform[i]);
+    }
+    SetMetadataItem("geo_transform", transformStr.c_str());
+
+    CPLDebug("EOPFZARR",
+             "LoadGeoTransformFromCoordinateArrays: set geotransform [%.2f,%.2f,0,%.2f,0,%.2f]",
+             originX,
+             stepX,
+             originY,
+             stepY);
+    return true;
 }
 
 bool EOPFZarrDataset::TryFastPathMetadata(const char* key, const char** outValue) const

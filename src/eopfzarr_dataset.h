@@ -93,6 +93,7 @@ class EOPFZarrDataset : public GDALPamDataset
     void OptimizedMetadataMerge() const;
     void CacheGeotransformFromCorners(double minX, double maxX, double minY, double maxY);
     bool TryFastPathMetadata(const char* key, const char** outValue) const;
+    bool LoadGeoTransformFromCoordinateArrays();
 };
 
 class EOPFZarrRasterBand : public GDALProxyRasterBand
