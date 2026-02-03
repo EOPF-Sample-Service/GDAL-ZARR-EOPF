@@ -1079,18 +1079,16 @@ bool EOPFZarrDataset::LoadGeoTransformFromCoordinateArrays()
              xZarrPath.c_str(),
              yZarrPath.c_str());
 
-    GDALDataset* xDS =
-        GDALDataset::FromHandle(GDALOpenEx(xZarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY,
-                                           nullptr, nullptr, nullptr));
+    GDALDataset* xDS = GDALDataset::FromHandle(GDALOpenEx(
+        xZarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
     if (!xDS)
     {
         CPLDebug("EOPFZARR", "LoadGeoTransformFromCoordinateArrays: failed to open x array");
         return false;
     }
 
-    GDALDataset* yDS =
-        GDALDataset::FromHandle(GDALOpenEx(yZarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY,
-                                           nullptr, nullptr, nullptr));
+    GDALDataset* yDS = GDALDataset::FromHandle(GDALOpenEx(
+        yZarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
     if (!yDS)
     {
         GDALClose(xDS);
@@ -1149,24 +1147,24 @@ bool EOPFZarrDataset::LoadGeoTransformFromCoordinateArrays()
     {
         CPLDebug("EOPFZARR",
                  "LoadGeoTransformFromCoordinateArrays: RasterIO failed (x=%d, y=%d)",
-                 (int)xErr,
-                 (int)yErr);
+                 (int) xErr,
+                 (int) yErr);
         return false;
     }
 
-    double stepX = (double)(xVals[1] - xVals[0]);  // pixel width (positive, e.g. 10 or 60)
-    double stepY = (double)(yVals[1] - yVals[0]);  // pixel height (negative for north-up)
+    double stepX = (double) (xVals[1] - xVals[0]);  // pixel width (positive, e.g. 10 or 60)
+    double stepY = (double) (yVals[1] - yVals[0]);  // pixel height (negative for north-up)
 
     // xVals[0]/yVals[0] are pixel centers; origin (UL corner) is offset by half a pixel
-    double originX = (double)xVals[0] - stepX / 2.0;
-    double originY = (double)yVals[0] - stepY / 2.0;
+    double originX = (double) xVals[0] - stepX / 2.0;
+    double originY = (double) yVals[0] - stepY / 2.0;
 
     CPLDebug("EOPFZARR",
              "LoadGeoTransformFromCoordinateArrays: x[0]=%.2f step=%.2f, y[0]=%.2f step=%.2f "
              "-> origin=(%.2f, %.2f)",
-             (double)xVals[0],
+             (double) xVals[0],
              stepX,
-             (double)yVals[0],
+             (double) yVals[0],
              stepY,
              originX,
              originY);
