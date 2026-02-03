@@ -503,19 +503,18 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                 maxY = bbox3;
             }
 
-            // For UTM products: geographic bbox cannot be used directly as projected coordinates
-            // Skip geotransform; CRS is already set so GDAL can handle transformations when needed
+            // For UTM products: geographic bbox will be transformed to UTM in STEP 5
             if (isUTM)
             {
+                hasBounds = true;
                 CPLDebug("EOPFZARR",
                          "Geographic bbox found for UTM product (EPSG:%d): [%.8f,%.8f,%.8f,%.8f] - "
-                         "CRS set but skipping geotransform (would need coordinate transformation)",
+                         "will transform to UTM in STEP 5",
                          nEPSG,
                          minX,
                          minY,
                          maxX,
                          maxY);
-                // Leave hasBounds=false to skip geotransform setting
             }
             else
             {
@@ -532,72 +531,51 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
     }
 
 
-    // If no bounds found after all attempts, create default bounds
-    // BUT: For UTM products without proj:bbox, do NOT create default bounds
-    // as they would be incorrectly transformed from geographic to UTM
+    // If no bounds found after all attempts, create default geographic bounds
     if (!hasBounds)
     {
-        // Check if this is a UTM product without bounds
-        if (nEPSG != 0 && isUTM)
-        {
-            // UTM product without proj:bbox - CRS is already set, skip geotransform
-            CPLDebug("EOPFZARR",
-                     "UTM product (EPSG:%d) without proj:bbox - CRS set, no geotransform",
-                     nEPSG);
-            // Leave hasBounds=false to skip geotransform setting below
-        }
-        else
-        {
-            // Create default geographic bounds for non-UTM products
-            minX = 10.0;  // longitude
-            minY = 40.0;  // latitude
-            maxX = 15.0;  // longitude
-            maxY = 45.0;  // latitude
-            hasBounds = true;
-            isUTM = false;  // Defaulting to geographic
-            nEPSG = 4326;   // Assuming WGS84 for these defaults
+        // Create default geographic bounds for non-UTM products without any bounds
+        minX = 10.0;  // longitude
+        minY = 40.0;  // latitude
+        maxX = 15.0;  // longitude
+        maxY = 45.0;  // latitude
+        hasBounds = true;
+        isUTM = false;  // Defaulting to geographic
+        nEPSG = 4326;   // Assuming WGS84 for these defaults
 
-            // Ensure WGS84 projection is set
-            OGRSpatialReference srs_default_geo;
-            srs_default_geo.SetWellKnownGeogCS("WGS84");
-            srs_default_geo.SetAuthority("GEOGCS", "EPSG", 4326);
-            char* pszDefaultWKT = nullptr;
-            srs_default_geo.exportToWkt(&pszDefaultWKT);
-            ds.SetProjection(pszDefaultWKT);
-            ds.SetMetadataItem("spatial_ref", pszDefaultWKT);
-            ds.SetMetadataItem("EPSG", "4326");
-            ds.SetMetadataItem("proj:epsg", "4326");
-            CPLFree(pszDefaultWKT);
-            CPLDebug("EOPFZARR",
-                     "No bounds found, created default geographic bounds (EPSG:4326): "
-                     "[%.8f,%.8f,%.8f,%.8f]",
-                     minX,
-                     minY,
-                     maxX,
-                     maxY);
-        }
+        // Ensure WGS84 projection is set
+        OGRSpatialReference srs_default_geo;
+        srs_default_geo.SetWellKnownGeogCS("WGS84");
+        srs_default_geo.SetAuthority("GEOGCS", "EPSG", 4326);
+        char* pszDefaultWKT = nullptr;
+        srs_default_geo.exportToWkt(&pszDefaultWKT);
+        ds.SetProjection(pszDefaultWKT);
+        ds.SetMetadataItem("spatial_ref", pszDefaultWKT);
+        ds.SetMetadataItem("EPSG", "4326");
+        ds.SetMetadataItem("proj:epsg", "4326");
+        CPLFree(pszDefaultWKT);
+        CPLDebug("EOPFZARR",
+                 "No bounds found, created default geographic bounds (EPSG:4326): "
+                 "[%.8f,%.8f,%.8f,%.8f]",
+                 minX,
+                 minY,
+                 maxX,
+                 maxY);
     }
 
     // -----------------------------------
-    // STEP 5: Transform bounds if using UTM (This step might be redundant if STEP 3 handles UTM and
-    // returns) This section should only run if STEP 3 didn't execute or didn't return, and we have
-    // a UTM projection identified in STEP 2 but not specifically EPSG:32632.
+    // STEP 5: Transform geographic bounds to UTM if needed.
+    // Runs when proj:bbox was not available but stac_discovery.bbox provided geographic bounds.
     // -----------------------------------
-    if (hasBounds && isUTM &&
-        nEPSG != 32632)  // Only if UTM and not already handled by EPSG 32632 block
+    if (hasBounds && isUTM)
     {
-        // Create source (WGS84, assuming input bounds were geographic if not from proj:bbox)
-        // and target (UTM) spatial references
-        OGRSpatialReference srcSRS_transform, tgtSRS_transform;
-        // Heuristic: if bounds are small and look like lat/lon, assume WGS84
-        // This is tricky; ideally, the source CRS of these bounds should be known.
-        // For now, let's assume if isUTM is true, but we didn't use proj:bbox,
-        // the minX/minY etc. might still be geographic.
+        // Geographic bounds need transformation to the target UTM projection
         bool boundsLookGeographic = (std::abs(minX) <= 180 && std::abs(maxX) <= 180 &&
                                      std::abs(minY) <= 90 && std::abs(maxY) <= 90);
 
         if (boundsLookGeographic)
         {
+            OGRSpatialReference srcSRS_transform, tgtSRS_transform;
             srcSRS_transform.SetWellKnownGeogCS("WGS84");
             if (tgtSRS_transform.importFromEPSG(nEPSG) == OGRERR_NONE)
             {
@@ -605,19 +583,25 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                     OGRCreateCoordinateTransformation(&srcSRS_transform, &tgtSRS_transform);
                 if (poCT)
                 {
-                    double utmMinX = minX, utmMinY = minY;  // Temp vars for transformation
-                    double utmMaxX = maxX, utmMaxY = maxY;
+                    // Transform all 4 corners to get a correct UTM bounding box
+                    double cornersX[4] = {minX, maxX, minX, maxX};
+                    double cornersY[4] = {minY, minY, maxY, maxY};
+                    bool allSuccess = poCT->Transform(4, cornersX, cornersY);
 
-                    // Transform corners. Note: transforming bbox corners doesn't always give the
-                    // transformed bbox. For simplicity, we transform min/min and max/max. A more
-                    // robust way is to transform all 4 corners and find new min/max.
-                    bool bSuccess1 = poCT->Transform(1, &utmMinX, &utmMinY);
-                    bool bSuccess2 = poCT->Transform(1, &utmMaxX, &utmMaxY);
-
-                    if (bSuccess1 && bSuccess2)
+                    if (allSuccess)
                     {
+                        double utmMinX = cornersX[0], utmMaxX = cornersX[0];
+                        double utmMinY = cornersY[0], utmMaxY = cornersY[0];
+                        for (int i = 1; i < 4; ++i)
+                        {
+                            utmMinX = std::min(utmMinX, cornersX[i]);
+                            utmMaxX = std::max(utmMaxX, cornersX[i]);
+                            utmMinY = std::min(utmMinY, cornersY[i]);
+                            utmMaxY = std::max(utmMaxY, cornersY[i]);
+                        }
+
                         CPLDebug("EOPFZARR",
-                                 "Transformed geographic-like bounds [%.8f,%.8f,%.8f,%.8f] to UTM "
+                                 "Transformed geographic bounds [%.8f,%.8f,%.8f,%.8f] to UTM "
                                  "(EPSG:%d) [%.8f,%.8f,%.8f,%.8f]",
                                  minX,
                                  minY,
@@ -628,16 +612,15 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                                  utmMinY,
                                  utmMaxX,
                                  utmMaxY);
-                        // Update bounds to UTM coordinates
-                        minX = std::min(utmMinX, utmMaxX);  // Ensure minX is min
-                        minY = std::min(utmMinY, utmMaxY);  // Ensure minY is min
-                        maxX = std::max(utmMinX, utmMaxX);  // Ensure maxX is max
-                        maxY = std::max(utmMinY, utmMaxY);  // Ensure maxY is max
+                        minX = utmMinX;
+                        minY = utmMinY;
+                        maxX = utmMaxX;
+                        maxY = utmMaxY;
                     }
                     else
                     {
                         CPLDebug("EOPFZARR",
-                                 "Failed to transform geographic-like bounds to UTM (EPSG:%d)",
+                                 "Failed to transform geographic bounds to UTM (EPSG:%d)",
                                  nEPSG);
                     }
                     OGRCoordinateTransformation::DestroyCT(poCT);
@@ -656,12 +639,6 @@ static void ExtractCoordinateMetadata(const CPLJSONObject& obj, GDALDataset& ds)
                          "Failed to import target UTM SRS for transformation (EPSG:%d)",
                          nEPSG);
             }
-        }
-        else
-        {
-            CPLDebug("EOPFZARR",
-                     "Bounds do not look geographic, skipping UTM transformation for EPSG:%d",
-                     nEPSG);
         }
     }
 
