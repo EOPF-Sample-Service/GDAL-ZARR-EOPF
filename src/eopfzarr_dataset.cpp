@@ -1262,3 +1262,392 @@ void EOPFZarrRasterBand::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff)
     // For now, just log the intent
     CPLDebug("EOPFZARR_PERF", "Would prefetch blocks around (%d,%d)", nBlockXOff, nBlockYOff);
 }
+
+// ============================================================================
+// EOPFZarrMultiBandDataset implementation - Multi-band GRD support
+// ============================================================================
+
+bool IsGRDProduct(const std::string& path)
+{
+    // Check if path contains GRD product indicators
+    // Sentinel-1 GRD naming: S1A_IW_GRDH_..., S1B_EW_GRDM_..., etc.
+    // Pattern: S1[ABC]_[IW|EW|SM]_GRD[HMF]_...
+    if (path.find("_GRD") != std::string::npos || path.find("_grd") != std::string::npos)
+    {
+        CPLDebug("EOPFZARR", "IsGRDProduct: Detected GRD product pattern in path");
+        return true;
+    }
+    return false;
+}
+
+std::vector<std::pair<std::string, std::string>> FindGRDPolarizations(GDALDataset* rootDS,
+                                                                      const std::string& rootPath)
+{
+    std::vector<std::pair<std::string, std::string>> result;
+
+    if (!rootDS)
+        return result;
+
+    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
+    if (!papszSubdatasets)
+        return result;
+
+    // Track found polarizations to avoid duplicates and ensure we find measurement arrays
+    std::map<std::string, std::string> polToPath;
+
+    for (int i = 0; papszSubdatasets[i] != nullptr; i++)
+    {
+        char* pszKey = nullptr;
+        const char* pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
+
+        if (pszKey && pszValue && strstr(pszKey, "_NAME"))
+        {
+            std::string subdataset(pszValue);
+
+            // Look for measurements/grd arrays
+            if (subdataset.find("measurements/grd") != std::string::npos ||
+                subdataset.find("measurements\\grd") != std::string::npos)
+            {
+                // Extract polarization from path
+                // Pattern: .../S01SIWGRD_..._VV/measurements/grd or _VH or _HH or _HV
+                std::string polName;
+
+                // Check for polarization indicators before /measurements
+                size_t measPos = subdataset.find("/measurements");
+                if (measPos == std::string::npos)
+                    measPos = subdataset.find("\\measurements");
+
+                if (measPos != std::string::npos)
+                {
+                    // Look backwards for polarization
+                    std::string beforeMeas = subdataset.substr(0, measPos);
+
+                    // Check for polarization suffixes
+                    if (beforeMeas.length() >= 2)
+                    {
+                        std::string lastTwo = beforeMeas.substr(beforeMeas.length() - 2);
+
+                        // Convert to uppercase for comparison
+                        for (char& c : lastTwo)
+                            c = (char) toupper((unsigned char) c);
+
+                        if (lastTwo == "VV" || lastTwo == "VH" || lastTwo == "HH" ||
+                            lastTwo == "HV")
+                        {
+                            polName = lastTwo;
+                        }
+                    }
+                }
+
+                if (!polName.empty() && polToPath.find(polName) == polToPath.end())
+                {
+                    // Extract subdataset path from the full ZARR/EOPFZARR path
+                    // Format: EOPFZARR:"rootPath":/subpath or ZARR:"rootPath":/subpath
+                    std::string subPath;
+                    size_t colonPos = subdataset.rfind("\":");
+                    if (colonPos != std::string::npos)
+                    {
+                        subPath = subdataset.substr(colonPos + 2);
+                    }
+
+                    if (!subPath.empty())
+                    {
+                        polToPath[polName] = subPath;
+                        CPLDebug("EOPFZARR",
+                                 "FindGRDPolarizations: Found %s at %s",
+                                 polName.c_str(),
+                                 subPath.c_str());
+                    }
+                }
+            }
+        }
+        CPLFree(pszKey);
+    }
+
+    // Convert map to vector with consistent ordering (HH before HV, VV before VH)
+    const char* polOrder[] = {"VV", "VH", "HH", "HV"};
+    for (const char* pol : polOrder)
+    {
+        auto it = polToPath.find(pol);
+        if (it != polToPath.end())
+        {
+            result.push_back({it->first, it->second});
+        }
+    }
+
+    return result;
+}
+
+EOPFZarrMultiBandDataset::EOPFZarrMultiBandDataset()
+    : mCachedSpatialRef(nullptr), m_bIsRemoteDataset(false)
+{
+}
+
+EOPFZarrMultiBandDataset::~EOPFZarrMultiBandDataset()
+{
+    // Clear bands first (they reference the subdatasets)
+    for (int i = 0; i < nBands; i++)
+    {
+        delete papoBands[i];
+        papoBands[i] = nullptr;
+    }
+    nBands = 0;
+
+    // Then clear the subdatasets
+    mPolarizationDatasets.clear();
+
+    if (mCachedSpatialRef)
+    {
+        delete mCachedSpatialRef;
+        mCachedSpatialRef = nullptr;
+    }
+}
+
+EOPFZarrMultiBandDataset* EOPFZarrMultiBandDataset::CreateFromPolarizations(
+    const std::string& rootPath,
+    const std::vector<std::pair<std::string, std::string>>& polPaths,
+    GDALDriver* drv,
+    bool bIsRemote)
+{
+    if (polPaths.empty())
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "No polarization subdatasets provided");
+        return nullptr;
+    }
+
+    std::unique_ptr<EOPFZarrMultiBandDataset> poDS(new EOPFZarrMultiBandDataset());
+    poDS->m_bIsRemoteDataset = bIsRemote;
+    poDS->poDriver = drv;
+
+    // Suppress PAM save warnings for remote datasets
+    if (bIsRemote)
+    {
+        poDS->nPamFlags |= 4;  // GPF_NOSAVE
+    }
+
+    // Open each polarization subdataset
+    char* const azDrvList[] = {(char*) "Zarr", nullptr};
+
+    for (const auto& polPair : polPaths)
+    {
+        const std::string& polName = polPair.first;
+        const std::string& subPath = polPair.second;
+
+        std::string zarrPath = "ZARR:\"" + rootPath + "\":" + subPath;
+        CPLDebug("EOPFZARR",
+                 "EOPFZarrMultiBandDataset: Opening %s subdataset: %s",
+                 polName.c_str(),
+                 zarrPath.c_str());
+
+        GDALDataset* polDS = GDALDataset::FromHandle(GDALOpenEx(
+            zarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, azDrvList, nullptr, nullptr));
+
+        if (!polDS)
+        {
+            CPLError(CE_Failure,
+                     CPLE_OpenFailed,
+                     "Failed to open %s polarization subdataset: %s",
+                     polName.c_str(),
+                     zarrPath.c_str());
+            return nullptr;
+        }
+
+        poDS->mPolarizationDatasets.push_back(std::unique_ptr<GDALDataset>(polDS));
+        poDS->mPolarizationNames.push_back(polName);
+    }
+
+    // Use first polarization as reference for dimensions
+    GDALDataset* refDS = poDS->mPolarizationDatasets[0].get();
+    poDS->nRasterXSize = refDS->GetRasterXSize();
+    poDS->nRasterYSize = refDS->GetRasterYSize();
+
+    // Validate all polarizations have same dimensions
+    for (size_t i = 1; i < poDS->mPolarizationDatasets.size(); i++)
+    {
+        GDALDataset* ds = poDS->mPolarizationDatasets[i].get();
+        if (ds->GetRasterXSize() != poDS->nRasterXSize ||
+            ds->GetRasterYSize() != poDS->nRasterYSize)
+        {
+            CPLError(CE_Warning,
+                     CPLE_AppDefined,
+                     "Polarization %s has different dimensions (%dx%d vs %dx%d)",
+                     poDS->mPolarizationNames[i].c_str(),
+                     ds->GetRasterXSize(),
+                     ds->GetRasterYSize(),
+                     poDS->nRasterXSize,
+                     poDS->nRasterYSize);
+        }
+    }
+
+    // Create bands for each polarization
+    for (size_t i = 0; i < poDS->mPolarizationDatasets.size(); i++)
+    {
+        GDALDataset* polDS = poDS->mPolarizationDatasets[i].get();
+        const std::string& polName = poDS->mPolarizationNames[i];
+
+        EOPFZarrMultiBandRasterBand* band =
+            new EOPFZarrMultiBandRasterBand(poDS.get(), (int) (i + 1), polDS, polName);
+        poDS->SetBand((int) (i + 1), band);
+    }
+
+    // Set description for QGIS
+    std::string desc = "EOPFZARR_GRD:";
+    for (size_t i = 0; i < poDS->mPolarizationNames.size(); i++)
+    {
+        if (i > 0)
+            desc += "+";
+        desc += poDS->mPolarizationNames[i];
+    }
+    poDS->SetDescription(desc.c_str());
+
+    // Set metadata
+    poDS->SetMetadataItem("EOPF_PRODUCT", "YES");
+    poDS->SetMetadataItem("EOPF_PRODUCT_TYPE", "GRD");
+    poDS->SetMetadataItem("EOPF_MULTIBAND", "YES");
+
+    std::string polList;
+    for (size_t i = 0; i < poDS->mPolarizationNames.size(); i++)
+    {
+        if (i > 0)
+            polList += ",";
+        polList += poDS->mPolarizationNames[i];
+    }
+    poDS->SetMetadataItem("EOPF_POLARIZATIONS", polList.c_str());
+
+    CPLDebug("EOPFZARR",
+             "EOPFZarrMultiBandDataset: Created %d-band GRD dataset (%s)",
+             (int) poDS->mPolarizationDatasets.size(),
+             polList.c_str());
+
+    return poDS.release();
+}
+
+const OGRSpatialReference* EOPFZarrMultiBandDataset::GetSpatialRef() const
+{
+    if (mCachedSpatialRef)
+        return mCachedSpatialRef;
+
+    // Get from first polarization dataset
+    if (!mPolarizationDatasets.empty())
+    {
+        const OGRSpatialReference* srs = mPolarizationDatasets[0]->GetSpatialRef();
+        if (srs)
+        {
+            mCachedSpatialRef = srs->Clone();
+            return mCachedSpatialRef;
+        }
+    }
+    return nullptr;
+}
+
+#ifdef HAVE_GDAL_GEOTRANSFORM
+CPLErr EOPFZarrMultiBandDataset::GetGeoTransform(GDALGeoTransform& gt) const
+{
+    if (!mPolarizationDatasets.empty())
+    {
+        return mPolarizationDatasets[0]->GetGeoTransform(gt);
+    }
+    return CE_Failure;
+}
+#else
+CPLErr EOPFZarrMultiBandDataset::GetGeoTransform(double* gt)
+{
+    if (!mPolarizationDatasets.empty())
+    {
+        return mPolarizationDatasets[0]->GetGeoTransform(gt);
+    }
+    return CE_Failure;
+}
+#endif
+
+char** EOPFZarrMultiBandDataset::GetMetadata(const char* pszDomain)
+{
+    return GDALPamDataset::GetMetadata(pszDomain);
+}
+
+const char* EOPFZarrMultiBandDataset::GetMetadataItem(const char* pszName, const char* pszDomain)
+{
+    return GDALPamDataset::GetMetadataItem(pszName, pszDomain);
+}
+
+// ============================================================================
+// EOPFZarrMultiBandRasterBand implementation
+// ============================================================================
+
+EOPFZarrMultiBandRasterBand::EOPFZarrMultiBandRasterBand(EOPFZarrMultiBandDataset* poDSIn,
+                                                         int nBandIn,
+                                                         GDALDataset* poSourceDS,
+                                                         const std::string& polName)
+    : mSourceDataset(poSourceDS), mPolarizationName(polName)
+{
+    poDS = poDSIn;
+    nBand = nBandIn;
+
+    // Get band properties from source
+    GDALRasterBand* srcBand = poSourceDS->GetRasterBand(1);
+    if (srcBand)
+    {
+        this->eDataType = srcBand->GetRasterDataType();
+        srcBand->GetBlockSize(&this->nBlockXSize, &this->nBlockYSize);
+    }
+    else
+    {
+        this->eDataType = GDT_UInt16;  // Default for GRD
+        this->nBlockXSize = 256;
+        this->nBlockYSize = 256;
+    }
+
+    // Set band description to polarization name
+    SetDescription(polName.c_str());
+}
+
+EOPFZarrMultiBandRasterBand::~EOPFZarrMultiBandRasterBand()
+{
+    // mSourceDataset is owned by parent EOPFZarrMultiBandDataset, don't delete
+}
+
+CPLErr EOPFZarrMultiBandRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
+{
+    if (!mSourceDataset)
+        return CE_Failure;
+
+    GDALRasterBand* srcBand = mSourceDataset->GetRasterBand(1);
+    if (!srcBand)
+        return CE_Failure;
+
+    return srcBand->ReadBlock(nBlockXOff, nBlockYOff, pImage);
+}
+
+CPLErr EOPFZarrMultiBandRasterBand::IRasterIO(GDALRWFlag eRWFlag,
+                                              int nXOff,
+                                              int nYOff,
+                                              int nXSize,
+                                              int nYSize,
+                                              void* pData,
+                                              int nBufXSize,
+                                              int nBufYSize,
+                                              GDALDataType eBufType,
+                                              GSpacing nPixelSpace,
+                                              GSpacing nLineSpace,
+                                              GDALRasterIOExtraArg* psExtraArg)
+{
+    if (!mSourceDataset)
+        return CE_Failure;
+
+    GDALRasterBand* srcBand = mSourceDataset->GetRasterBand(1);
+    if (!srcBand)
+        return CE_Failure;
+
+    return srcBand->RasterIO(eRWFlag,
+                             nXOff,
+                             nYOff,
+                             nXSize,
+                             nYSize,
+                             pData,
+                             nBufXSize,
+                             nBufYSize,
+                             eBufType,
+                             nPixelSpace,
+                             nLineSpace,
+                             psExtraArg);
+}
