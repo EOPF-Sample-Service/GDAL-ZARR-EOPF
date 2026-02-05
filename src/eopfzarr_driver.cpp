@@ -822,7 +822,81 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     bool bIsRemoteDataset = IsUrlOrVirtualPath(mainPath);
     CPLDebug("EOPFZARR", "Dataset is %s", bIsRemoteDataset ? "REMOTE" : "LOCAL");
 
-    // Create our wrapper dataset
+    // Check if this is a GRD product and multi-band mode is enabled
+    // Default is YES for GRD products unless explicitly disabled
+    const char* pszGrdMultiband =
+        CSLFetchNameValueDef(poOpenInfo->papszOpenOptions, "GRD_MULTIBAND", "YES");
+    bool bGrdMultiband = CPLTestBool(pszGrdMultiband);
+
+    // For root datasets (not subdatasets), check if this is a GRD product
+    if (!isSubdataset && bGrdMultiband && IsGRDProduct(mainPath))
+    {
+        CPLDebug("EOPFZARR", "Detected GRD product, attempting multi-band mode");
+
+        // Create a temporary wrapper to get subdatasets
+        std::unique_ptr<EOPFZarrDataset> tempDS(
+            EOPFZarrDataset::Create(poUnderlyingDS, gEOPFDriver, nullptr, bIsRemoteDataset));
+
+        if (tempDS)
+        {
+            // Find GRD polarization subdatasets
+            auto polPaths = FindGRDPolarizations(tempDS.get(), mainPath);
+
+            if (polPaths.size() >= 2)
+            {
+                CPLDebug("EOPFZARR",
+                         "Found %d polarizations, creating multi-band dataset",
+                         (int) polPaths.size());
+
+                // Release the temporary dataset (it owns poUnderlyingDS)
+                tempDS.reset();
+
+                // Create multi-band dataset
+                EOPFZarrMultiBandDataset* poMultiDS =
+                    EOPFZarrMultiBandDataset::CreateFromPolarizations(
+                        mainPath, polPaths, gEOPFDriver, bIsRemoteDataset);
+
+                if (poMultiDS)
+                {
+                    poMultiDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
+                    return poMultiDS;
+                }
+                else
+                {
+                    CPLDebug("EOPFZARR",
+                             "Failed to create multi-band dataset, falling back to standard mode");
+                    // Re-open the underlying dataset since tempDS closed it
+                    char* const azDrvList[] = {(char*) "Zarr", nullptr};
+                    std::string zarrPath = "ZARR:\"" + mainPath + "\"";
+                    poUnderlyingDS = static_cast<GDALDataset*>(
+                        GDALOpenEx(zarrPath.c_str(),
+                                   poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                                   azDrvList,
+                                   nullptr,
+                                   nullptr));
+                    if (!poUnderlyingDS)
+                    {
+                        CPLError(CE_Failure,
+                                 CPLE_OpenFailed,
+                                 "Failed to re-open dataset after multi-band attempt");
+                        return nullptr;
+                    }
+                }
+            }
+            else
+            {
+                CPLDebug("EOPFZARR",
+                         "Found only %d polarization(s), using standard mode",
+                         (int) polPaths.size());
+                // tempDS will be destroyed, need to get the underlying dataset back
+                // Actually, we need to keep tempDS and return it
+                tempDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
+                return tempDS.release();
+            }
+        }
+    }
+
+    // Create our wrapper dataset (standard mode)
     // Pass subdataset path so it can be set before metadata loading
     // Pass remote flag to control PAM save behavior
     EOPFZarrDataset* poDS = EOPFZarrDataset::Create(poUnderlyingDS,
@@ -874,7 +948,7 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
     driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "drivers/raster/eopfzarr.html");
     driver->SetMetadataItem(GDAL_DMD_SUBDATASETS, "YES");
 
-    // Add our own EOPF_PROCESS option and SUPPRESS_AUX_WARNING option
+    // Add our own EOPF_PROCESS option, SUPPRESS_AUX_WARNING, and GRD_MULTIBAND options
     const char* pszOptions =
         "<OpenOptionList>"
         "  <Option name='EOPF_PROCESS' type='boolean' default='NO' description='Enable EOPF "
@@ -884,6 +958,12 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
         "  </Option>"
         "  <Option name='SUPPRESS_AUX_WARNING' type='boolean' default='YES' description='Suppress "
         "auxiliary file (.aux.xml) save warnings for remote datasets'>"
+        "    <Value>YES</Value>"
+        "    <Value>NO</Value>"
+        "  </Option>"
+        "  <Option name='GRD_MULTIBAND' type='boolean' default='YES' description='For Sentinel-1 "
+        "GRD products, combine polarization bands (VV/VH or HH/HV) into a single multi-band "
+        "dataset'>"
         "    <Value>YES</Value>"
         "    <Value>NO</Value>"
         "  </Option>"

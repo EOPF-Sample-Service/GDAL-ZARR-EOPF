@@ -96,6 +96,86 @@ class EOPFZarrDataset : public GDALPamDataset
     bool LoadGeoTransformFromCoordinateArrays();
 };
 
+/**
+ * EOPFZarrMultiBandDataset - A dataset that combines multiple polarization
+ * subdatasets (VV/VH or HH/HV) from Sentinel-1 GRD products into a single
+ * multi-band dataset for easier access.
+ */
+class EOPFZarrMultiBandDataset : public GDALPamDataset
+{
+  private:
+    std::vector<std::unique_ptr<GDALDataset>> mPolarizationDatasets;
+    std::vector<std::string> mPolarizationNames;
+    mutable OGRSpatialReference* mCachedSpatialRef = nullptr;
+    bool m_bIsRemoteDataset;
+
+  public:
+    EOPFZarrMultiBandDataset();
+    ~EOPFZarrMultiBandDataset() override;
+
+    /**
+     * Create a multi-band GRD dataset from polarization subdatasets.
+     * @param rootPath The root path of the GRD product
+     * @param polPaths Vector of pairs: (polarization name, subdataset path)
+     * @param drv The EOPFZARR driver
+     * @param bIsRemote Whether the dataset is remote
+     * @return The created dataset or nullptr on failure
+     */
+    static EOPFZarrMultiBandDataset* CreateFromPolarizations(
+        const std::string& rootPath,
+        const std::vector<std::pair<std::string, std::string>>& polPaths,
+        GDALDriver* drv,
+        bool bIsRemote);
+
+    const OGRSpatialReference* GetSpatialRef() const override;
+
+#ifdef HAVE_GDAL_GEOTRANSFORM
+    CPLErr GetGeoTransform(GDALGeoTransform& gt) const override;
+#else
+    CPLErr GetGeoTransform(double* gt) override;
+#endif
+
+    char** GetMetadata(const char* pszDomain = nullptr) override;
+    const char* GetMetadataItem(const char* pszName, const char* pszDomain = nullptr) override;
+};
+
+/**
+ * EOPFZarrMultiBandRasterBand - A raster band that proxies to a polarization
+ * subdataset band in a multi-band GRD dataset.
+ */
+class EOPFZarrMultiBandRasterBand : public GDALPamRasterBand
+{
+  private:
+    GDALDataset* mSourceDataset;  // Not owned - owned by parent EOPFZarrMultiBandDataset
+    std::string mPolarizationName;
+
+  public:
+    EOPFZarrMultiBandRasterBand(EOPFZarrMultiBandDataset* poDSIn,
+                                int nBandIn,
+                                GDALDataset* poSourceDS,
+                                const std::string& polName);
+    ~EOPFZarrMultiBandRasterBand() override;
+
+    CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
+    CPLErr IRasterIO(GDALRWFlag eRWFlag,
+                     int nXOff,
+                     int nYOff,
+                     int nXSize,
+                     int nYSize,
+                     void* pData,
+                     int nBufXSize,
+                     int nBufYSize,
+                     GDALDataType eBufType,
+                     GSpacing nPixelSpace,
+                     GSpacing nLineSpace,
+                     GDALRasterIOExtraArg* psExtraArg) override;
+};
+
+// Helper function to detect and parse GRD products
+bool IsGRDProduct(const std::string& path);
+std::vector<std::pair<std::string, std::string>> FindGRDPolarizations(GDALDataset* rootDS,
+                                                                      const std::string& rootPath);
+
 class EOPFZarrRasterBand : public GDALProxyRasterBand
 {
   private:
