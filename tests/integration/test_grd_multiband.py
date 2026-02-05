@@ -7,6 +7,14 @@ polarization subdatasets into a single multi-band dataset.
 import pytest
 from osgeo import gdal
 
+# Try to import numpy, mark as None if unavailable
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+requires_numpy = pytest.mark.skipif(np is None, reason="numpy required for array tests")
+
 # Test URLs for GRD products with dual polarization
 GRD_VV_VH_URL = (
     "/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:"
@@ -67,6 +75,7 @@ class TestGRDMultiBandVVVH:
         assert "VV" in pols
         assert "VH" in pols
 
+    @requires_numpy
     def test_read_data(self, dataset):
         """Should be able to read data from both bands."""
         assert dataset is not None
@@ -172,11 +181,10 @@ class TestGRDDataIntegrity:
         if ds:
             ds = None
 
+    @requires_numpy
     def test_no_all_zeros(self, dataset):
         """Data should not be all zeros (indicates read failure)."""
         assert dataset is not None
-        import numpy as np
-
         # Read a sample from each band
         for i in range(1, dataset.RasterCount + 1):
             band = dataset.GetRasterBand(i)
@@ -187,22 +195,20 @@ class TestGRDDataIntegrity:
             # At least some values should be non-zero
             assert np.any(data != 0), f"Band {i} has all zeros"
 
+    @requires_numpy
     def test_valid_data_range(self, dataset):
         """UInt16 data should be in valid range."""
         assert dataset is not None
-        import numpy as np
-
         for i in range(1, dataset.RasterCount + 1):
             band = dataset.GetRasterBand(i)
             data = band.ReadAsArray(0, 0, 100, 100)
             assert data.min() >= 0
             assert data.max() <= 65535
 
+    @requires_numpy
     def test_vv_vh_are_different(self, dataset):
         """VV and VH bands should contain different data."""
         assert dataset is not None
-        import numpy as np
-
         band1 = dataset.GetRasterBand(1)
         band2 = dataset.GetRasterBand(2)
 
