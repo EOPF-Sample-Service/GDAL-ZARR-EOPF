@@ -1,5 +1,6 @@
 ﻿#include "eopfzarr_dataset.h"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
