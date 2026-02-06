@@ -723,7 +723,12 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
             {
                 pszSuppressAuxWarning = pszValue;
             }
-            else if (!EQUAL(pszKey, "EOPF_PROCESS"))
+            else if (EQUAL(pszKey, "EOPF_PROCESS") || EQUAL(pszKey, "GRD_MULTIBAND") ||
+                     EQUAL(pszKey, "BURST"))
+            {
+                // EOPF-specific options - don't pass to underlying Zarr driver
+            }
+            else
             {
                 papszOpenOptions = CSLSetNameValue(papszOpenOptions, pszKey, pszValue);
             }
@@ -896,6 +901,137 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         }
     }
 
+    // Check if this is an SLC product with BURST option
+    const char* pszBurst = CSLFetchNameValue(poOpenInfo->papszOpenOptions, "BURST");
+
+    if (!isSubdataset && pszBurst && strlen(pszBurst) > 0)
+    {
+        if (IsSLCProduct(mainPath))
+        {
+            CPLDebug("EOPFZARR", "Detected SLC product with BURST=%s", pszBurst);
+
+            // Create a temporary wrapper to enumerate subdatasets
+            std::unique_ptr<EOPFZarrDataset> tempDS(
+                EOPFZarrDataset::Create(poUnderlyingDS, gEOPFDriver, nullptr, bIsRemoteDataset));
+
+            if (tempDS)
+            {
+                // Discover all available bursts
+                auto bursts = FindSLCBursts(tempDS.get(), mainPath);
+
+                if (bursts.empty())
+                {
+                    CPLError(CE_Failure,
+                             CPLE_AppDefined,
+                             "No SLC bursts found in product. "
+                             "Is this a valid Sentinel-1 SLC product?");
+                    return nullptr;
+                }
+
+                // Normalize requested burst name to uppercase
+                std::string requestedBurst(pszBurst);
+                for (char& c : requestedBurst)
+                    c = (char) toupper((unsigned char) c);
+
+                // Find the requested burst
+                const SLCBurstInfo* pFoundBurst = nullptr;
+                for (const auto& burst : bursts)
+                {
+                    std::string normalizedName = burst.friendlyName;
+                    for (char& c : normalizedName)
+                        c = (char) toupper((unsigned char) c);
+                    if (normalizedName == requestedBurst)
+                    {
+                        pFoundBurst = &burst;
+                        break;
+                    }
+                }
+
+                if (!pFoundBurst)
+                {
+                    // Build error message listing all valid burst names
+                    std::string validBursts;
+                    for (size_t i = 0; i < bursts.size(); i++)
+                    {
+                        if (i > 0)
+                            validBursts += ", ";
+                        if (i > 0 && i % 10 == 0)
+                            validBursts += "\n  ";
+                        validBursts += bursts[i].friendlyName;
+                    }
+                    CPLError(CE_Failure,
+                             CPLE_AppDefined,
+                             "Burst '%s' not found. Available bursts (%d total):\n  %s",
+                             pszBurst,
+                             (int) bursts.size(),
+                             validBursts.c_str());
+                    return nullptr;
+                }
+
+                CPLDebug("EOPFZARR",
+                         "Found burst %s -> subdataset path: %s",
+                         pFoundBurst->friendlyName.c_str(),
+                         pFoundBurst->zarrSubPath.c_str());
+
+                // Release the temporary dataset (it owns poUnderlyingDS)
+                tempDS.reset();
+
+                // Open just the selected burst subdataset via the Zarr driver
+                char* const azDrvList[] = {(char*) "Zarr", nullptr};
+                std::string burstZarrPath = "ZARR:\"" + mainPath + "\":" + pFoundBurst->zarrSubPath;
+
+                GDALDataset* poBurstDS = static_cast<GDALDataset*>(
+                    GDALOpenEx(burstZarrPath.c_str(),
+                               poOpenInfo->nOpenFlags | GDAL_OF_RASTER | GDAL_OF_READONLY,
+                               azDrvList,
+                               nullptr,
+                               nullptr));
+
+                if (!poBurstDS)
+                {
+                    CPLError(CE_Failure,
+                             CPLE_OpenFailed,
+                             "Failed to open burst subdataset: %s",
+                             burstZarrPath.c_str());
+                    return nullptr;
+                }
+
+                // Create EOPF wrapper for the burst
+                EOPFZarrDataset* poBurstWrapper = EOPFZarrDataset::Create(
+                    poBurstDS, gEOPFDriver, pFoundBurst->zarrSubPath.c_str(), bIsRemoteDataset);
+
+                if (poBurstWrapper)
+                {
+                    poBurstWrapper->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
+                    poBurstWrapper->SetMetadataItem("EOPF_PRODUCT_TYPE", "SLC");
+                    poBurstWrapper->SetMetadataItem("EOPF_BURST_NAME",
+                                                    pFoundBurst->friendlyName.c_str());
+                    poBurstWrapper->SetMetadataItem("EOPF_BURST_SUBSWATH",
+                                                    pFoundBurst->subswath.c_str());
+                    poBurstWrapper->SetMetadataItem("EOPF_BURST_POLARIZATION",
+                                                    pFoundBurst->polarization.c_str());
+                    poBurstWrapper->SetMetadataItem(
+                        "EOPF_BURST_INDEX",
+                        CPLString().Printf("%d", pFoundBurst->burstIndex).c_str());
+                    return poBurstWrapper;
+                }
+                else
+                {
+                    GDALClose(poBurstDS);
+                    return nullptr;
+                }
+            }
+        }
+        else
+        {
+            CPLError(CE_Warning,
+                     CPLE_AppDefined,
+                     "BURST open option is only supported for Sentinel-1 SLC products. "
+                     "Ignoring BURST=%s for non-SLC product.",
+                     pszBurst);
+        }
+    }
+
     // Create our wrapper dataset (standard mode)
     // Pass subdataset path so it can be set before metadata loading
     // Pass remote flag to control PAM save behavior
@@ -967,6 +1103,9 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
         "    <Value>YES</Value>"
         "    <Value>NO</Value>"
         "  </Option>"
+        "  <Option name='BURST' type='string' default='' description='For Sentinel-1 SLC products, "
+        "select a specific burst by name (format: {subswath}_{polarization}_{index}, e.g. "
+        "IW1_VV_001)'/>"
         "</OpenOptionList>";
     driver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, pszOptions);
 

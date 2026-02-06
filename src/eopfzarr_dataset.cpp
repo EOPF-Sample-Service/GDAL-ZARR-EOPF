@@ -1,5 +1,6 @@
 ﻿#include "eopfzarr_dataset.h"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
@@ -1375,6 +1376,187 @@ std::vector<std::pair<std::string, std::string>> FindGRDPolarizations(GDALDatase
         }
     }
 
+    return result;
+}
+
+/* -------------------------------------------------------------------- */
+/*      SLC burst detection and discovery                               */
+/* -------------------------------------------------------------------- */
+
+bool IsSLCProduct(const std::string& path)
+{
+    if (path.find("_SLC") != std::string::npos || path.find("_slc") != std::string::npos)
+    {
+        CPLDebug("EOPFZARR", "IsSLCProduct: Detected SLC product pattern in path");
+        return true;
+    }
+    return false;
+}
+
+std::vector<SLCBurstInfo> FindSLCBursts(GDALDataset* rootDS, const std::string& /* rootPath */)
+{
+    std::vector<SLCBurstInfo> result;
+
+    if (!rootDS)
+        return result;
+
+    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
+    if (!papszSubdatasets)
+        return result;
+
+    // Intermediate structure: group bursts by (subswath, polarization)
+    // Key: "IW1_VV", Value: vector of (absolute_burst_id, zarrSubPath)
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>> groupedBursts;
+
+    for (int i = 0; papszSubdatasets[i] != nullptr; i++)
+    {
+        char* pszKey = nullptr;
+        const char* pszValue = CPLParseNameValue(papszSubdatasets[i], &pszKey);
+
+        if (pszKey && pszValue && strstr(pszKey, "_NAME"))
+        {
+            std::string subdataset(pszValue);
+
+            // Look for measurements/slc arrays
+            if (subdataset.find("measurements/slc") == std::string::npos &&
+                subdataset.find("measurements\\slc") == std::string::npos)
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+
+            // Extract the subdataset path after the ":/ part
+            std::string subPath;
+            size_t colonPos = subdataset.rfind("\":");
+            if (colonPos != std::string::npos)
+            {
+                subPath = subdataset.substr(colonPos + 2);
+            }
+
+            if (subPath.empty())
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+
+            // Parse the group name segment before /measurements/slc
+            // Pattern: /S01SIWSLC_..._VV_IW1_92598/measurements/slc
+            size_t measPos = subPath.find("/measurements");
+            if (measPos == std::string::npos)
+                measPos = subPath.find("\\measurements");
+
+            if (measPos == std::string::npos)
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+
+            std::string groupName = subPath.substr(0, measPos);
+            // Remove leading slash
+            if (!groupName.empty() && (groupName[0] == '/' || groupName[0] == '\\'))
+                groupName = groupName.substr(1);
+
+            // Parse from the end: ..._{POL}_{SUBSWATH}_{BURSTID}
+            // Split by underscore from the right
+            size_t lastUnderscore = groupName.rfind('_');
+            if (lastUnderscore == std::string::npos)
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+            std::string burstId = groupName.substr(lastUnderscore + 1);
+
+            size_t secondLastUnderscore = groupName.rfind('_', lastUnderscore - 1);
+            if (secondLastUnderscore == std::string::npos)
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+            std::string subswath = groupName.substr(secondLastUnderscore + 1,
+                                                    lastUnderscore - secondLastUnderscore - 1);
+
+            size_t thirdLastUnderscore = groupName.rfind('_', secondLastUnderscore - 1);
+            if (thirdLastUnderscore == std::string::npos)
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+            std::string polarization = groupName.substr(
+                thirdLastUnderscore + 1, secondLastUnderscore - thirdLastUnderscore - 1);
+
+            // Convert to uppercase for consistency
+            for (char& c : subswath)
+                c = (char) toupper((unsigned char) c);
+            for (char& c : polarization)
+                c = (char) toupper((unsigned char) c);
+
+            // Validate subswath pattern (IW1-IW3, EW1-EW5, SM, etc.)
+            bool validSubswath =
+                (subswath.length() == 3 && (subswath[0] == 'I' || subswath[0] == 'E') &&
+                 subswath[1] == 'W' && subswath[2] >= '1' && subswath[2] <= '5') ||
+                subswath == "SM";
+
+            // Validate polarization
+            bool validPol = (polarization == "VV" || polarization == "VH" || polarization == "HH" ||
+                             polarization == "HV");
+
+            if (!validSubswath || !validPol)
+            {
+                CPLFree(pszKey);
+                continue;
+            }
+
+            std::string groupKey = subswath + "_" + polarization;
+            groupedBursts[groupKey].push_back({burstId, subPath});
+
+            CPLDebug("EOPFZARR",
+                     "FindSLCBursts: Found burst %s_%s id=%s at %s",
+                     subswath.c_str(),
+                     polarization.c_str(),
+                     burstId.c_str(),
+                     subPath.c_str());
+        }
+        CPLFree(pszKey);
+    }
+
+    // Sort each group by burst ID and assign 1-based indices
+    for (auto& kv : groupedBursts)
+    {
+        // Sort by burst ID string (numeric sort)
+        std::sort(kv.second.begin(),
+                  kv.second.end(),
+                  [](const std::pair<std::string, std::string>& a,
+                     const std::pair<std::string, std::string>& b) { return a.first < b.first; });
+
+        // Parse the group key back to subswath and polarization
+        size_t underscorePos = kv.first.find('_');
+        std::string subswath = kv.first.substr(0, underscorePos);
+        std::string polarization = kv.first.substr(underscorePos + 1);
+
+        for (size_t idx = 0; idx < kv.second.size(); idx++)
+        {
+            SLCBurstInfo info;
+            info.subswath = subswath;
+            info.polarization = polarization;
+            info.burstIndex = (int) (idx + 1);
+            info.zarrSubPath = kv.second[idx].second;
+
+            // Construct friendly name: IW1_VV_001
+            char indexStr[16];
+            snprintf(indexStr, sizeof(indexStr), "%03d", info.burstIndex);
+            info.friendlyName = subswath + "_" + polarization + "_" + indexStr;
+
+            result.push_back(info);
+        }
+    }
+
+    // Sort by friendly name for consistent ordering
+    std::sort(result.begin(),
+              result.end(),
+              [](const SLCBurstInfo& a, const SLCBurstInfo& b)
+              { return a.friendlyName < b.friendlyName; });
+
+    CPLDebug("EOPFZARR", "FindSLCBursts: Found %d total bursts", (int) result.size());
     return result;
 }
 

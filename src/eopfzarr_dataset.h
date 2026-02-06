@@ -176,6 +176,19 @@ bool IsGRDProduct(const std::string& path);
 std::vector<std::pair<std::string, std::string>> FindGRDPolarizations(GDALDataset* rootDS,
                                                                       const std::string& rootPath);
 
+// Helper functions for SLC burst selection
+struct SLCBurstInfo
+{
+    std::string friendlyName;  // e.g., "IW1_VV_001"
+    std::string subswath;      // e.g., "IW1"
+    std::string polarization;  // e.g., "VV"
+    int burstIndex;            // 1-based per-subswath index
+    std::string zarrSubPath;   // relative path within zarr
+};
+
+bool IsSLCProduct(const std::string& path);
+std::vector<SLCBurstInfo> FindSLCBursts(GDALDataset* rootDS, const std::string& rootPath);
+
 class EOPFZarrRasterBand : public GDALProxyRasterBand
 {
   private:
