@@ -388,7 +388,7 @@ gdal.SetConfigOption('CPL_DEBUG', 'ON')
 
 - [GDAL ZARR Driver Documentation](https://gdal.org/drivers/raster/zarr.html)
 - [Rasterio Documentation](https://rasterio.readthedocs.io/)
-- [EOPF Project Documentation](https://eopf.readthedocs.io/)
+- [EOPF Project Documentation](https://eopf.copernicus.eu/eopf-sde/)
 
 ## 🤝 Contributing
 
