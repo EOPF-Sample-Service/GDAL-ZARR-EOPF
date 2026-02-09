@@ -29,6 +29,12 @@ class EOPFZarrDataset : public GDALPamDataset
     mutable bool mMetadataLoaded;
     mutable bool mGeospatialInfoProcessed;
 
+    // GCP storage
+    std::vector<GDAL_GCP> mGCPs;
+    OGRSpatialReference mGCPSRS;
+    bool mGCPsLoaded = false;
+    void LoadGCPs();
+
   public:
     EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver* selfDrv);
     ~EOPFZarrDataset();
