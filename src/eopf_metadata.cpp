@@ -881,6 +881,138 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds,
     GDALClose(poZarrDS);
 }
 
+/* ------------------------------------------------------------------ */
+/*      Extract product-level metadata from STAC discovery             */
+/* ------------------------------------------------------------------ */
+static void ExtractProductMetadata(const CPLJSONObject& obj, GDALDataset& ds)
+{
+    // Extract title from other_metadata
+    const CPLJSONObject& otherMeta = obj.GetObj("other_metadata");
+    if (otherMeta.IsValid())
+    {
+        std::string title = otherMeta.GetString("title", "");
+        if (!title.empty())
+        {
+            ds.SetMetadataItem("EOPF_TITLE", title.c_str(), "EOPF");
+        }
+    }
+
+    // Extract properties from stac_discovery
+    const CPLJSONObject& stacDiscovery = obj.GetObj("stac_discovery");
+    if (!stacDiscovery.IsValid())
+        return;
+
+    const CPLJSONObject& properties = stacDiscovery.GetObj("properties");
+    if (!properties.IsValid())
+        return;
+
+    CPLDebug("EOPFZARR", "Extracting product metadata from STAC properties");
+
+    // Helper: set string metadata item if present
+    auto setStr = [&](const char* stacKey, const char* eopfKey)
+    {
+        std::string val = properties.GetString(stacKey, "");
+        if (!val.empty())
+        {
+            ds.SetMetadataItem(eopfKey, val.c_str(), "EOPF");
+        }
+    };
+
+    // Helper: set integer metadata item if present
+    auto setInt = [&](const char* stacKey, const char* eopfKey)
+    {
+        int val = properties.GetInteger(stacKey, 0);
+        if (val != 0)
+        {
+            ds.SetMetadataItem(eopfKey, CPLString().Printf("%d", val).c_str(), "EOPF");
+        }
+    };
+
+    // Helper: set double metadata item if present
+    auto setDouble = [&](const char* stacKey, const char* eopfKey)
+    {
+        double val = properties.GetDouble(stacKey, -1.0);
+        if (val >= 0.0)
+        {
+            ds.SetMetadataItem(eopfKey, CPLString().Printf("%.6f", val).c_str(), "EOPF");
+        }
+    };
+
+    // Helper: set string array as comma-separated
+    auto setStrArray = [&](const char* stacKey, const char* eopfKey)
+    {
+        const CPLJSONArray arr = properties.GetArray(stacKey);
+        if (arr.IsValid() && arr.Size() > 0)
+        {
+            std::string joined;
+            for (int i = 0; i < arr.Size(); i++)
+            {
+                if (i > 0)
+                    joined += ",";
+                joined += arr[i].ToString();
+            }
+            ds.SetMetadataItem(eopfKey, joined.c_str(), "EOPF");
+        }
+    };
+
+    // Common metadata
+    setStr("constellation", "EOPF_CONSTELLATION");
+    setStr("platform", "EOPF_PLATFORM");
+    setStrArray("instruments", "EOPF_INSTRUMENTS");
+    setStr("datetime", "EOPF_DATETIME");
+    setStr("start_datetime", "EOPF_START_DATETIME");
+    setStr("end_datetime", "EOPF_END_DATETIME");
+    setStr("created", "EOPF_CREATED");
+
+    // Product info
+    setStr("product:type", "EOPF_PRODUCT_TYPE");
+    setStr("product:timeliness", "EOPF_TIMELINESS");
+    setStr("product:timeliness_category", "EOPF_TIMELINESS_CATEGORY");
+
+    // Processing info
+    setStr("processing:level", "EOPF_PROCESSING_LEVEL");
+    setStr("processing:lineage", "EOPF_PROCESSING_LINEAGE");
+
+    // EOPF-specific
+    setStr("eopf:datatake_id", "EOPF_DATATAKE_ID");
+    setStr("eopf:instrument_mode", "EOPF_INSTRUMENT_MODE");
+
+    // Satellite orbit info
+    setInt("sat:absolute_orbit", "EOPF_ABSOLUTE_ORBIT");
+    setInt("sat:relative_orbit", "EOPF_RELATIVE_ORBIT");
+    setStr("sat:orbit_state", "EOPF_ORBIT_STATE");
+    setStr("sat:platform_international_designator", "EOPF_INTL_DESIGNATOR");
+
+    // SAR-specific (Sentinel-1)
+    setStr("sar:frequency_band", "EOPF_SAR_FREQUENCY_BAND");
+    setStr("sar:instrument_mode", "EOPF_SAR_INSTRUMENT_MODE");
+    setStrArray("sar:polarizations", "EOPF_SAR_POLARIZATIONS");
+    setStr("sar:product_type", "EOPF_SAR_PRODUCT_TYPE");
+
+    // Optical-specific (Sentinel-2)
+    setDouble("eo:cloud_cover", "EOPF_CLOUD_COVER");
+    setDouble("eo:snow_cover", "EOPF_SNOW_COVER");
+    setStr("gsd", "EOPF_GSD");
+}
+
+void EOPF::AttachProductMetadata(GDALDataset& ds, const std::string& rootPath)
+{
+    CPLJSONDocument doc;
+
+    if (LoadZMetadata(rootPath, doc))
+    {
+        ExtractProductMetadata(doc.GetRoot(), ds);
+    }
+    else
+    {
+        std::string zattrsPath = CPLFormFilename(rootPath.c_str(), ".zattrs", nullptr);
+        if (doc.Load(zattrsPath))
+        {
+            ExtractProductMetadata(doc.GetRoot(), ds);
+        }
+    }
+}
+
 void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
 {
     CPLJSONDocument doc;
@@ -915,6 +1047,7 @@ void EOPF::AttachMetadata(GDALDataset& ds, const std::string& rootPath)
     {
         const CPLJSONObject& root = doc.GetRoot();  // This is .zattrs content now
         ExtractCoordinateMetadata(root, ds);
+        ExtractProductMetadata(root, ds);
     }
     else
     {
