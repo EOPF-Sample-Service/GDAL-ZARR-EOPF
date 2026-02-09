@@ -864,6 +864,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
                 if (poMultiDS)
                 {
                     poMultiDS->SetMetadataItem("EOPFZARR_WRAPPER", "YES", "EOPF");
+                    EOPF::AttachProductMetadata(*poMultiDS, mainPath);
                     return poMultiDS;
                 }
                 else
@@ -1013,6 +1014,7 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
                     poBurstWrapper->SetMetadataItem(
                         "EOPF_BURST_INDEX",
                         CPLString().Printf("%d", pFoundBurst->burstIndex).c_str());
+                    EOPF::AttachProductMetadata(*poBurstWrapper, mainPath);
                     return poBurstWrapper;
                 }
                 else
