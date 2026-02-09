@@ -1354,13 +1354,41 @@ bool EOPFZarrDataset::LoadGeoTransformFromCoordinateArrays()
     }
 
     // Read first 2 values from each 1D coordinate array to get origin and step
-    // x/y arrays are 1D (either Nx1 or 1xN depending on driver layout)
+    // x/y arrays must be 1D (either Nx1 or 1xN depending on driver layout).
+    // If both dimensions are > 1, it's a 2D geolocation grid (e.g. Sentinel-3
+    // LST measurements/x which is 1500x1200), not a 1D coordinate axis — skip.
     int xWidth = xDS->GetRasterXSize();
     int xHeight = xDS->GetRasterYSize();
+
+    if (xWidth > 1 && xHeight > 1)
+    {
+        GDALClose(xDS);
+        GDALClose(yDS);
+        CPLDebug("EOPFZARR",
+                 "LoadGeoTransformFromCoordinateArrays: x array is 2D (%dx%d), not a 1D "
+                 "coordinate axis — skipping",
+                 xWidth,
+                 xHeight);
+        return false;
+    }
+
     int nXLen = (xWidth > xHeight) ? xWidth : xHeight;
 
     int yWidth = yDS->GetRasterXSize();
     int yHeight = yDS->GetRasterYSize();
+
+    if (yWidth > 1 && yHeight > 1)
+    {
+        GDALClose(xDS);
+        GDALClose(yDS);
+        CPLDebug("EOPFZARR",
+                 "LoadGeoTransformFromCoordinateArrays: y array is 2D (%dx%d), not a 1D "
+                 "coordinate axis — skipping",
+                 yWidth,
+                 yHeight);
+        return false;
+    }
+
     int nYLen = (yWidth > yHeight) ? yWidth : yHeight;
 
     if (nXLen < 2 || nYLen < 2)
@@ -1402,6 +1430,17 @@ bool EOPFZarrDataset::LoadGeoTransformFromCoordinateArrays()
 
     double stepX = (double) (xVals[1] - xVals[0]);  // pixel width (positive, e.g. 10 or 60)
     double stepY = (double) (yVals[1] - yVals[0]);  // pixel height (negative for north-up)
+
+    // Validate steps are non-zero (zero means fill/sentinel values, not real coordinates)
+    if (stepX == 0.0 || stepY == 0.0)
+    {
+        CPLDebug("EOPFZARR",
+                 "LoadGeoTransformFromCoordinateArrays: zero step (x=%.2f, y=%.2f) — "
+                 "coordinate arrays likely contain fill values, skipping",
+                 stepX,
+                 stepY);
+        return false;
+    }
 
     // xVals[0]/yVals[0] are pixel centers; origin (UL corner) is offset by half a pixel
     double originX = (double) xVals[0] - stepX / 2.0;
