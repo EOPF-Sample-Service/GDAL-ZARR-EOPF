@@ -1,17 +1,12 @@
-﻿name: Build, Test & Release EOPFZarr Plugin
+﻿name: Full CI — Build, Test & Release EOPFZarr Plugin
 
+# Full CI runs on PRs, releases, manual triggers, and CI config changes.
+# For fast feedback on regular pushes, see ci-light.yml (~3 min).
 on:
   push:
     branches: [ main, develop ]
-    paths-ignore:
-      - '**.md'
-      - '**.txt'
-      - 'docs/**'
-      - 'notebooks/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.dockerignore'
-      - 'docker-images/**'
+    paths:
+      - '.github/workflows/**'
   pull_request:
     branches: [ main, develop ]
     paths-ignore:
@@ -193,34 +188,34 @@ jobs:
           fi
 
 
+      - name: Setup Python (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install deps (macOS)
         if: runner.os == 'macOS'
         run: |
           brew uninstall --ignore-dependencies cmake || true
           # Install GDAL and build tools via Homebrew
           brew install gdal cmake ninja
-          
+
+          # Ensure pip build tools are available (needed for building GDAL bindings)
+          python -m pip install --upgrade pip setuptools wheel numpy
+
           # Install GDAL Python bindings with proper version matching
           GDAL_VERSION=$(gdal-config --version)
           echo "Installing GDAL Python bindings for version: $GDAL_VERSION"
-          
-          # Method 1: Try pip install with version matching (allow compatible releases like post1)
-          pip install "GDAL~=$GDAL_VERSION" || {
-            echo "Direct pip install failed, trying manual compilation method..."
-            
-            # Method 2: Manual compilation approach
-            pip download GDAL==$GDAL_VERSION
-            tar -xzf GDAL-$GDAL_VERSION.tar.gz
-            cd GDAL-$GDAL_VERSION
-            
-            # Configure for macOS Homebrew GDAL installation
-            python setup.py build_ext --gdal-config=$(which gdal-config)
-            python setup.py build
-            python setup.py install
-            cd ..
-            rm -rf GDAL-$GDAL_VERSION*
+
+          # Try compatible release first, then exact, then build from source
+          pip install "GDAL~=$GDAL_VERSION" || \
+          pip install "GDAL==$GDAL_VERSION" || \
+          pip install --no-build-isolation "GDAL~=$GDAL_VERSION" || {
+            echo "All pip methods failed — check if GDAL $GDAL_VERSION bindings are available on PyPI"
+            exit 1
           }
-          
+
           # Verify GDAL Python bindings installation
           python -c "from osgeo import gdal; print(f'GDAL Python bindings version: {gdal.VersionInfo()}')"
           

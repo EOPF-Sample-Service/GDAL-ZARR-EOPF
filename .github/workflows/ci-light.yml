@@ -1,0 +1,85 @@
+name: CI Light — Lint + Linux Build
+
+# Fast feedback on every push (~3 min).
+# Full cross-platform CI runs on PRs (see main.yml).
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'notebooks/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - 'docker-images/**'
+      - 'build-*'
+      - 'install-*'
+      - 'setup-*'
+      - 'cleanup.sh'
+
+concurrency:
+  group: ci-light-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cppcheck clang-format
+      - name: cppcheck
+        run: |
+          cppcheck --enable=all --inconclusive \
+            --suppress=missingIncludeSystem \
+            src/ include/ 2>&1 | tee cppcheck.log
+          # Fail on errors only (not warnings/style)
+          ! grep -q '\[error\]' cppcheck.log
+      - name: Check code formatting
+        run: |
+          find src include -name "*.cpp" -o -name "*.h" | \
+            xargs clang-format --style=file --dry-run --Werror
+
+  build-and-test:
+    name: Build & Test (Linux)
+    runs-on: ubuntu-24.04
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: linux-light-${{ hashFiles('**/*.cpp','**/*.h') }}
+          restore-keys: linux-light-
+
+      - name: Install GDAL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable -y
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin cmake ninja-build build-essential
+          echo "GDAL version: $(gdal-config --version)"
+
+      - name: Configure & Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      - name: Unit Tests (C++)
+        run: |
+          cd build
+          ctest -C Release --output-on-failure
+
+      - name: Smoke Test
+        run: |
+          GDAL_DRIVER_PATH="$PWD/build" gdalinfo --formats | grep "EOPFZARR"
+          echo "✅ EOPFZARR driver loads successfully"
