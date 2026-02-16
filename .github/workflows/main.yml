@@ -1,4 +1,4 @@
-﻿name: Full CI — Build, Test & Release EOPFZarr Plugin
+name: Full CI — Build, Test & Release EOPFZarr Plugin
 
 # Full CI runs on PRs, releases, manual triggers, and CI config changes.
 # For fast feedback on regular pushes, see ci-light.yml (~3 min).
@@ -190,7 +190,7 @@ jobs:
 
       - name: Setup Python (macOS)
         if: runner.os == 'macOS'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
