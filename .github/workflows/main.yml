@@ -108,6 +108,38 @@ jobs:
           done
           echo "All markdown files are readable"
 
+  url-health-check:
+    name: URL Health Check
+    runs-on: ubuntu-24.04
+    needs: [check-changes]
+    if: needs.check-changes.outputs.docs-only != 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check test dataset URLs are reachable
+        run: |
+          python3 -c "
+          import urllib.request, sys
+          sys.path.insert(0, 'tests')
+          from test_urls import ALL_URLS
+
+          failed = []
+          for name, url in ALL_URLS.items():
+              try:
+                  req = urllib.request.Request(url + '/.zattrs', method='HEAD')
+                  resp = urllib.request.urlopen(req, timeout=15)
+                  print(f'  OK  {name} ({resp.status})')
+              except Exception as e:
+                  print(f'  FAIL {name}: {e}')
+                  failed.append(name)
+
+          if failed:
+              print(f'\n{len(failed)} URL(s) unreachable: {failed}')
+              print('Update tests/test_urls.py with current bucket paths.')
+              sys.exit(1)
+          else:
+              print(f'\nAll {len(ALL_URLS)} URLs reachable.')
+          "
+
   lint:
     name: Lint • cppcheck & clang-format
     runs-on: ubuntu-24.04

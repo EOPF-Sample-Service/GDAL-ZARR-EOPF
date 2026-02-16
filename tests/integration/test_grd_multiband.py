@@ -13,18 +13,13 @@ try:
 except ImportError:
     np = None
 
-# Test URLs for GRD products with dual polarization
-GRD_VV_VH_URL = (
-    "/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:"
-    "202602-s01siwgrh-global/05/products/cpm_v262/"
-    "S1C_IW_GRDH_1SDV_20260205T120122_20260205T120158_006220_00C7E4_5D6E.zarr"
-)
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from test_urls import S1_GRD_VV_VH_URL, S1_GRD_HH_HV_URL
 
-GRD_HH_HV_URL = (
-    "/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:"
-    "202602-s01sewgrm-global/05/products/cpm_v262/"
-    "S1A_EW_GRDM_1SDH_20260205T132815_20260205T132849_063084_07EADA_F486.zarr"
-)
+# Test URLs (centralized in tests/test_urls.py)
+GRD_VV_VH_URL = "/vsicurl/" + S1_GRD_VV_VH_URL
+GRD_HH_HV_URL = "/vsicurl/" + S1_GRD_HH_HV_URL
 
 
 class TestGRDMultiBandVVVH:

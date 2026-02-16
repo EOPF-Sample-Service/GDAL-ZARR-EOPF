@@ -21,9 +21,13 @@ except ImportError:
 
 pytestmark = pytest.mark.require_driver("EOPFZARR")
 
-# Test URLs from Issue #135
-SENTINEL3_SLSTR_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202601-s03slsrbt-eu/18/products/cpm_v262/S3A_SL_1_RBT____20260118T234920_20260118T235220_20260119T021734_0180_135_116_1080_PS1_O_NR_004.zarr"
-SENTINEL2_UTM_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
+from test_urls import S3_SLSTR_L1_RBT_URL, S2_L2A_URL, S2_L1C_URL
+
+# Test URLs (centralized in tests/test_urls.py)
+SENTINEL3_SLSTR_URL = S3_SLSTR_L1_RBT_URL
+SENTINEL2_UTM_URL = S2_L2A_URL
 
 
 def check_url_accessible(url, timeout=10):
@@ -160,7 +164,7 @@ class TestUTMWithoutProjBbox:
 
 
 # L1C product — tile T35SLB, UTM zone 35N.  Has x/y coordinate arrays at 10m and 60m.
-SENTINEL2_L1C_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil1c-eu/03/products/cpm_v262/S2A_MSIL1C_20260203T092011_N0511_R050_T35SLB_20260203T111324.zarr"
+SENTINEL2_L1C_URL = S2_L1C_URL
 
 # Standard Sentinel-2 MGRS tile origin for T35SLB (and all S2 tiles at this grid point)
 # x/y coordinate arrays confirm: x[0]=300005 (10m), x[0]=300030 (60m) → UL edge = 300000

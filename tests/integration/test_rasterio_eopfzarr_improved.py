@@ -27,9 +27,13 @@ except ImportError:
 
 pytestmark = pytest.mark.require_driver("EOPFZARR")
 
-# Test URLs
-REMOTE_SAMPLE_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
-REMOTE_WITH_SUBDATASETS_ZARR = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s02msil2a-eu/02/products/cpm_v262/S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr/measurements/reflectance/r60m/b01"
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
+from test_urls import S2_L2A_URL, S2_L2A_SUBDATASET_URL
+
+# Test URLs (centralized in tests/test_urls.py)
+REMOTE_SAMPLE_ZARR = S2_L2A_URL
+REMOTE_WITH_SUBDATASETS_ZARR = S2_L2A_SUBDATASET_URL
 
 
 # Environment Detection and Configuration
