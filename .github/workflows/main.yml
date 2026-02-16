@@ -120,7 +120,11 @@ jobs:
           python3 -c "
           import urllib.request, sys
           sys.path.insert(0, 'tests')
-          from test_urls import ALL_URLS
+          from test_urls import ALL_URLS, CPM_VERSION, RELEASE_MONTH
+
+          print(f'CPM version:   {CPM_VERSION}')
+          print(f'Release month: {RELEASE_MONTH}')
+          print()
 
           failed = []
           for name, url in ALL_URLS.items():
@@ -134,7 +138,7 @@ jobs:
 
           if failed:
               print(f'\n{len(failed)} URL(s) unreachable: {failed}')
-              print('Update tests/test_urls.py with current bucket paths.')
+              print('Update CPM_VERSION / RELEASE_MONTH in tests/test_urls.py')
               sys.exit(1)
           else:
               print(f'\nAll {len(ALL_URLS)} URLs reachable.')

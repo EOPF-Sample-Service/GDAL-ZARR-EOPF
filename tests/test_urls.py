@@ -4,12 +4,23 @@ Centralized test dataset URLs.
 All remote URLs used in integration tests are defined here.
 When EODC rotates buckets or URLs change, update THIS FILE ONLY.
 
+On each new CPM release, update:
+  1. CPM_VERSION  (e.g. "cpm_v262" -> "cpm_v270")
+  2. RELEASE_MONTH (e.g. "202602" -> "202603")
+  3. Product filenames if they change
+
 Bucket types:
   - notebook-data: Stable bucket, does not rotate with CPM releases.
-  - 202602-...:    Release bucket, rotates each month/release.
+  - <RELEASE_MONTH>-...: Release bucket, rotates each month/release.
 
 When possible, prefer the stable notebook-data bucket.
 """
+
+# =============================================================================
+# Release configuration — update these on each CPM release
+# =============================================================================
+CPM_VERSION = "cpm_v262"
+RELEASE_MONTH = "202602"
 
 # =============================================================================
 # EODC base
@@ -20,7 +31,7 @@ _EODC = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a"
 # Sentinel-1 SLC  (stable notebook-data bucket)
 # =============================================================================
 S1_SLC_URL = (
-    f"{_EODC}:notebook-data/tutorial_data/cpm_v262/"
+    f"{_EODC}:notebook-data/tutorial_data/{CPM_VERSION}/"
     "S1C_IW_SLC__1SDV_20251016T165627_20251016T165654_004590_00913B_30C4.zarr"
 )
 
@@ -28,12 +39,12 @@ S1_SLC_URL = (
 # Sentinel-1 GRD  (release bucket — update when rotated)
 # =============================================================================
 S1_GRD_VV_VH_URL = (
-    f"{_EODC}:202602-s01siwgrh-global/05/products/cpm_v262/"
+    f"{_EODC}:{RELEASE_MONTH}-s01siwgrh-global/05/products/{CPM_VERSION}/"
     "S1C_IW_GRDH_1SDV_20260205T120122_20260205T120158_006220_00C7E4_5D6E.zarr"
 )
 
 S1_GRD_HH_HV_URL = (
-    f"{_EODC}:202602-s01sewgrm-global/05/products/cpm_v262/"
+    f"{_EODC}:{RELEASE_MONTH}-s01sewgrm-global/05/products/{CPM_VERSION}/"
     "S1A_EW_GRDM_1SDH_20260205T132815_20260205T132849_063084_07EADA_F486.zarr"
 )
 
@@ -41,38 +52,39 @@ S1_GRD_HH_HV_URL = (
 # Sentinel-2  (release bucket — update when rotated)
 # =============================================================================
 S2_L2A_URL = (
-    f"{_EODC}:202602-s02msil2a-eu/02/products/cpm_v262/"
+    f"{_EODC}:{RELEASE_MONTH}-s02msil2a-eu/02/products/{CPM_VERSION}/"
     "S2A_MSIL2A_20260202T094641_N0511_R036_T34UDC_20260202T104719.zarr"
 )
 
 S2_L1C_URL = (
-    f"{_EODC}:202602-s02msil1c-eu/03/products/cpm_v262/"
+    f"{_EODC}:{RELEASE_MONTH}-s02msil1c-eu/03/products/{CPM_VERSION}/"
     "S2A_MSIL1C_20260203T092011_N0511_R050_T35SLB_20260203T111324.zarr"
 )
 
 # =============================================================================
 # Sentinel-3  (release bucket — update when rotated)
+# Note: SLSTR L1 RBT uses 202601, not RELEASE_MONTH (different release cycle)
 # =============================================================================
 S3_OLCI_L1_EFR_URL = (
-    f"{_EODC}:202602-s03olcefr-eu/02/products/cpm_v262/"
+    f"{_EODC}:{RELEASE_MONTH}-s03olcefr-eu/02/products/{CPM_VERSION}/"
     "S3B_OL_1_EFR____20260202T115259_20260202T115559_"
     "20260202T135532_0179_116_180_2160_ESA_O_NR_004.zarr"
 )
 
 S3_SLSTR_L1_RBT_URL = (
-    f"{_EODC}:202601-s03slsrbt-eu/18/products/cpm_v262/"
+    f"{_EODC}:202601-s03slsrbt-eu/18/products/{CPM_VERSION}/"
     "S3A_SL_1_RBT____20260118T234920_20260118T235220_"
     "20260119T021734_0180_135_116_1080_PS1_O_NR_004.zarr"
 )
 
 S3_SLSTR_L1_RBT_URL_B = (
-    f"{_EODC}:202601-s03slsrbt-eu/18/products/cpm_v262/"
+    f"{_EODC}:202601-s03slsrbt-eu/18/products/{CPM_VERSION}/"
     "S3B_SL_1_RBT____20260118T231041_20260118T231341_"
     "20260119T014624_0180_115_358_1080_ESA_O_NR_004.zarr"
 )
 
 S3_SLSTR_L2_LST_URL = (
-    f"{_EODC}:202602-s03slslst-eu/02/products/cpm_v262/"
+    f"{_EODC}:{RELEASE_MONTH}-s03slslst-eu/02/products/{CPM_VERSION}/"
     "S3A_SL_2_LST____20260202T123441_20260202T123741_"
     "20260202T144630_0179_135_323_2340_PS1_O_NR_004.zarr"
 )
