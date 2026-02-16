@@ -5,10 +5,14 @@ import os
 # Enable GDAL exceptions
 gdal.UseExceptions()
 
-# Known Sentinel-3 Product URLs
-OLCI_L1_EFR_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s03olcefr-eu/02/products/cpm_v262/S3B_OL_1_EFR____20260202T115259_20260202T115559_20260202T135532_0179_116_180_2160_ESA_O_NR_004.zarr"
-SLSTR_L1_RBT_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202601-s03slsrbt-eu/18/products/cpm_v262/S3B_SL_1_RBT____20260118T231041_20260118T231341_20260119T014624_0180_115_358_1080_ESA_O_NR_004.zarr"
-SLSTR_L2_LST_URL = "https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202602-s03slslst-eu/02/products/cpm_v262/S3A_SL_2_LST____20260202T123441_20260202T123741_20260202T144630_0179_135_323_2340_PS1_O_NR_004.zarr"
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
+from test_urls import S3_OLCI_L1_EFR_URL, S3_SLSTR_L1_RBT_URL_B, S3_SLSTR_L2_LST_URL
+
+# Known Sentinel-3 Product URLs (centralized in tests/test_urls.py)
+OLCI_L1_EFR_URL = S3_OLCI_L1_EFR_URL
+SLSTR_L1_RBT_URL = S3_SLSTR_L1_RBT_URL_B
+SLSTR_L2_LST_URL = S3_SLSTR_L2_LST_URL
 
 # Placeholders for missing products
 # OLCI_L1_ERR_URL = "..."

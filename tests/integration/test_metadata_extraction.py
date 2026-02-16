@@ -7,24 +7,14 @@ and exposed via the EOPF metadata domain.
 import pytest
 from osgeo import gdal
 
-# Test URLs
-SLC_URL = (
-    "/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:"
-    "notebook-data/tutorial_data/cpm_v262/"
-    "S1C_IW_SLC__1SDV_20251016T165627_20251016T165654_004590_00913B_30C4.zarr"
-)
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from test_urls import S1_SLC_URL, S1_GRD_VV_VH_URL, S2_L1C_URL
 
-GRD_URL = (
-    "/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:"
-    "202602-s01siwgrh-global/05/products/cpm_v262/"
-    "S1C_IW_GRDH_1SDV_20260205T120122_20260205T120158_006220_00C7E4_5D6E.zarr"
-)
-
-S2_URL = (
-    "/vsicurl/https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:"
-    "202602-s02msil1c-eu/03/products/cpm_v262/"
-    "S2A_MSIL1C_20260203T092011_N0511_R050_T35SLB_20260203T111324.zarr"
-)
+# Test URLs (centralized in tests/test_urls.py)
+SLC_URL = "/vsicurl/" + S1_SLC_URL
+GRD_URL = "/vsicurl/" + S1_GRD_VV_VH_URL
+S2_URL = "/vsicurl/" + S2_L1C_URL
 
 
 class TestSentinel1SLCMetadata:

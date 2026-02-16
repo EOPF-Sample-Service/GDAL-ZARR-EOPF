@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 SYSTEM_PYTHON="/usr/bin/python3"
 KERNEL_NAME="eopfzarr-dev"
-KERNEL_DISPLAY="EOPFZARR Dev (System Python + build/)"
+KERNEL_DISPLAY="EOPFZARR Dev (GDAL + rasterio + rioxarray)"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -126,6 +126,47 @@ print('  Updated:', path)
 "
     fi
 done
+
+# ---------- patch notebooks to use this kernel --------------------------------
+NOTEBOOKS_DIR="$SCRIPT_DIR/notebooks"
+if [[ -d "$NOTEBOOKS_DIR" ]]; then
+    echo ""
+    echo -e "${GREEN}Patching notebooks to use ${KERNEL_NAME} kernel...${NC}"
+    $SYSTEM_PYTHON -c "
+import json, glob, os
+
+notebooks_dir = '$NOTEBOOKS_DIR'
+kernel_name = '$KERNEL_NAME'
+kernel_display = '$KERNEL_DISPLAY'
+count = 0
+
+for nb_path in sorted(glob.glob(os.path.join(notebooks_dir, '*.ipynb'))):
+    with open(nb_path) as f:
+        nb = json.load(f)
+
+    changed = False
+    meta = nb.setdefault('metadata', {})
+    ks = meta.setdefault('kernelspec', {})
+
+    if ks.get('name') != kernel_name:
+        ks['name'] = kernel_name
+        ks['display_name'] = kernel_display
+        ks['language'] = 'python'
+        changed = True
+
+    if changed:
+        with open(nb_path, 'w') as f:
+            json.dump(nb, f, indent=1)
+            f.write('\n')
+        print(f'  Updated: {os.path.basename(nb_path)}')
+        count += 1
+
+if count == 0:
+    print('  All notebooks already use the correct kernel.')
+else:
+    print(f'  Patched {count} notebook(s).')
+"
+fi
 
 # ---------- summary ----------------------------------------------------------
 echo ""

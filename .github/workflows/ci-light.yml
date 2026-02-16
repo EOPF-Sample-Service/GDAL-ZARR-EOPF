@@ -4,7 +4,6 @@ name: CI Light — Lint + Linux Build
 # Full cross-platform CI runs on PRs (see main.yml).
 on:
   push:
-    branches: [ main, develop ]
     paths-ignore:
       - '**.md'
       - '**.txt'
