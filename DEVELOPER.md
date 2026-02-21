@@ -228,6 +228,57 @@ GDAL_DRIVER_PATH=build gdalinfo --formats | grep EOPFZARR
 | Run tests | `cd build && ctest --output-on-failure` | `ctest --test-dir build` |
 | Check plugin loads | `GDAL_DRIVER_PATH=build gdalinfo --formats \| grep EOPFZARR` | `gdalinfo --formats \| grep EOPF` |
 
+## Contributing
+
+### Code Structure
+
+```
+src/
+├── eopfzarr_driver.cpp       # GDAL driver registration
+├── eopfzarr_dataset.cpp      # Main dataset implementation
+├── eopfzarr_dataset.h        # Dataset header
+├── eopfzarr_performance.cpp  # Performance optimizations
+└── eopf_metadata.cpp         # Metadata handling
+
+include/
+├── eopfzarr_performance.h    # Performance framework
+└── eopfzarr_config.h.in      # Configuration template
+```
+
+### Architecture Notes
+
+- **Dataset Wrapper Pattern**: The plugin wraps GDAL's Zarr driver to add EOPF-specific metadata enhancement, geospatial coordinate detection, and performance optimizations.
+- **Performance Framework**: Includes metadata caching with TTL, network optimization, block access pattern tracking, and lazy loading.
+- **Const-Correctness**: Use `const_cast` sparingly and document why. Prefer `mutable` members for caching.
+
+### Pull Request Process
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`
+3. Make your changes and add/update tests
+4. Ensure all tests pass: `ctest --test-dir build --output-on-failure`
+5. Commit with clear messages (e.g., `feat: add caching for metadata operations`)
+6. Push and create a pull request
+
+### Debugging
+
+```bash
+# Verbose CMake output
+cmake -S . -B build -DCMAKE_VERBOSE_MAKEFILE=ON
+
+# Debug build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+# Enable GDAL debug output
+export CPL_DEBUG=ON
+
+# Enable plugin-specific debug
+export CPL_DEBUG=EOPFZARR
+
+# Enable performance timers
+export EOPF_ENABLE_PERFORMANCE_TIMERS=1
+```
+
 ## CI/CD
 
 Our GitHub Actions pipeline automatically runs:

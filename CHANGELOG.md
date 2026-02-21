@@ -167,7 +167,7 @@ This release introduces native geolocation arrays support, comprehensive Sentine
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for information on how to contribute to this project.
+See [DEVELOPER.md](DEVELOPER.md) for information on how to contribute to this project.
 
 ## Support
 
