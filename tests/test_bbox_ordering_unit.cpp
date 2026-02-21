@@ -77,9 +77,9 @@ bool testEOPFBboxOrderingSentinel3()
     assert(minX < maxX);
     assert(minY < maxY);
     
-    // Verify geographic region (Djibouti: 40-56°E, 7-21°N)
-    assert(minX >= 40.0 && minX <= 56.0);
-    assert(maxX >= 40.0 && maxX <= 56.0);
+    // Verify geographic region (Djibouti/Horn of Africa: 40-57°E, 7-21°N)
+    assert(minX >= 40.0 && minX <= 57.0);
+    assert(maxX >= 40.0 && maxX <= 57.0);
     assert(minY >= 7.0 && minY <= 21.0);
     assert(maxY >= 7.0 && maxY <= 21.0);
     

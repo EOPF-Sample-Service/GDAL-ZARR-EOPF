@@ -11,7 +11,7 @@ gdalinfo --version
 ### System Requirements
 - **Windows**: Visual Studio 2019+ or MinGW-w64
 - **Linux**: GCC 8+ or Clang 7+
-- **macOS**: Xcode 11+ or Homebrew GCC
+- **macOS (Apple Silicon)**: Xcode Command Line Tools, Conda environment with GDAL 3.10
 - **CMake**: 3.16 or higher
 
 ## Installation Methods
@@ -28,10 +28,15 @@ install-windows.bat
 ./install-linux.sh
 ```
 
-**macOS:**
+**macOS (Apple Silicon):**
 ```bash
-./install-macos.sh
+conda activate eopf-zarr-driver
+./build-and-install-macos.sh
 ```
+
+> **Important (macOS):** The plugin must be built against the Conda GDAL (3.10), not Homebrew GDAL.
+> The macOS script handles this automatically by passing the correct `-DGDAL_INCLUDE_DIR` and
+> `-DGDAL_LIBRARY` flags to CMake. See [DEVELOPER.md](DEVELOPER.md) for details.
 
 ### Option 2: Manual Installation
 

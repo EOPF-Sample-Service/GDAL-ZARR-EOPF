@@ -97,6 +97,44 @@ We provide platform-specific scripts that build the plugin and copy it to the co
 
 In **dev mode** (`--dev`), the plugin stays in `build/` and GDAL is told to load it from there using `GDAL_DRIVER_PATH`. This avoids needing `sudo cp` after every rebuild.
 
+### macOS (Apple Silicon)
+
+macOS requires building against the **Conda GDAL** (3.10) to avoid ABI mismatches with Homebrew GDAL.
+
+```bash
+# One-time: activate the conda environment
+conda activate eopf-zarr-driver
+
+# Build + copy .dylib to conda plugins dir
+./build-and-install-macos.sh
+
+# Build only — load plugin from build/ via GDAL_DRIVER_PATH
+./build-and-install-macos.sh --dev
+
+# Clean rebuild + install
+./build-and-install-macos.sh --clean
+```
+
+#### Quick Dev Setup (macOS)
+
+Add this alias to your `~/.zshrc` for one-command setup:
+
+```bash
+alias eopf="cd /path/to/GDAL-ZARR-EOPF && source dev-env.sh"
+```
+
+Then from any terminal:
+
+```bash
+eopf                          # activates conda env, sets GDAL_DRIVER_PATH, builds if needed
+cmake --build build           # rebuild after code changes
+ctest --test-dir build        # run tests
+gdalinfo --formats | grep EOPF  # verify driver loads
+```
+
+> **Note:** Do not install GDAL via Homebrew alongside the Conda environment — having two
+> GDAL versions causes ABI mismatches and the plugin will fail to load silently.
+
 ## Jupyter Notebook Setup (Linux)
 
 The notebooks require **system Python** (`/usr/bin/python3`) because it has the GDAL Python bindings linked to the same GDAL that loads our `.so` plugin. Conda/venv Python environments typically ship their own GDAL version which won't load the plugin.
@@ -180,15 +218,15 @@ GDAL_DRIVER_PATH=build gdalinfo --formats | grep EOPFZARR
 
 ### Quick Reference
 
-| Task | Command |
-|------|---------|
-| Rebuild (dev, no sudo) | `./build-and-install.sh --dev` |
-| Rebuild + system install | `./build-and-install.sh` |
-| Clean rebuild + install | `./build-and-install.sh --clean` |
-| One-time Jupyter setup | `./setup-jupyter.sh` |
-| Re-create kernels only | `./setup-jupyter.sh --kernel` |
-| Run tests | `cd build && ctest --output-on-failure` |
-| Check plugin loads | `GDAL_DRIVER_PATH=build gdalinfo --formats \| grep EOPFZARR` |
+| Task | Linux | macOS |
+|------|-------|-------|
+| Quick dev setup | — | `eopf` (alias) |
+| Rebuild (dev, no sudo) | `./build-and-install.sh --dev` | `cmake --build build` |
+| Rebuild + install | `./build-and-install.sh` | `./build-and-install-macos.sh` |
+| Clean rebuild + install | `./build-and-install.sh --clean` | `./build-and-install-macos.sh --clean` |
+| One-time Jupyter setup | `./setup-jupyter.sh` | `eopf` (auto-configures) |
+| Run tests | `cd build && ctest --output-on-failure` | `ctest --test-dir build` |
+| Check plugin loads | `GDAL_DRIVER_PATH=build gdalinfo --formats \| grep EOPFZARR` | `gdalinfo --formats \| grep EOPF` |
 
 ## CI/CD
 

@@ -4,5 +4,15 @@
         "LICENCE": "plaintext",
         "COPYING": "plaintext",
         "COPYRIGHT": "plaintext"
-    }
+    },
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureArgs": [
+        "-DGDAL_INCLUDE_DIR=/opt/anaconda3/envs/eopf-zarr-driver/include",
+        "-DGDAL_LIBRARY=/opt/anaconda3/envs/eopf-zarr-driver/lib/libgdal.dylib"
+    ],
+    "cmake.environment": {
+        "GDAL_DRIVER_PATH": "${workspaceFolder}/build"
+    },
+    "cmake.ctestArgs": [],
+    "cmake.buildType": "Release"
 }

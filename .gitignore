@@ -74,6 +74,7 @@ coverage.xml
 
 # Virtual environments
 venv/
+.venv/
 env/
 ENV/
 
@@ -91,3 +92,4 @@ Testing/
 DartConfiguration.tcl
 CTestTestfile.cmake
 tests/data/
+tests/sample_data.aux.xml
