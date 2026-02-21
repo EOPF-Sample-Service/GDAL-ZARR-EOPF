@@ -208,7 +208,7 @@ export GDAL_DRIVER_PATH=$PWD/build
 
 ### 📖 Complete Documentation
 
-- **Installation Guide**: [../INSTALLATION.md](../INSTALLATION.md)
+- **Developer Guide**: [../DEVELOPER.md](../DEVELOPER.md)
 - **Docker Quick Start**: [../DOCKER_QUICKSTART.md](../DOCKER_QUICKSTART.md)
 - **Troubleshooting**: [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
 

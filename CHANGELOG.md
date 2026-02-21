@@ -172,4 +172,4 @@ See [DEVELOPER.md](DEVELOPER.md) for information on how to contribute to this pr
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues)
-- **Documentation**: [Installation](INSTALLATION.md) | [Usage](USAGE.md) | [Troubleshooting](TROUBLESHOOTING.md)
+- **Documentation**: [Developer Guide](DEVELOPER.md) | [Usage](USAGE.md) | [Troubleshooting](TROUBLESHOOTING.md)
