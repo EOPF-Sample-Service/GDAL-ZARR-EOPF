@@ -1,6 +1,7 @@
 # GDAL EOPF-Zarr Plugin
 
 [![Build Status](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/main.yml/badge.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/main.yml)
+[![Build and Publish Docker Image](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/docker-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Zarr datasets.
