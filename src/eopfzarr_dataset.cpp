@@ -1133,26 +1133,9 @@ GDALRasterBand* EOPFZarrRasterBand::RefUnderlyingRasterBand()
 #endif
 CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage)
 {
-    EOPF_PERF_TIMER("EOPFZarrRasterBand::IReadBlock");
-
-    // Track block access patterns for potential prefetching
-    TrackBlockAccess(nBlockXOff, nBlockYOff);
-
-    // Simply delegate to the underlying band
     if (m_poUnderlyingBand)
-    {
-        CPLErr result = m_poUnderlyingBand->ReadBlock(nBlockXOff, nBlockYOff, pImage);
+        return m_poUnderlyingBand->ReadBlock(nBlockXOff, nBlockYOff, pImage);
 
-        // Consider prefetching adjacent blocks if access pattern suggests it
-        if (result == CE_None && ShouldPrefetchAdjacentBlocks(nBlockXOff, nBlockYOff))
-        {
-            PrefetchAdjacentBlocks(nBlockXOff, nBlockYOff);
-        }
-
-        return result;
-    }
-
-    // Return failure if there's no underlying band
     CPLError(
         CE_Failure, CPLE_AppDefined, "EOPFZarrRasterBand::IReadBlock: No underlying raster band");
     return CE_Failure;
@@ -1498,57 +1481,6 @@ bool EOPFZarrDataset::TryFastPathMetadata(const char* key, const char** outValue
 
 // Performance optimization methods for RasterBand
 
-void EOPFZarrRasterBand::TrackBlockAccess(int nBlockXOff, int nBlockYOff) const
-{
-    // Only track if we haven't exceeded cache size
-    if (mBlockAccessTimes.size() < MAX_BLOCK_CACHE_SIZE)
-    {
-        auto key = std::make_pair(nBlockXOff, nBlockYOff);
-        mBlockAccessTimes[key] = std::chrono::steady_clock::now();
-    }
-}
-
-bool EOPFZarrRasterBand::ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const
-{
-    // Simple heuristic: if we've accessed this area recently, prefetch adjacent blocks
-    // This is especially useful for sequential reading patterns
-
-    // Check if we've accessed nearby blocks recently
-    auto now = std::chrono::steady_clock::now();
-    const auto threshold = std::chrono::seconds(1);  // 1 second threshold
-
-    int adjacentCount = 0;
-    for (int dx = -1; dx <= 1; dx++)
-    {
-        for (int dy = -1; dy <= 1; dy++)
-        {
-            if (dx == 0 && dy == 0)
-                continue;  // Skip center block
-
-            auto key = std::make_pair(nBlockXOff + dx, nBlockYOff + dy);
-            auto it = mBlockAccessTimes.find(key);
-            if (it != mBlockAccessTimes.end() && (now - it->second) < threshold)
-            {
-                adjacentCount++;
-            }
-        }
-    }
-
-    // If we've accessed 2 or more adjacent blocks recently, enable prefetching
-    return adjacentCount >= 2;
-}
-
-void EOPFZarrRasterBand::PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff)
-{
-    // This is a placeholder for prefetching logic
-    // In a full implementation, you might:
-    // 1. Check which adjacent blocks aren't in GDAL's cache
-    // 2. Use a background thread to read them
-    // 3. Prime GDAL's block cache
-
-    // For now, just log the intent
-    CPLDebug("EOPFZARR_PERF", "Would prefetch blocks around (%d,%d)", nBlockXOff, nBlockYOff);
-}
 
 // ============================================================================
 // EOPFZarrMultiBandDataset implementation - Multi-band GRD support
