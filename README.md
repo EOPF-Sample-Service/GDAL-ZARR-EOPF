@@ -3,81 +3,67 @@
 [![Build Status](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/main.yml/badge.svg)](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/actions/workflows/main.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Zarr datasets.
+A GDAL driver plugin for reading EOPF (Earth Observation Processing Framework) Zarr datasets, including Sentinel-1, Sentinel-2, and Sentinel-3 products.
 
 ## Features
 
-- **QGIS integration** - Works with "Add Raster Layer"
-- **Geospatial intelligence** - Automatic CRS and geotransform detection
-- **Geolocation arrays** - Native support for satellite swath data with pixel-accurate georeferencing
-- **Performance optimized** - Caching, lazy loading, block prefetching
-- **Cloud native** - HTTP/HTTPS and virtual file system support
-- **Cross-platform** - Windows, macOS, Linux
+- **QGIS integration** — works with "Add Raster Layer" using the `EOPFZARR:` prefix
+- **Sentinel-1 GRD** — multi-band polarization (VV/VH or HH/HV) via `GRD_MULTIBAND=YES`
+- **Sentinel-1 SLC** — burst selection via `BURST=IW1_VV_001`
+- **Geocoding via GCPs** — ground control points from `conditions/gcp/` arrays for accurate georeferencing
+- **Metadata extraction** — STAC discovery properties exposed in the `EOPF` metadata domain
+- **Cloud native** — HTTP/HTTPS and virtual file system (`/vsicurl/`) support
+- **Cross-platform** — Windows, macOS, Linux
 
 ## Quick Start
 
-1. **Check GDAL version** (requires 3.10+):
-
-   ```bash
-   gdalinfo --version
-   ```
-
-2. **Build and install**:
-
-   ```bash
-   mkdir build && cd build
-   cmake ..
-   cmake --build . --config Release
-   cmake --install . --config Release
-   ```
-
-3. **Test installation**:
-
-   ```bash
-   gdalinfo --formats | grep EOPFZARR
-   ```
-
-4. **Use with QGIS**: Add raster layer with `EOPFZARR:/path/to/data.zarr`
-
-## 🐳 Docker Quick Start
-
-The easiest way to get started is using our pre-built Docker image:
+### Docker (Recommended)
 
 ```bash
-# Pull and run the image
 docker pull yuvraj1989/eopf-zarr-driver:latest
 docker run -p 8888:8888 yuvraj1989/eopf-zarr-driver:latest
-
-# Access JupyterLab at: http://localhost:8888
 ```
 
-The Docker image includes:
-- ✅ **GDAL 3.10.2** with EOPF-Zarr driver pre-installed
-- ✅ **Complete rasterio integration** 
-- ✅ **JupyterLab environment** with all geospatial packages
-- ✅ **Network access** for remote Zarr datasets
+Access JupyterLab at `http://localhost:8888`. The image includes GDAL 3.10, the EOPFZARR driver, rasterio, rioxarray, and jupyterhub-singleuser.
 
-See [DOCKER_QUICKSTART.md](docker-images/eopfzarr-qgis) for detailed usage instructions.
+### Build from Source
+
+Requirements: GDAL 3.10+, CMake 3.16+, C++17 compiler.
+
+```bash
+git clone https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.git
+cd GDAL-ZARR-EOPF
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+sudo cp gdal_EOPFZarr.so $(gdal-config --plugindir)/
+```
+
+Verify:
+
+```bash
+gdalinfo --formats | grep EOPFZARR
+```
 
 ## Usage
 
 ### Command Line
 
 ```bash
-# Get dataset info
-gdalinfo 'EOPFZARR:"/path/to/data.zarr"'
+# List subdatasets
+gdalinfo 'EOPFZARR:"/vsicurl/https://example.com/product.zarr"'
 
-# Access subdatasets (recommended format - clean output)
-gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
+# Open a specific subdataset
+gdalinfo 'EOPFZARR:"/vsicurl/https://example.com/product.zarr":measurements/reflectance/r10m/b04'
 
-# Alternative format (shows expected .zmetadata errors)
-gdalinfo 'EOPFZARR:"/path/to/data.zarr/measurements/reflectance/r10m/b04"'
+# Sentinel-1 GRD multi-band (VV+VH)
+gdalinfo 'EOPFZARR:"/vsicurl/https://example.com/S1_GRD.zarr"' --oo GRD_MULTIBAND=YES
 
-# Convert to GeoTIFF
-gdal_translate 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04' output.tif
+# Sentinel-1 SLC burst selection
+gdalinfo 'EOPFZARR:"/vsicurl/https://example.com/S1_SLC.zarr"' --oo BURST=IW1_VV_001
 
-# Reproject
-gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04' reprojected.tif
+# Geocode via GCPs
+gdalwarp -geoloc -t_srs CRS:84 'EOPFZARR:"/vsicurl/https://example.com/S1_GRD.zarr":measurements/ew/hh_grd' output.tif
 ```
 
 ### Python
@@ -85,204 +71,62 @@ gdalwarp -t_srs EPSG:4326 'EOPFZARR:"/path/to/data.zarr":measurements/reflectanc
 ```python
 from osgeo import gdal
 
-# Open main dataset
-ds = gdal.Open('EOPFZARR:"/path/to/data.zarr"')
-
-# Access subdatasets (recommended approach)
+# Open dataset and list subdatasets
+ds = gdal.Open('EOPFZARR:"/vsicurl/https://example.com/product.zarr"')
 subdatasets = ds.GetMetadata("SUBDATASETS")
-sub_ds = gdal.Open(subdatasets["SUBDATASET_1_NAME"])
 
-# Or open subdataset directly (colon format recommended)
-sub_ds = gdal.Open('EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04')
+# Open subdataset directly
+sub = gdal.Open('EOPFZARR:"/vsicurl/https://example.com/product.zarr":measurements/reflectance/r10m/b04')
+array = sub.ReadAsArray()
 
-# Read as NumPy array
-array = sub_ds.ReadAsArray()
+# Sentinel-1 GRD multi-band
+ds = gdal.OpenEx('EOPFZARR:"/vsicurl/https://example.com/S1_GRD.zarr"',
+                 open_options=["GRD_MULTIBAND=YES"])
+
+# Sentinel-1 SLC burst
+ds = gdal.OpenEx('EOPFZARR:"/vsicurl/https://example.com/S1_SLC.zarr"',
+                 open_options=["BURST=IW1_VV_001"])
+
+# Read EOPF metadata
+meta = ds.GetMetadata("EOPF")
+print(meta.get("EOPF_PRODUCT_TYPE"))
 ```
 
-### Using with rioxarray
+### Open Options
 
-rioxarray extends xarray with rasterio (GDAL) capabilities for seamless geospatial data handling:
-
-```python
-import rioxarray
-
-# Open EOPF Zarr subdataset
-da = rioxarray.open_rasterio('EOPFZARR:/path/to/data.zarr:measurements/band')
-
-# Access geospatial metadata
-print(da.rio.crs)       # Coordinate Reference System
-print(da.rio.bounds())  # Bounding box coordinates
-print(da.rio.transform())  # Affine transform
-
-# Reproject to different CRS
-da_reproj = da.rio.reproject('EPSG:3857')
-
-# Clip to area of interest
-from shapely.geometry import box
-bbox = box(minx, miny, maxx, maxy)
-da_clipped = da.rio.clip([bbox], crs=da.rio.crs)
-
-# Write to GeoTIFF
-da.rio.to_raster('output.tif')
-```
-
-**See Examples:**
-- Comprehensive notebook: `notebooks/08-EOPFZARR-with-Rioxarray.ipynb`
-
-### Working with Swath Data (Sentinel-3, etc.)
-
-For satellite swath data with geolocation arrays, use `gdalwarp -geoloc` to get accurate georeferencing:
-
-```bash
-# Get pixel-accurate warped output from swath data
-gdalwarp -geoloc -t_srs EPSG:4326 -tr 0.01 0.01 \
-  "EOPFZARR:/path/to/sentinel3.zarr:measurements/inadir/s7_bt_in" \
-  output_true_geometry.tif
-```
-
-**In QGIS:**
-1. Load EOPFZARR layer (shows stretched initially)
-2. `Raster → Projections → Warp (Reproject)`
-3. In "Additional command-line parameters": add `-geoloc`
-4. Run to get TRUE curved swath geometry
-
-**See:** `notebooks/10-Sentinel3-SLSTR-L1-RBT-GDAL.ipynb` for detailed examples
-
-## Configuration
-
-### Subdataset Access Formats
-
-The plugin supports two formats for accessing subdatasets:
-
-1. **Colon-separated format (recommended)**: `EOPFZARR:"/path/to/data.zarr":subdataset/path`
-   - Clean output with no error messages
-   - More efficient access pattern
-
-2. **Direct path format**: `EOPFZARR:"/path/to/data.zarr/subdataset/path"`
-   - Shows expected `.zmetadata` error messages (harmless)
-   - Compatible with older usage patterns
+| Option | Values | Description |
+|---|---|---|
+| `GRD_MULTIBAND` | `YES` / `NO` (default) | Combine VV+VH or HH+HV polarizations into a 2-band dataset |
+| `BURST` | e.g. `IW1_VV_001` | Select a specific SLC burst by name |
 
 ### Environment Variables
 
-- **`EOPF_SHOW_ZARR_ERRORS`** - Controls visibility of Zarr driver error messages
-  - `NO` (default) - Suppresses expected error messages during subdataset opening
-  - `YES` - Shows all Zarr driver error messages for debugging
+| Variable | Values | Description |
+|---|---|---|
+| `EOPF_SHOW_ZARR_ERRORS` | `YES` / `NO` (default) | Show Zarr driver error messages (useful for debugging) |
 
-**Examples:**
+## Notebooks
 
-```bash
-# Normal usage - clean output with colon format
-gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
+See [`notebooks/`](notebooks/) for Jupyter notebooks covering all features:
 
-# Debug mode - show all errors 
-EOPF_SHOW_ZARR_ERRORS=YES gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
-
-# Windows PowerShell
-$env:EOPF_SHOW_ZARR_ERRORS = "YES"
-gdalinfo 'EOPFZARR:"/path/to/data.zarr":measurements/reflectance/r10m/b04'
-```
-
-## Building
-
-### Requirements
-
-- GDAL 3.10+ with development headers
-- CMake 3.16+
-- C++14 compatible compiler
-
-### Windows
-
-```cmd
-# Using vcpkg (recommended)
-vcpkg install gdal[core]
-
-# Build
-mkdir build && cd build
-cmake -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ..
-cmake --build . --config Release
-```
-
-### Linux/macOS
-
-```bash
-# Install GDAL development packages
-# Ubuntu/Debian: sudo apt-get install libgdal-dev
-# macOS: brew install gdal
-
-# Build
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
-```
-
-## Testing
-
-The project includes comprehensive testing following industry best practices:
-
-### Test Types
-
-- **Unit Tests (C++)** - Core functionality and GDAL integration
-- **Integration Tests (Python)** - End-to-end driver functionality using pytest
-- **Performance Tests** - Caching and optimization validation
-- **Compatibility Tests** - Different Zarr format support
-
-
-### Manual Testing
-
-```bash
-# C++ unit tests via CTest
-cd build
-ctest -C Release --verbose
-
-# Python integration tests via pytest  
-pytest tests/integration/ -v
-
-# Generate test data (if needed)
-python tests/generate_test_data.py
-```
-
-### Test Data
-
-Integration tests use automatically generated Zarr datasets covering:
-
-- Basic functionality
-- Subdatasets
-- Geospatial information
-- EOPF metadata
-- Performance testing
-
-### Network Testing
-
-The test suite includes comprehensive network testing:
-
-- **HTTPS URLs**: Tests with real-world EODC datasets
-- **VSI Wrappers**: `/vsicurl/` and `/vsis3/` path handling
-- **Error Handling**: Network timeouts and invalid URLs
-- **Performance**: Caching effectiveness with remote datasets
-
-Example tested HTTPS URL:
-
-```text
-https://objects.eodc.eu/e05ab01a9d56408d82ac32d69a5aae2a:202506-s02msil1c/25/products/cpm_v256/S2C_MSIL1C_20250625T095051_N0511_R079_T33TWE_20250625T132854.zarr
-```
-
-### CI/CD Testing
-
-GitHub Actions automatically runs:
-
-- Cross-platform builds (Windows, macOS, Linux)
-- C++ unit tests via CTest
-- Python integration tests via pytest
-- Smoke tests for driver registration
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
+| Notebook | Description |
+|---|---|
+| `01-Basic-Functionality-Demo.ipynb` | Driver registration, subdatasets, basic reads |
+| `03-EOPF-Zarr-Test.ipynb` | Environment validation |
+| `04-Explore_sentinel2_EOPFZARR.ipynb` | Sentinel-2 product exploration |
+| `07-Sentinel-3-OLCI-Level-1-EFR.ipynb` | Sentinel-3 OLCI data |
+| `08-EOPFZARR-with-Rioxarray.ipynb` | rioxarray integration |
+| `09-EOPFZARR-with-Rasterio.ipynb` | rasterio integration |
+| `11-Sentinel-1-GRD-Demo.ipynb` | Sentinel-1 GRD access and GCPs |
+| `12-Sentinel-1-GRD-MultiBand-Demo.ipynb` | GRD multi-band polarization |
+| `13-Sentinel-1-SLC-Burst-Selection.ipynb` | SLC burst selection |
 
 ## Documentation
 
-- **[Usage Guide](USAGE.md)** - Examples and best practices
-- **[Developer Guide](DEVELOPER.md)** - Building, testing, and contributing
-- **[Troubleshooting](TROUBLESHOOTING.md)** - Common issues and solutions
-- **[Changelog](CHANGELOG.md)** - Version history and changes
+- [Developer Guide](DEVELOPER.md) — building, testing, contributing
+- [Usage Guide](USAGE.md) — examples and best practices
+- [Troubleshooting](TROUBLESHOOTING.md) — common issues and solutions
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
