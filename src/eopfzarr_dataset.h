@@ -201,21 +201,6 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
     GDALRasterBand* m_poUnderlyingBand;
     EOPFZarrDataset* m_poDS;
 
-    // Performance optimization members
-    struct PairHash
-    {
-        size_t operator()(const std::pair<int, int>& p) const
-        {
-            return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
-        }
-    };
-
-    mutable std::unordered_map<std::pair<int, int>,
-                               std::chrono::time_point<std::chrono::steady_clock>,
-                               PairHash>
-        mBlockAccessTimes;
-    static constexpr size_t MAX_BLOCK_CACHE_SIZE = 64;
-
   public:
     EOPFZarrRasterBand(EOPFZarrDataset* poDS, GDALRasterBand* poUnderlyingBand, int nBand);
     ~EOPFZarrRasterBand();
@@ -228,10 +213,4 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
 #endif
     // Add the IReadBlock method
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
-
-  private:
-    // Performance optimization methods
-    void TrackBlockAccess(int nBlockXOff, int nBlockYOff) const;
-    bool ShouldPrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff) const;
-    void PrefetchAdjacentBlocks(int nBlockXOff, int nBlockYOff);
 };
