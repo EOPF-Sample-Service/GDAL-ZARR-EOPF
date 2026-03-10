@@ -107,6 +107,44 @@ with rasterio.open(
 |---|---|---|
 | `GRD_MULTIBAND` | `YES` / `NO` (default) | Combine VV+VH or HH+HV polarizations into a 2-band dataset |
 | `BURST` | e.g. `IW1_VV_001` | Select a specific SLC burst |
+| `CACHE_SIZE_MB` | integer (default: `256`) | VSI cache size in megabytes for remote datasets |
+
+## Performance Tuning
+
+For remote datasets (`/vsicurl/`), the driver automatically applies sensible defaults when the corresponding config option is not already set:
+
+| Config Option | Auto Default | Description |
+|---|---|---|
+| `VSI_CACHE` | `TRUE` | Enable in-memory caching of remote file reads |
+| `VSI_CACHE_SIZE` | `268435456` (256 MB) | Size of the VSI RAM cache; increase for large chunks |
+| `CPL_VSIL_CURL_CACHE_SIZE` | `209715200` (200 MB) | CURL response LRU cache size |
+| `GDAL_NUM_THREADS` | `ALL_CPUS` | Multi-threaded chunk decoding (GDAL 3.10+) |
+
+To override these defaults, set the environment variable before opening:
+
+```bash
+export VSI_CACHE_SIZE=536870912   # 512 MB
+export GDAL_NUM_THREADS=4         # Limit to 4 threads
+```
+
+Or use the `CACHE_SIZE_MB` open option to control VSI cache size per-dataset:
+
+```python
+ds = gdal.OpenEx(
+    'EOPFZARR:"/vsicurl/https://example.com/product.zarr"',
+    open_options=["CACHE_SIZE_MB=512"]
+)
+```
+
+### QGIS Users
+
+For best performance in QGIS, also set `GDAL_CACHEMAX` (GDAL's block cache, separate from VSI cache):
+
+```bash
+export GDAL_CACHEMAX=512   # 512 MB block cache
+```
+
+> **Note:** QGIS versions before 3.40 have a known rendering issue with remote Zarr data ([QGIS #63153](https://github.com/qgis/QGIS/issues/63153)). Upgrading to QGIS 3.40+ is recommended.
 
 ## Environment Variables
 
