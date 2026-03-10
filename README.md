@@ -99,6 +99,15 @@ print(meta.get("EOPF_PRODUCT_TYPE"))
 |---|---|---|
 | `GRD_MULTIBAND` | `YES` / `NO` (default) | Combine VV+VH or HH+HV polarizations into a 2-band dataset |
 | `BURST` | e.g. `IW1_VV_001` | Select a specific SLC burst by name |
+| `CACHE_SIZE_MB` | integer (default: `256`) | VSI cache size in megabytes for remote datasets |
+
+### Performance
+
+For remote datasets, the driver automatically enables:
+- **VSI caching** (256 MB) and **CURL cache** (200 MB) to reduce network round-trips
+- **Multi-threaded chunk decoding** (`GDAL_NUM_THREADS=ALL_CPUS`) for parallel processing
+
+These defaults apply only when the user has not already set the corresponding config option. See the [Usage Guide](USAGE.md#performance-tuning) for override details and QGIS-specific tips.
 
 ### Environment Variables
 

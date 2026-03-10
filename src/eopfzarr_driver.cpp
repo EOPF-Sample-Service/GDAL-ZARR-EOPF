@@ -709,10 +709,11 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
         }
     }
 
-    // Create option list without EOPF_PROCESS and SUPPRESS_AUX_WARNING
+    // Create option list without EOPF-specific options
     // (we handle these internally)
     char** papszOpenOptions = nullptr;
     const char* pszSuppressAuxWarning = nullptr;
+    int nCacheSizeMB = 256;  // Default cache size
     for (char** papszIter = poOpenInfo->papszOpenOptions; papszIter && *papszIter; ++papszIter)
     {
         char* pszKey = nullptr;
@@ -722,6 +723,12 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
             if (EQUAL(pszKey, "SUPPRESS_AUX_WARNING"))
             {
                 pszSuppressAuxWarning = pszValue;
+            }
+            else if (EQUAL(pszKey, "CACHE_SIZE_MB"))
+            {
+                nCacheSizeMB = atoi(pszValue);
+                if (nCacheSizeMB < 1)
+                    nCacheSizeMB = 256;
             }
             else if (EQUAL(pszKey, "EOPF_PROCESS") || EQUAL(pszKey, "GRD_MULTIBAND") ||
                      EQUAL(pszKey, "BURST"))
@@ -741,6 +748,38 @@ static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
     if (pszSuppressAuxWarning)
     {
         CPLSetThreadLocalConfigOption("EOPFZARR_SUPPRESS_AUX_WARNING", pszSuppressAuxWarning);
+    }
+
+    // For remote datasets, apply performance defaults if not already configured
+    if (IsUrlOrVirtualPath(mainPath))
+    {
+        // Enable VSI cache for remote reads
+        if (!CPLGetConfigOption("VSI_CACHE", nullptr))
+        {
+            CPLSetConfigOption("VSI_CACHE", "TRUE");
+            CPLDebug("EOPFZARR", "Auto-enabled VSI_CACHE=TRUE for remote dataset");
+        }
+
+        // Set VSI cache size (from CACHE_SIZE_MB open option, default 256MB)
+        if (!CPLGetConfigOption("VSI_CACHE_SIZE", nullptr))
+        {
+            CPLSetConfigOption("VSI_CACHE_SIZE", CPLSPrintf("%d", nCacheSizeMB * 1024 * 1024));
+            CPLDebug("EOPFZARR", "Auto-set VSI_CACHE_SIZE=%dMB for remote dataset", nCacheSizeMB);
+        }
+
+        // Set CURL cache size (200MB default)
+        if (!CPLGetConfigOption("CPL_VSIL_CURL_CACHE_SIZE", nullptr))
+        {
+            CPLSetConfigOption("CPL_VSIL_CURL_CACHE_SIZE", "209715200");
+            CPLDebug("EOPFZARR", "Auto-set CPL_VSIL_CURL_CACHE_SIZE=200MB for remote dataset");
+        }
+
+        // Enable multi-threaded chunk decoding (GDAL 3.10+)
+        if (!CPLGetConfigOption("GDAL_NUM_THREADS", nullptr))
+        {
+            CPLSetConfigOption("GDAL_NUM_THREADS", "ALL_CPUS");
+            CPLDebug("EOPFZARR", "Auto-set GDAL_NUM_THREADS=ALL_CPUS for remote dataset");
+        }
     }
 
     // Use GDALOpenEx to open the dataset
@@ -1108,6 +1147,8 @@ extern "C" EOPFZARR_DLL void GDALRegister_EOPFZarr()
         "  <Option name='BURST' type='string' default='' description='For Sentinel-1 SLC products, "
         "select a specific burst by name (format: {subswath}_{polarization}_{index}, e.g. "
         "IW1_VV_001)'/>"
+        "  <Option name='CACHE_SIZE_MB' type='int' default='256' description='VSI cache size in "
+        "megabytes for remote datasets (default: 256)'/>"
         "</OpenOptionList>";
     driver->SetMetadataItem(GDAL_DMD_OPENOPTIONLIST, pszOptions);
 
