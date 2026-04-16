@@ -33,6 +33,171 @@ struct PamDisableGuard
         CPLSetThreadLocalConfigOption("GDAL_PAM_ENABLED", bHadValue ? osOldValue.c_str() : nullptr);
     }
 };
+// Shared GCP loader: reads pixel/line/lat/lon/height arrays from the Zarr
+// conditions/gcp/ group and builds GDAL_GCP structures.
+// subPath is the measurement array path (e.g. "/S01.../measurements/grd");
+// we navigate up two levels to reach the product group.
+static bool LoadGCPsFromZarr(const std::string& rootPath,
+                             const std::string& subPath,
+                             std::vector<GDAL_GCP>& gcps,
+                             OGRSpatialReference& gcpSRS)
+{
+    std::string parentGroup = subPath;
+    if (!parentGroup.empty() && parentGroup[0] == '/')
+        parentGroup = parentGroup.substr(1);
+
+    for (int level = 0; level < 2; level++)
+    {
+        size_t lastSlash = parentGroup.find_last_of('/');
+        if (lastSlash == std::string::npos)
+        {
+            CPLDebug(
+                "EOPFZARR", "LoadGCPsFromZarr: cannot navigate up from %s", parentGroup.c_str());
+            return false;
+        }
+        parentGroup = parentGroup.substr(0, lastSlash);
+    }
+
+    const char* arrayNames[] = {"pixel", "line", "latitude", "longitude", "height"};
+    GDALDataset* gcpDS[5] = {nullptr};
+
+    for (int i = 0; i < 5; i++)
+    {
+        std::string zarrPath =
+            "ZARR:\"" + rootPath + "\":/" + parentGroup + "/conditions/gcp/" + arrayNames[i];
+        gcpDS[i] = GDALDataset::FromHandle(GDALOpenEx(
+            zarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
+        if (!gcpDS[i])
+        {
+            CPLDebug("EOPFZARR", "LoadGCPsFromZarr: failed to open %s", zarrPath.c_str());
+            for (int j = 0; j < i; j++)
+                GDALClose(gcpDS[j]);
+            return false;
+        }
+    }
+
+    int nPixels = std::max(gcpDS[0]->GetRasterXSize(), gcpDS[0]->GetRasterYSize());
+    int nLines = std::max(gcpDS[1]->GetRasterXSize(), gcpDS[1]->GetRasterYSize());
+    int latWidth = gcpDS[2]->GetRasterXSize();
+    int latHeight = gcpDS[2]->GetRasterYSize();
+
+    if (latHeight != nLines || latWidth != nPixels)
+    {
+        CPLDebug("EOPFZARR",
+                 "LoadGCPsFromZarr: dimension mismatch lat(%dx%d) vs pixel(%d) x line(%d)",
+                 latWidth,
+                 latHeight,
+                 nPixels,
+                 nLines);
+        for (int i = 0; i < 5; i++)
+            GDALClose(gcpDS[i]);
+        return false;
+    }
+
+    auto readVec = [](GDALDataset* ds, int n, bool isRow) -> std::vector<double>
+    {
+        std::vector<double> v(n);
+        GDALRasterBand* b = ds->GetRasterBand(1);
+        CPLErr e;
+        if (isRow)
+            e = b->RasterIO(GF_Read, 0, 0, n, 1, v.data(), n, 1, GDT_Float64, 0, 0, nullptr);
+        else
+            e = b->RasterIO(GF_Read, 0, 0, 1, n, v.data(), 1, n, GDT_Float64, 0, 0, nullptr);
+        if (e != CE_None)
+            v.clear();
+        return v;
+    };
+
+    bool isPixelRow = (gcpDS[0]->GetRasterXSize() >= nPixels);
+    bool isLineRow = (gcpDS[1]->GetRasterXSize() >= nLines);
+    auto pixelVals = readVec(gcpDS[0], nPixels, isPixelRow);
+    auto lineVals = readVec(gcpDS[1], nLines, isLineRow);
+
+    std::vector<double> latVals(nLines * nPixels), lonVals(nLines * nPixels),
+        heightVals(nLines * nPixels, 0.0);
+    CPLErr e;
+    e = gcpDS[2]->GetRasterBand(1)->RasterIO(GF_Read,
+                                             0,
+                                             0,
+                                             latWidth,
+                                             latHeight,
+                                             latVals.data(),
+                                             latWidth,
+                                             latHeight,
+                                             GDT_Float64,
+                                             0,
+                                             0,
+                                             nullptr);
+    if (e != CE_None)
+    {
+        for (int i = 0; i < 5; i++)
+            GDALClose(gcpDS[i]);
+        return false;
+    }
+    e = gcpDS[3]->GetRasterBand(1)->RasterIO(GF_Read,
+                                             0,
+                                             0,
+                                             latWidth,
+                                             latHeight,
+                                             lonVals.data(),
+                                             latWidth,
+                                             latHeight,
+                                             GDT_Float64,
+                                             0,
+                                             0,
+                                             nullptr);
+    if (e != CE_None)
+    {
+        for (int i = 0; i < 5; i++)
+            GDALClose(gcpDS[i]);
+        return false;
+    }
+    // height is optional — ignore read errors
+    gcpDS[4]->GetRasterBand(1)->RasterIO(GF_Read,
+                                         0,
+                                         0,
+                                         latWidth,
+                                         latHeight,
+                                         heightVals.data(),
+                                         latWidth,
+                                         latHeight,
+                                         GDT_Float64,
+                                         0,
+                                         0,
+                                         nullptr);
+
+    for (int i = 0; i < 5; i++)
+        GDALClose(gcpDS[i]);
+
+    if (pixelVals.empty() || lineVals.empty())
+        return false;
+
+    gcps.resize(nLines * nPixels);
+    int idx = 0;
+    for (int iLine = 0; iLine < nLines; iLine++)
+    {
+        for (int iPixel = 0; iPixel < nPixels; iPixel++)
+        {
+            GDAL_GCP& gcp = gcps[idx];
+            char szId[32];
+            snprintf(szId, sizeof(szId), "GCP_%d", idx + 1);
+            gcp.pszId = CPLStrdup(szId);
+            gcp.pszInfo = CPLStrdup("");
+            gcp.dfGCPPixel = pixelVals[iPixel] + 0.5;
+            gcp.dfGCPLine = lineVals[iLine] + 0.5;
+            gcp.dfGCPX = lonVals[iLine * nPixels + iPixel];
+            gcp.dfGCPY = latVals[iLine * nPixels + iPixel];
+            gcp.dfGCPZ = heightVals[iLine * nPixels + iPixel];
+            idx++;
+        }
+    }
+
+    gcpSRS.SetWellKnownGeogCS("WGS84");
+    gcpSRS.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    CPLDebug("EOPFZARR", "LoadGCPsFromZarr: loaded %d GCPs", idx);
+    return true;
+}
+
 }  // namespace
 
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver* selfDrv)
@@ -893,221 +1058,9 @@ void EOPFZarrDataset::LoadGCPs()
         return;
     }
 
-    std::string subPath(pszSubPath);
     std::string description = mInner->GetDescription();
     std::string rootPath = ExtractRootPath(description);
-
-    // Navigate up to the product group containing conditions/gcp/
-    // From "S01SIWGRD_.../measurements/grd" we go up past "measurements/grd"
-    // From "S01SIWSLC_.../measurements/slc" we go up past "measurements/slc"
-    std::string parentGroup = subPath;
-
-    // Remove leading slash
-    if (!parentGroup.empty() && parentGroup[0] == '/')
-        parentGroup = parentGroup.substr(1);
-
-    // Go up two levels (past measurements/<type>)
-    for (int level = 0; level < 2; level++)
-    {
-        size_t lastSlash = parentGroup.find_last_of('/');
-        if (lastSlash == std::string::npos)
-        {
-            CPLDebug("EOPFZARR", "LoadGCPs: Cannot navigate up from %s", parentGroup.c_str());
-            return;
-        }
-        parentGroup = parentGroup.substr(0, lastSlash);
-    }
-
-    CPLDebug("EOPFZARR", "LoadGCPs: Parent group = %s", parentGroup.c_str());
-
-    // Construct Zarr paths for GCP arrays
-    const char* arrayNames[] = {"pixel", "line", "latitude", "longitude", "height"};
-    GDALDataset* gcpDS[5] = {nullptr};
-
-    for (int i = 0; i < 5; i++)
-    {
-        std::string zarrPath =
-            "ZARR:\"" + rootPath + "\":/" + parentGroup + "/conditions/gcp/" + arrayNames[i];
-        gcpDS[i] = GDALDataset::FromHandle(GDALOpenEx(
-            zarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
-        if (!gcpDS[i])
-        {
-            CPLDebug("EOPFZARR",
-                     "LoadGCPs: Failed to open %s array: %s",
-                     arrayNames[i],
-                     zarrPath.c_str());
-            // Clean up already opened
-            for (int j = 0; j < i; j++)
-                GDALClose(gcpDS[j]);
-            return;
-        }
-    }
-
-    GDALDataset* pixelDS = gcpDS[0];
-    GDALDataset* lineDS = gcpDS[1];
-    GDALDataset* latDS = gcpDS[2];
-    GDALDataset* lonDS = gcpDS[3];
-    GDALDataset* heightDS = gcpDS[4];
-
-    // pixel and line are 1D arrays
-    int nPixels = std::max(pixelDS->GetRasterXSize(), pixelDS->GetRasterYSize());
-    int nLines = std::max(lineDS->GetRasterXSize(), lineDS->GetRasterYSize());
-
-    // lat, lon, height are 2D arrays [nLines x nPixels]
-    int latHeight = latDS->GetRasterYSize();
-    int latWidth = latDS->GetRasterXSize();
-
-    CPLDebug("EOPFZARR",
-             "LoadGCPs: pixel count=%d, line count=%d, lat dims=%dx%d",
-             nPixels,
-             nLines,
-             latWidth,
-             latHeight);
-
-    // Validate dimensions match
-    if (latHeight != nLines || latWidth != nPixels)
-    {
-        CPLDebug("EOPFZARR",
-                 "LoadGCPs: Dimension mismatch — lat(%dx%d) vs pixel(%d) x line(%d)",
-                 latWidth,
-                 latHeight,
-                 nPixels,
-                 nLines);
-        for (int i = 0; i < 5; i++)
-            GDALClose(gcpDS[i]);
-        return;
-    }
-
-    // Read 1D pixel array
-    std::vector<double> pixelVals(nPixels);
-    GDALRasterBand* pixelBand = pixelDS->GetRasterBand(1);
-    CPLErr err;
-    if (pixelDS->GetRasterXSize() >= nPixels)
-        err = pixelBand->RasterIO(
-            GF_Read, 0, 0, nPixels, 1, pixelVals.data(), nPixels, 1, GDT_Float64, 0, 0, nullptr);
-    else
-        err = pixelBand->RasterIO(
-            GF_Read, 0, 0, 1, nPixels, pixelVals.data(), 1, nPixels, GDT_Float64, 0, 0, nullptr);
-    if (err != CE_None)
-    {
-        CPLDebug("EOPFZARR", "LoadGCPs: Failed to read pixel array");
-        for (int i = 0; i < 5; i++)
-            GDALClose(gcpDS[i]);
-        return;
-    }
-
-    // Read 1D line array
-    std::vector<double> lineVals(nLines);
-    GDALRasterBand* lineBand = lineDS->GetRasterBand(1);
-    if (lineDS->GetRasterXSize() >= nLines)
-        err = lineBand->RasterIO(
-            GF_Read, 0, 0, nLines, 1, lineVals.data(), nLines, 1, GDT_Float64, 0, 0, nullptr);
-    else
-        err = lineBand->RasterIO(
-            GF_Read, 0, 0, 1, nLines, lineVals.data(), 1, nLines, GDT_Float64, 0, 0, nullptr);
-    if (err != CE_None)
-    {
-        CPLDebug("EOPFZARR", "LoadGCPs: Failed to read line array");
-        for (int i = 0; i < 5; i++)
-            GDALClose(gcpDS[i]);
-        return;
-    }
-
-    // Read 2D latitude array [nLines x nPixels]
-    std::vector<double> latVals(nLines * nPixels);
-    err = latDS->GetRasterBand(1)->RasterIO(GF_Read,
-                                            0,
-                                            0,
-                                            latWidth,
-                                            latHeight,
-                                            latVals.data(),
-                                            latWidth,
-                                            latHeight,
-                                            GDT_Float64,
-                                            0,
-                                            0,
-                                            nullptr);
-    if (err != CE_None)
-    {
-        CPLDebug("EOPFZARR", "LoadGCPs: Failed to read latitude array");
-        for (int i = 0; i < 5; i++)
-            GDALClose(gcpDS[i]);
-        return;
-    }
-
-    // Read 2D longitude array [nLines x nPixels]
-    std::vector<double> lonVals(nLines * nPixels);
-    err = lonDS->GetRasterBand(1)->RasterIO(GF_Read,
-                                            0,
-                                            0,
-                                            latWidth,
-                                            latHeight,
-                                            lonVals.data(),
-                                            latWidth,
-                                            latHeight,
-                                            GDT_Float64,
-                                            0,
-                                            0,
-                                            nullptr);
-    if (err != CE_None)
-    {
-        CPLDebug("EOPFZARR", "LoadGCPs: Failed to read longitude array");
-        for (int i = 0; i < 5; i++)
-            GDALClose(gcpDS[i]);
-        return;
-    }
-
-    // Read 2D height array [nLines x nPixels]
-    std::vector<double> heightVals(nLines * nPixels);
-    err = heightDS->GetRasterBand(1)->RasterIO(GF_Read,
-                                               0,
-                                               0,
-                                               latWidth,
-                                               latHeight,
-                                               heightVals.data(),
-                                               latWidth,
-                                               latHeight,
-                                               GDT_Float64,
-                                               0,
-                                               0,
-                                               nullptr);
-    if (err != CE_None)
-    {
-        CPLDebug("EOPFZARR", "LoadGCPs: Failed to read height array — using 0");
-        std::fill(heightVals.begin(), heightVals.end(), 0.0);
-    }
-
-    // Close intermediate datasets
-    for (int i = 0; i < 5; i++)
-        GDALClose(gcpDS[i]);
-
-    // Build GDAL_GCP structures
-    mGCPs.resize(nLines * nPixels);
-    int gcpIdx = 0;
-    for (int iLine = 0; iLine < nLines; iLine++)
-    {
-        for (int iPixel = 0; iPixel < nPixels; iPixel++)
-        {
-            GDAL_GCP& gcp = mGCPs[gcpIdx];
-            char szId[32];
-            snprintf(szId, sizeof(szId), "GCP_%d", gcpIdx + 1);
-            gcp.pszId = CPLStrdup(szId);
-            gcp.pszInfo = CPLStrdup("");
-            gcp.dfGCPPixel = pixelVals[iPixel] + 0.5;
-            gcp.dfGCPLine = lineVals[iLine] + 0.5;
-            gcp.dfGCPX = lonVals[iLine * nPixels + iPixel];
-            gcp.dfGCPY = latVals[iLine * nPixels + iPixel];
-            gcp.dfGCPZ = heightVals[iLine * nPixels + iPixel];
-            gcpIdx++;
-        }
-    }
-
-    // Set GCP SRS to WGS84
-    mGCPSRS.SetWellKnownGeogCS("WGS84");
-    mGCPSRS.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
-
-    CPLDebug(
-        "EOPFZARR", "LoadGCPs: Loaded %d GCPs (%d lines x %d pixels)", gcpIdx, nLines, nPixels);
+    LoadGCPsFromZarr(rootPath, pszSubPath, mGCPs, mGCPSRS);
 }
 
 CPLErr EOPFZarrDataset::TryLoadXML(char** papszSiblingFiles)
@@ -1989,46 +1942,45 @@ EOPFZarrMultiBandDataset* EOPFZarrMultiBandDataset::CreateFromPolarizations(
              (int) poDS->mPolarizationDatasets.size(),
              polList.c_str());
 
+    // Load GCPs from the first polarization's conditions/gcp/ arrays.
+    // The raw Zarr polarization datasets have no geographic CRS, so GCPs are
+    // the only way to geolocate the multi-band wrapper in GDAL/QGIS.
+    if (!polPaths.empty())
+    {
+        LoadGCPsFromZarr(rootPath, polPaths[0].second, poDS->mGCPs, poDS->mGCPSRS);
+        CPLDebug("EOPFZARR",
+                 "EOPFZarrMultiBandDataset: loaded %d GCPs for geolocation",
+                 (int) poDS->mGCPs.size());
+    }
+
     return poDS.release();
 }
 
 const OGRSpatialReference* EOPFZarrMultiBandDataset::GetSpatialRef() const
 {
-    if (mCachedSpatialRef)
-        return mCachedSpatialRef;
-
-    // Get from first polarization dataset
-    if (!mPolarizationDatasets.empty())
-    {
-        const OGRSpatialReference* srs = mPolarizationDatasets[0]->GetSpatialRef();
-        if (srs)
-        {
-            mCachedSpatialRef = srs->Clone();
-            return mCachedSpatialRef;
-        }
-    }
+    // No geographic CRS on the multi-band wrapper — geolocation is via GCPs.
     return nullptr;
 }
 
-#ifdef HAVE_GDAL_GEOTRANSFORM
-CPLErr EOPFZarrMultiBandDataset::GetGeoTransform(GDALGeoTransform& gt) const
+// GetGeoTransform intentionally not overridden — geolocation is via GCPs.
+// The base class returns CE_Failure which signals to GDAL/QGIS to use GCPs.
+
+int EOPFZarrMultiBandDataset::GetGCPCount()
 {
-    if (!mPolarizationDatasets.empty())
-    {
-        return mPolarizationDatasets[0]->GetGeoTransform(gt);
-    }
-    return CE_Failure;
+    return static_cast<int>(mGCPs.size());
 }
-#else
-CPLErr EOPFZarrMultiBandDataset::GetGeoTransform(double* gt)
+
+const GDAL_GCP* EOPFZarrMultiBandDataset::GetGCPs()
 {
-    if (!mPolarizationDatasets.empty())
-    {
-        return mPolarizationDatasets[0]->GetGeoTransform(gt);
-    }
-    return CE_Failure;
+    return mGCPs.empty() ? nullptr : mGCPs.data();
 }
-#endif
+
+const OGRSpatialReference* EOPFZarrMultiBandDataset::GetGCPSpatialRef() const
+{
+    if (mGCPs.empty())
+        return nullptr;
+    return &mGCPSRS;
+}
 
 char** EOPFZarrMultiBandDataset::GetMetadata(const char* pszDomain)
 {
