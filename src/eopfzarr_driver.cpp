@@ -677,8 +677,31 @@ static GDALDataset* OpenSubdataset(const std::string& mainPath,
     return nullptr;
 }
 
+// RAII guard to disable PAM on inner Zarr datasets opened during EOPFOpen.
+// Our EOPF wrapper handles PAM itself; inner datasets should not write .aux.xml.
+struct PamDisableGuard
+{
+    std::string osOldValue;
+    bool bHadValue;
+
+    PamDisableGuard()
+    {
+        const char* p = CPLGetThreadLocalConfigOption("GDAL_PAM_ENABLED", nullptr);
+        bHadValue = p != nullptr;
+        if (p)
+            osOldValue = p;
+        CPLSetThreadLocalConfigOption("GDAL_PAM_ENABLED", "NO");
+    }
+    ~PamDisableGuard()
+    {
+        CPLSetThreadLocalConfigOption("GDAL_PAM_ENABLED", bHadValue ? osOldValue.c_str() : nullptr);
+    }
+};
+
 static GDALDataset* EOPFOpen(GDALOpenInfo* poOpenInfo)
 {
+    PamDisableGuard pamGuard;  // Disable PAM for all inner Zarr opens
+
     const char* pszFilename = poOpenInfo->pszFilename;
     CPLDebug("EOPFZARR", "EOPFOpen: Opening file: %s", pszFilename);
 

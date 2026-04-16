@@ -8,8 +8,32 @@
 #include "cpl_string.h"
 #include "cpl_vsi.h"
 #include "eopf_metadata.h"
-#include "eopfzarr_config.h"       // Add this include
-#include "eopfzarr_performance.h"  // Add performance optimizations
+#include "eopfzarr_config.h"
+#include "eopfzarr_performance.h"
+
+// RAII guard to temporarily disable PAM for inner Zarr dataset opens.
+// Prevents the Zarr driver from writing .aux.xml next to .zarray files.
+namespace
+{
+struct PamDisableGuard
+{
+    std::string osOldValue;
+    bool bHadValue;
+
+    PamDisableGuard()
+    {
+        const char* p = CPLGetThreadLocalConfigOption("GDAL_PAM_ENABLED", nullptr);
+        bHadValue = p != nullptr;
+        if (p)
+            osOldValue = p;
+        CPLSetThreadLocalConfigOption("GDAL_PAM_ENABLED", "NO");
+    }
+    ~PamDisableGuard()
+    {
+        CPLSetThreadLocalConfigOption("GDAL_PAM_ENABLED", bHadValue ? osOldValue.c_str() : nullptr);
+    }
+};
+}  // namespace
 
 EOPFZarrDataset::EOPFZarrDataset(std::unique_ptr<GDALDataset> inner, GDALDriver* selfDrv)
     : mInner(std::move(inner)),
@@ -133,18 +157,11 @@ EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner,
         // Track if this is a remote dataset
         ds->m_bIsRemoteDataset = bIsRemoteDataset;
 
-        // If remote dataset and warning suppression is enabled (default: YES),
-        // set GPF_NOSAVE to prevent PAM from trying to save .aux.xml
+        // For remote datasets, suppress PAM save on our wrapper
         if (bIsRemoteDataset)
         {
-            const char* pszSuppressAuxWarning =
-                CPLGetConfigOption("EOPFZARR_SUPPRESS_AUX_WARNING", "YES");
-            if (CPLTestBool(pszSuppressAuxWarning))
-            {
-                // GPF_NOSAVE = 4 - prevents PAM from saving auxiliary files
-                ds->nPamFlags |= 4;  // GPF_NOSAVE
-                CPLDebug("EOPFZARR", "Remote dataset detected - PAM save disabled");
-            }
+            ds->nPamFlags |= 4;  // GPF_NOSAVE
+            CPLDebug("EOPFZARR", "Remote dataset - PAM save disabled on wrapper");
         }
 
         // Set subdataset path metadata BEFORE loading other metadata
@@ -157,6 +174,29 @@ EOPFZarrDataset* EOPFZarrDataset::Create(GDALDataset* inner,
         ds->LoadEOPFMetadata();                    // Always load metadata
         ds->UpdateBandDescriptionsFromMetadata();  // Set friendly band names AND dataset
                                                    // description
+
+        // Set the PAM physical filename from the original Zarr path.
+        // The description gets changed to EOPFZARR:/friendly_name for QGIS,
+        // but PAM derives .aux.xml location from the physical filename.
+        {
+            std::string innerDesc = ds->mInner->GetDescription();
+            std::string rootPath = ExtractRootPath(innerDesc);
+            std::string pamPath = rootPath;
+            if (pszSubdatasetPath && strlen(pszSubdatasetPath) > 0)
+            {
+                // For subdatasets: append flattened subpath
+                std::string safeSub = pszSubdatasetPath;
+                for (auto& c : safeSub)
+                {
+                    if (c == '/' || c == '\\')
+                        c = '_';
+                }
+                pamPath += safeSub;
+            }
+            ds->SetPhysicalFilename(pamPath.c_str());
+            CPLDebug("EOPFZARR", "PAM physical filename: %s", pamPath.c_str());
+        }
+
         return ds.release();
     }
     catch (const std::exception& e)
@@ -843,6 +883,7 @@ void EOPFZarrDataset::LoadGCPs()
     if (mGCPsLoaded)
         return;
     mGCPsLoaded = true;
+    PamDisableGuard pamGuard;
 
     // GCPs only make sense for measurement subdatasets
     const char* pszSubPath = GetMetadataItem("SUBDATASET_PATH");
@@ -1141,6 +1182,33 @@ CPLErr EOPFZarrRasterBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pIma
     return CE_Failure;
 }
 
+// GetNoDataValue: check local override first, then fall back to underlying band
+double EOPFZarrRasterBand::GetNoDataValue(int* pbSuccess)
+{
+    if (m_bNoDataSet)
+    {
+        if (pbSuccess)
+            *pbSuccess = TRUE;
+        return m_dfNoDataValue;
+    }
+
+    // Fall back to underlying band
+    if (m_poUnderlyingBand)
+        return m_poUnderlyingBand->GetNoDataValue(pbSuccess);
+
+    if (pbSuccess)
+        *pbSuccess = FALSE;
+    return 0.0;
+}
+
+// SetNoDataValue: store locally (underlying band is read-only)
+CPLErr EOPFZarrRasterBand::SetNoDataValue(double dfNoData)
+{
+    m_dfNoDataValue = dfNoData;
+    m_bNoDataSet = true;
+    return CE_None;
+}
+
 // Update band descriptions to use friendly names based on subdataset path
 void EOPFZarrDataset::UpdateBandDescriptionsFromMetadata()
 {
@@ -1281,6 +1349,8 @@ void EOPFZarrDataset::CacheGeotransformFromCorners(double minX,
 
 bool EOPFZarrDataset::LoadGeoTransformFromCoordinateArrays()
 {
+    PamDisableGuard pamGuard;
+
     const char* pszSubdatasetPath = GetMetadataItem("SUBDATASET_PATH");
     if (!pszSubdatasetPath || strlen(pszSubdatasetPath) == 0)
         return false;

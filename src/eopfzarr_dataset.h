@@ -200,6 +200,8 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
   private:
     GDALRasterBand* m_poUnderlyingBand;
     EOPFZarrDataset* m_poDS;
+    double m_dfNoDataValue = 0.0;
+    bool m_bNoDataSet = false;
 
   public:
     EOPFZarrRasterBand(EOPFZarrDataset* poDS, GDALRasterBand* poUnderlyingBand, int nBand);
@@ -211,6 +213,10 @@ class EOPFZarrRasterBand : public GDALProxyRasterBand
 #else
     GDALRasterBand* RefUnderlyingRasterBand() override;
 #endif
-    // Add the IReadBlock method
     CPLErr IReadBlock(int nBlockXOff, int nBlockYOff, void* pImage) override;
+
+    // Override nodata to use PAM (GDALProxyRasterBand delegates to underlying band
+    // which is read-only, so PAM-based nodata would be lost)
+    double GetNoDataValue(int* pbSuccess = nullptr) override;
+    CPLErr SetNoDataValue(double dfNoData) override;
 };
