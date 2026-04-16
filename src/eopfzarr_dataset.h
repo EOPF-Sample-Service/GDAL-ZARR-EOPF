@@ -114,8 +114,11 @@ class EOPFZarrMultiBandDataset : public GDALPamDataset
     std::vector<std::string> mPolarizationNames;
     mutable OGRSpatialReference* mCachedSpatialRef = nullptr;
     bool m_bIsRemoteDataset;
-    std::vector<GDAL_GCP> mGCPs;
-    OGRSpatialReference mGCPSRS;
+    mutable std::vector<GDAL_GCP> mGCPs;
+    mutable OGRSpatialReference mGCPSRS;
+    mutable bool mGCPsLoaded = false;
+    std::string mRootPath;
+    std::string mFirstPolSubPath;
 
   public:
     EOPFZarrMultiBandDataset();
@@ -135,10 +138,13 @@ class EOPFZarrMultiBandDataset : public GDALPamDataset
         GDALDriver* drv,
         bool bIsRemote);
 
-    // GCPs provide geolocation for Sentinel-1 swath data
+    // GCPs provide geolocation for Sentinel-1 swath data (loaded lazily on first access)
     int GetGCPCount() override;
     const GDAL_GCP* GetGCPs() override;
     const OGRSpatialReference* GetGCPSpatialRef() const override;
+
+  private:
+    void LoadGCPs() const;
 
     // No geotransform — geolocation is via GCPs
     const OGRSpatialReference* GetSpatialRef() const override;

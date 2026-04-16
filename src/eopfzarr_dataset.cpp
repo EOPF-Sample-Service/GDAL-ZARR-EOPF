@@ -1942,15 +1942,11 @@ EOPFZarrMultiBandDataset* EOPFZarrMultiBandDataset::CreateFromPolarizations(
              (int) poDS->mPolarizationDatasets.size(),
              polList.c_str());
 
-    // Load GCPs from the first polarization's conditions/gcp/ arrays.
-    // The raw Zarr polarization datasets have no geographic CRS, so GCPs are
-    // the only way to geolocate the multi-band wrapper in GDAL/QGIS.
+    // Store paths for lazy GCP loading — don't read GCP arrays at open time.
     if (!polPaths.empty())
     {
-        LoadGCPsFromZarr(rootPath, polPaths[0].second, poDS->mGCPs, poDS->mGCPSRS);
-        CPLDebug("EOPFZARR",
-                 "EOPFZarrMultiBandDataset: loaded %d GCPs for geolocation",
-                 (int) poDS->mGCPs.size());
+        poDS->mRootPath = rootPath;
+        poDS->mFirstPolSubPath = polPaths[0].second;
     }
 
     return poDS.release();
@@ -1965,18 +1961,32 @@ const OGRSpatialReference* EOPFZarrMultiBandDataset::GetSpatialRef() const
 // GetGeoTransform intentionally not overridden — geolocation is via GCPs.
 // The base class returns CE_Failure which signals to GDAL/QGIS to use GCPs.
 
+void EOPFZarrMultiBandDataset::LoadGCPs() const
+{
+    if (mGCPsLoaded)
+        return;
+    mGCPsLoaded = true;
+    if (mRootPath.empty() || mFirstPolSubPath.empty())
+        return;
+    LoadGCPsFromZarr(mRootPath, mFirstPolSubPath, mGCPs, mGCPSRS);
+    CPLDebug("EOPFZARR", "EOPFZarrMultiBandDataset: lazily loaded %d GCPs", (int) mGCPs.size());
+}
+
 int EOPFZarrMultiBandDataset::GetGCPCount()
 {
+    LoadGCPs();
     return static_cast<int>(mGCPs.size());
 }
 
 const GDAL_GCP* EOPFZarrMultiBandDataset::GetGCPs()
 {
+    LoadGCPs();
     return mGCPs.empty() ? nullptr : mGCPs.data();
 }
 
 const OGRSpatialReference* EOPFZarrMultiBandDataset::GetGCPSpatialRef() const
 {
+    LoadGCPs();
     if (mGCPs.empty())
         return nullptr;
     return &mGCPSRS;
