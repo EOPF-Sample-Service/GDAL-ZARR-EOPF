@@ -825,11 +825,17 @@ CPLErr EOPFZarrDataset::GetGeoTransform(GDALGeoTransform& padfTransform) const
 CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
 #endif
 {
+    // When GCPs are present, don't return a geotransform — GDAL/QGIS prefers
+    // geotransform over GCPs, so returning the inner Zarr's raw array-index
+    // geotransform would override correct GCP-based geolocation.
+    const_cast<EOPFZarrDataset*>(this)->LoadGCPs();
+    if (!mGCPs.empty())
+        return CE_Failure;
+
     CPLErr eErr = GDALPamDataset::GetGeoTransform(padfTransform);
     if (eErr == CE_None)
         return eErr;
 
-    // Fall back to inner dataset
     return mInner->GetGeoTransform(padfTransform);
 }
 
