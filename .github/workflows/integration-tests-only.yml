@@ -1,10 +1,11 @@
-name: Integration Tests Only
+name: Integration Tests
 
-# This workflow runs ONLY integration tests, skipping compilation and unit tests
-# Use this for faster feedback when working on integration test changes
+# Runs against live remote datasets (EODC object storage).
+# Kept separate from main CI to avoid flaky failures from transient network issues.
+# Trigger manually or let the weekly schedule catch regressions.
 
 on:
-  workflow_dispatch:  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
     inputs:
       test_filter:
         description: 'Test filter (pytest -k pattern)'
@@ -16,122 +17,143 @@ on:
         required: false
         default: false
         type: boolean
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
 
 jobs:
-  integration-tests-windows:
-    name: Integration Tests - Windows
-    runs-on: windows-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup GDAL with OSGeo4W
-        run: |
-          choco install osgeo4w --no-progress -y
-          
-      - name: Build EOPFZARR driver
-        run: |
-          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
-      
-      - name: Install Python packages
-        run: |
-          C:\OSGeo4W\bin\python3.exe -m pip install --upgrade pip
-          C:\OSGeo4W\bin\python3.exe -m pip install pytest rioxarray xarray
-      
-      - name: Set GDAL_DRIVER_PATH
-        run: |
-          $env:GDAL_DRIVER_PATH = "$PWD\build\Release"
-          echo "GDAL_DRIVER_PATH=$env:GDAL_DRIVER_PATH" >> $env:GITHUB_ENV
-      
-      - name: Run integration tests
-        run: |
-          $testFilter = "${{ github.event.inputs.test_filter }}"
-          $verboseFlag = ""
-          if ("${{ github.event.inputs.verbose }}" -eq "true") {
-            $verboseFlag = "-v -s"
-          }
-          
-          if ($testFilter) {
-            C:\OSGeo4W\bin\python3.exe -m pytest tests\integration\test_rioxarray_eopfzarr_integration.py -k "$testFilter" $verboseFlag
-          } else {
-            C:\OSGeo4W\bin\python3.exe -m pytest tests\integration\test_rioxarray_eopfzarr_integration.py -v $verboseFlag
-          }
-
   integration-tests-linux:
     name: Integration Tests - Linux
     runs-on: ubuntu-24.04
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install GDAL and dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gdal-bin libgdal-dev python3-gdal cmake build-essential
-          
+          sudo apt-get install -y gdal-bin libgdal-dev python3-gdal cmake build-essential ninja-build
+
       - name: Install Python packages
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install pytest rioxarray xarray rasterio
-      
+          python3 -m pip install pytest pytest-xdist numpy rasterio rioxarray
+
       - name: Build EOPFZARR driver
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-      
+
       - name: Run integration tests
         env:
           GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+          GDAL_HTTP_MAX_RETRY: '5'
+          GDAL_HTTP_RETRY_DELAY: '3'
         run: |
-          TEST_FILTER="${{ github.event.inputs.test_filter }}"
-          VERBOSE_FLAG=""
+          EXTRA_FLAGS="-v"
           if [ "${{ github.event.inputs.verbose }}" = "true" ]; then
-            VERBOSE_FLAG="-v -s"
+            EXTRA_FLAGS="-v -s"
           fi
-          
-          if [ -n "$TEST_FILTER" ]; then
-            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -k "$TEST_FILTER" $VERBOSE_FLAG
+          FILTER="${{ github.event.inputs.test_filter }}"
+          if [ -n "$FILTER" ]; then
+            python3 -m pytest -c pytest.ini tests/integration/ $EXTRA_FLAGS --tb=short -k "$FILTER"
           else
-            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -v $VERBOSE_FLAG
+            python3 -m pytest -c pytest.ini tests/integration/ $EXTRA_FLAGS --tb=short
           fi
 
   integration-tests-macos:
     name: Integration Tests - macOS
     runs-on: macos-13
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install GDAL and dependencies
-        run: |
-          brew install gdal cmake
-          
+        run: brew install gdal cmake ninja
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
       - name: Install Python packages
+        run: python -m pip install pytest pytest-xdist numpy rasterio rioxarray
+
+      - name: Install GDAL Python bindings
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install pytest rioxarray xarray rasterio
-      
+          GDAL_VERSION=$(gdal-config --version)
+          pip install "gdal==${GDAL_VERSION}" || pip install "gdal>=${GDAL_VERSION%.*},<$(echo $GDAL_VERSION | awk -F. '{print $1"."$2+1}')" || true
+          python -c "from osgeo import gdal; print(f'GDAL Python bindings: {gdal.VersionInfo()}')"
+
       - name: Build EOPFZARR driver
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-      
+
       - name: Run integration tests
         env:
           GDAL_DRIVER_PATH: ${{ github.workspace }}/build
+          GDAL_DATA: /opt/homebrew/share/gdal
+          PROJ_LIB: /opt/homebrew/share/proj
+          GDAL_HTTP_MAX_RETRY: '5'
+          GDAL_HTTP_RETRY_DELAY: '3'
         run: |
-          TEST_FILTER="${{ github.event.inputs.test_filter }}"
-          VERBOSE_FLAG=""
-          if [ "${{ github.event.inputs.verbose }}" = "true" ]; then
-            VERBOSE_FLAG="-v -s"
-          fi
-          
-          if [ -n "$TEST_FILTER" ]; then
-            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -k "$TEST_FILTER" $VERBOSE_FLAG
+          RASTERIO_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+          RASTERIO_DYLIBS="$RASTERIO_SITE/rasterio/.dylibs"
+          if [ -d "$RASTERIO_DYLIBS" ]; then
+            export DYLD_LIBRARY_PATH="$RASTERIO_DYLIBS:$(brew --prefix)/lib:$DYLD_LIBRARY_PATH"
           else
-            python3 -m pytest tests/integration/test_rioxarray_eopfzarr_integration.py -v $VERBOSE_FLAG
+            export DYLD_LIBRARY_PATH="$(brew --prefix)/lib:$DYLD_LIBRARY_PATH"
           fi
+          EXTRA_FLAGS="-v"
+          if [ "${{ github.event.inputs.verbose }}" = "true" ]; then
+            EXTRA_FLAGS="-v -s"
+          fi
+          FILTER="${{ github.event.inputs.test_filter }}"
+          if [ -n "$FILTER" ]; then
+            python -m pytest -c pytest.ini tests/integration/ $EXTRA_FLAGS --tb=short -k "$FILTER"
+          else
+            python -m pytest -c pytest.ini tests/integration/ $EXTRA_FLAGS --tb=short
+          fi
+
+  integration-tests-windows:
+    name: Integration Tests - Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup GDAL with OSGeo4W
+        run: choco install osgeo4w --no-progress -y
+
+      - name: Build EOPFZARR driver
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: Install Python packages
+        run: |
+          C:\OSGeo4W\apps\Python312\python3.exe -m pip install "numpy<2.0" pytest pytest-xdist rasterio rioxarray
+
+      - name: Run integration tests
+        shell: pwsh
+        env:
+          GDAL_HTTP_MAX_RETRY: '5'
+          GDAL_HTTP_RETRY_DELAY: '3'
+        run: |
+          $env:GDAL_DRIVER_PATH = "$PWD\build\Release"
+          $env:GDAL_DATA = "C:\OSGeo4W\share\gdal"
+          $env:PROJ_LIB = "C:\OSGeo4W\share\proj"
+          $env:PATH = "C:\OSGeo4W\bin;C:\OSGeo4W\apps\Python312;C:\OSGeo4W\apps\Python312\Scripts;" + $env:PATH
+          $env:PYTHONPATH = "C:\OSGeo4W\apps\Python312\Lib\site-packages"
+          $pythonExe = "C:\OSGeo4W\apps\Python312\python3.exe"
+
+          $extraFlags = "-v"
+          if ("${{ github.event.inputs.verbose }}" -eq "true") { $extraFlags = "-v -s" }
+          $filter = "${{ github.event.inputs.test_filter }}"
+          if ($filter) {
+            & $pythonExe -m pytest -c pytest.ini tests/integration/ $extraFlags --tb=short -k "$filter"
+          } else {
+            & $pythonExe -m pytest -c pytest.ini tests/integration/ $extraFlags --tb=short
+          }
