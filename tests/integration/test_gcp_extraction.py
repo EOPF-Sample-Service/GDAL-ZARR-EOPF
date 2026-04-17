@@ -189,8 +189,8 @@ class TestSLCBurstGCPs:
         assert srs.IsGeographic()
 
 
-class TestGRDMultiBandNoGCPs:
-    """Tests that GRD multi-band wrapper doesn't expose GCPs (it's a VRT)."""
+class TestGRDMultiBandGCPs:
+    """Tests that GRD multi-band wrapper exposes GCPs for geolocation in QGIS."""
 
     @pytest.fixture
     def dataset(self):
@@ -201,12 +201,27 @@ class TestGRDMultiBandNoGCPs:
         if ds:
             ds = None
 
-    def test_multiband_gcp_count(self, dataset):
-        """Multi-band GRD wrapper may or may not have GCPs."""
+    def test_multiband_has_gcps(self, dataset):
+        """Multi-band GRD wrapper should have GCPs for geolocation."""
         assert dataset is not None
-        # The multi-band wrapper is a VRT — it doesn't have SUBDATASET_PATH
-        # so LoadGCPs should skip it. GCPCount should be 0.
-        assert dataset.GetGCPCount() == 0
+        assert dataset.GetGCPCount() > 0
+
+    def test_multiband_gcp_projection_wgs84(self, dataset):
+        """Multi-band GRD GCP SRS should be WGS84."""
+        assert dataset is not None
+        srs = dataset.GetGCPSpatialRef()
+        assert srs is not None
+        assert srs.IsGeographic()
+        assert srs.GetAuthorityCode("DATUM") == "6326"
+
+    def test_multiband_gcp_coordinates_valid(self, dataset):
+        """Multi-band GRD GCPs should have valid lon/lat."""
+        assert dataset is not None
+        gcps = dataset.GetGCPs()
+        assert gcps is not None
+        for gcp in gcps:
+            assert -180.0 <= gcp.GCPX <= 180.0
+            assert -90.0 <= gcp.GCPY <= 90.0
 
 
 if __name__ == "__main__":
