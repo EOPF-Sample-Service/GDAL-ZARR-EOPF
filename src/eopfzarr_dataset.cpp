@@ -61,6 +61,12 @@ static bool LoadGCPsFromZarr(const std::string& rootPath,
     const char* arrayNames[] = {"pixel", "line", "latitude", "longitude", "height"};
     GDALDataset* gcpDS[5] = {nullptr};
 
+    // Suppress GDAL errors while probing — "Cannot find group conditions" is
+    // expected for non-Sentinel-1 products and must not leak to the caller.
+    // CPLQuietErrorHandler prevents display but GDAL still stores the error in
+    // thread-local state; CPLErrorReset() clears that so Python callers with
+    // UseExceptions() don't see a RuntimeError from the probe.
+    CPLPushErrorHandler(CPLQuietErrorHandler);
     for (int i = 0; i < 5; i++)
     {
         std::string zarrPath =
@@ -69,12 +75,16 @@ static bool LoadGCPsFromZarr(const std::string& rootPath,
             zarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
         if (!gcpDS[i])
         {
+            CPLPopErrorHandler();
+            CPLErrorReset();
             CPLDebug("EOPFZARR", "LoadGCPsFromZarr: failed to open %s", zarrPath.c_str());
             for (int j = 0; j < i; j++)
                 GDALClose(gcpDS[j]);
             return false;
         }
     }
+    CPLPopErrorHandler();
+    CPLErrorReset();
 
     int nPixels = std::max(gcpDS[0]->GetRasterXSize(), gcpDS[0]->GetRasterYSize());
     int nLines = std::max(gcpDS[1]->GetRasterXSize(), gcpDS[1]->GetRasterYSize());
@@ -835,6 +845,25 @@ CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
     CPLErr eErr = GDALPamDataset::GetGeoTransform(padfTransform);
     if (eErr == CE_None)
         return eErr;
+
+    // LoadGeoTransformFromCoordinateArrays() runs during construction while
+    // GDAL_PAM_ENABLED=NO (EOPFOpen's PamDisableGuard), so GDALPamDataset::
+    // SetGeoTransform() is a no-op there (psPam uninitialised).  The correctly
+    // half-pixel-adjusted value was stored in mCache — recover it here and
+    // re-persist it into PAM so subsequent calls take the fast path.
+    double cachedTransform[6];
+    if (const_cast<EOPFZarrDataset*>(this)->mCache.GetCachedGeoTransform(cachedTransform))
+    {
+#ifdef HAVE_GDAL_GEOTRANSFORM
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+            GDALGeoTransform(cachedTransform));
+        padfTransform = GDALGeoTransform(cachedTransform);
+#else
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(cachedTransform);
+        std::copy(cachedTransform, cachedTransform + 6, padfTransform);
+#endif
+        return CE_None;
+    }
 
     return mInner->GetGeoTransform(padfTransform);
 }
