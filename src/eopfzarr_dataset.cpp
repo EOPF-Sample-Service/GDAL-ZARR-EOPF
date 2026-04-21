@@ -836,6 +836,25 @@ CPLErr EOPFZarrDataset::GetGeoTransform(double* padfTransform)
     if (eErr == CE_None)
         return eErr;
 
+    // LoadGeoTransformFromCoordinateArrays() runs during construction while
+    // GDAL_PAM_ENABLED=NO (EOPFOpen's PamDisableGuard), so GDALPamDataset::
+    // SetGeoTransform() is a no-op there (psPam uninitialised).  The correctly
+    // half-pixel-adjusted value was stored in mCache — recover it here and
+    // re-persist it into PAM so subsequent calls take the fast path.
+    double cachedTransform[6];
+    if (const_cast<EOPFZarrDataset*>(this)->mCache.GetCachedGeoTransform(cachedTransform))
+    {
+#ifdef HAVE_GDAL_GEOTRANSFORM
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(
+            GDALGeoTransform(cachedTransform));
+        padfTransform = GDALGeoTransform(cachedTransform);
+#else
+        const_cast<EOPFZarrDataset*>(this)->GDALPamDataset::SetGeoTransform(cachedTransform);
+        std::copy(cachedTransform, cachedTransform + 6, padfTransform);
+#endif
+        return CE_None;
+    }
+
     return mInner->GetGeoTransform(padfTransform);
 }
 
