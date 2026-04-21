@@ -61,6 +61,12 @@ static bool LoadGCPsFromZarr(const std::string& rootPath,
     const char* arrayNames[] = {"pixel", "line", "latitude", "longitude", "height"};
     GDALDataset* gcpDS[5] = {nullptr};
 
+    // Suppress GDAL errors while probing — "Cannot find group conditions" is
+    // expected for non-Sentinel-1 products and must not leak to the caller.
+    // CPLQuietErrorHandler prevents display but GDAL still stores the error in
+    // thread-local state; CPLErrorReset() clears that so Python callers with
+    // UseExceptions() don't see a RuntimeError from the probe.
+    CPLPushErrorHandler(CPLQuietErrorHandler);
     for (int i = 0; i < 5; i++)
     {
         std::string zarrPath =
@@ -69,12 +75,16 @@ static bool LoadGCPsFromZarr(const std::string& rootPath,
             zarrPath.c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY, nullptr, nullptr, nullptr));
         if (!gcpDS[i])
         {
+            CPLPopErrorHandler();
+            CPLErrorReset();
             CPLDebug("EOPFZARR", "LoadGCPsFromZarr: failed to open %s", zarrPath.c_str());
             for (int j = 0; j < i; j++)
                 GDALClose(gcpDS[j]);
             return false;
         }
     }
+    CPLPopErrorHandler();
+    CPLErrorReset();
 
     int nPixels = std::max(gcpDS[0]->GetRasterXSize(), gcpDS[0]->GetRasterYSize());
     int nLines = std::max(gcpDS[1]->GetRasterXSize(), gcpDS[1]->GetRasterYSize());
