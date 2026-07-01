@@ -85,7 +85,7 @@ char** EOPFPerformanceCache::GetCachedSubdatasets()
     return mCachedSubdatasets;
 }
 
-void EOPFPerformanceCache::SetCachedSubdatasets(char** subdatasets)
+void EOPFPerformanceCache::SetCachedSubdatasets(CSLConstList subdatasets)
 {
     if (mCachedSubdatasets)
     {
@@ -275,7 +275,7 @@ std::vector<std::string> FastTokenize(const std::string& input, char delimiter)
     return tokens;
 }
 
-char** OptimizedCSLDuplicate(char** papszSource)
+char** OptimizedCSLDuplicate(CSLConstList papszSource)
 {
     if (!papszSource)
         return nullptr;
@@ -425,7 +425,7 @@ void EOPFZarrDatasetPerf::LoadEOPFMetadata()
     }
 
     // Load metadata from inner dataset
-    char** innerMetadata = mInner->GetMetadata();
+    CSLConstList innerMetadata = mInner->GetMetadata();
     if (innerMetadata)
     {
         OptimizedMetadataMerge();
@@ -590,7 +590,7 @@ const GDAL_GCP* EOPFZarrDatasetPerf::GetGCPs()
 void EOPFZarrDatasetPerf::OptimizedMetadataMerge() const
 {
     // Fast path for empty metadata
-    char** innerMetadata = mInner->GetMetadata();
+    CSLConstList innerMetadata = mInner->GetMetadata();
     if (!innerMetadata)
         return;
 

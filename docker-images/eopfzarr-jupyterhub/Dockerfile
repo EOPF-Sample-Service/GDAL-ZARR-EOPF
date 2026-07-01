@@ -17,7 +17,7 @@ RUN git clone --depth 1 https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF.gi
         -DGDAL_LIBRARY="/opt/conda/lib/libgdal.so" \
         -DCMAKE_INSTALL_RPATH="/opt/conda/lib" \
         -DCMAKE_BUILD_RPATH="/opt/conda/lib" && \
-    make -j$(nproc) && \
+    make -j$(nproc) gdal_EOPFZarr && \
     cp gdal_EOPFZarr.so /opt/conda/lib/gdalplugins/ && \
     rm -rf /tmp/eopf-zarr
 

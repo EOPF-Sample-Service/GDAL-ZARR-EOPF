@@ -774,7 +774,7 @@ void EOPF::DiscoverSubdatasets(GDALDataset& ds,
     }
 
     // Get subdatasets from the Zarr driver
-    char** papszZarrSubdatasets = poZarrDS->GetMetadata("SUBDATASETS");
+    CSLConstList papszZarrSubdatasets = poZarrDS->GetMetadata("SUBDATASETS");
     if (!papszZarrSubdatasets)
     {
         CPLDebug("EOPFZARR", "No subdatasets found in Zarr dataset: %s", zarrPath.c_str());

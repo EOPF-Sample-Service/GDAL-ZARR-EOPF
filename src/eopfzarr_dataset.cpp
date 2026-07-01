@@ -701,7 +701,7 @@ void EOPFZarrDataset::ProcessGeolocationArrays()
     }
 
     // Get all subdatasets from the root dataset
-    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
+    CSLConstList papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
     if (papszSubdatasets)
     {
         CPLDebug(
@@ -912,14 +912,14 @@ char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
         }
 
         // First try from GDALDataset - this would be the subdatasets set by EOPFOpen
-        char** papszSubdatasets = GDALDataset::GetMetadata(pszDomain);
+        CSLConstList papszSubdatasets = GDALDataset::GetMetadata(pszDomain);
         if (papszSubdatasets && CSLCount(papszSubdatasets) > 0)
         {
             CPLDebug("EOPFZARR",
                      "GetMetadata(SUBDATASETS): Returning %d subdataset items from base dataset",
                      CSLCount(papszSubdatasets));
             mCache.SetCachedSubdatasets(papszSubdatasets);
-            return papszSubdatasets;
+            return const_cast<char**>(papszSubdatasets);
         }
 
         // If not found in base dataset, try the inner dataset but with modified formats
@@ -995,17 +995,17 @@ char** EOPFZarrDataset::GetMetadata(const char* pszDomain)
     else
     {
         // First try PAM
-        char** papszMD = GDALPamDataset::GetMetadata(pszDomain);
+        CSLConstList papszMD = GDALPamDataset::GetMetadata(pszDomain);
         if (papszMD && CSLCount(papszMD) > 0)
-            return papszMD;
+            return const_cast<char**>(papszMD);
 
         // Fall back to inner dataset
         if (mInner)
-            return mInner->GetMetadata(pszDomain);
+            return const_cast<char**>(mInner->GetMetadata(pszDomain));
     }
 
     // For other domains, handle as before
-    return GDALPamDataset::GetMetadata(pszDomain);
+    return const_cast<char**>(GDALPamDataset::GetMetadata(pszDomain));
 }
 
 char** EOPFZarrDataset::GetFileList()
@@ -1280,8 +1280,8 @@ void EOPFZarrDataset::OptimizedMetadataMerge() const
         EOPFPerformanceUtils::OptimizedCSLDuplicate(self->GDALPamDataset::GetMetadata());
 
     // Get metadata from inner dataset
-    char** papszInnerMeta = mInner->GetMetadata();
-    for (char** papszIter = papszInnerMeta; papszIter && *papszIter; ++papszIter)
+    CSLConstList papszInnerMeta = mInner->GetMetadata();
+    for (CSLConstList papszIter = papszInnerMeta; papszIter && *papszIter; ++papszIter)
     {
         char* pszKey = nullptr;
         const char* pszValue = CPLParseNameValue(*papszIter, &pszKey);
@@ -1565,7 +1565,7 @@ std::vector<std::pair<std::string, std::string>> FindGRDPolarizations(GDALDatase
     if (!rootDS)
         return result;
 
-    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
+    CSLConstList papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
     if (!papszSubdatasets)
         return result;
 
@@ -1676,7 +1676,7 @@ std::vector<SLCBurstInfo> FindSLCBursts(GDALDataset* rootDS, const std::string& 
     if (!rootDS)
         return result;
 
-    char** papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
+    CSLConstList papszSubdatasets = rootDS->GetMetadata("SUBDATASETS");
     if (!papszSubdatasets)
         return result;
 

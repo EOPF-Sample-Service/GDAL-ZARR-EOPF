@@ -600,7 +600,7 @@ static GDALDataset* OpenSubdataset(const std::string& mainPath,
     std::unique_ptr<GDALDataset> parentGuard(poParentDS);
 
     // Find the subdataset
-    char** papszSubdatasets = poParentDS->GetMetadata("SUBDATASETS");
+    CSLConstList papszSubdatasets = poParentDS->GetMetadata("SUBDATASETS");
     if (!papszSubdatasets)
     {
         CPLDebug("EOPFZARR", "No subdatasets found in parent dataset");

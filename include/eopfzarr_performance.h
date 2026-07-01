@@ -78,7 +78,7 @@ class EOPFPerformanceCache
 
     // Subdataset caching
     char** GetCachedSubdatasets();
-    void SetCachedSubdatasets(char** subdatasets);
+    void SetCachedSubdatasets(CSLConstList subdatasets);
     bool HasCachedSubdatasets() const;
 
     // Full metadata caching
@@ -224,7 +224,7 @@ std::vector<std::string> FastTokenize(const std::string& input, char delimiter);
 /**
  * @brief Memory-efficient CSL operations
  */
-char** OptimizedCSLDuplicate(char** papszSource);
+char** OptimizedCSLDuplicate(CSLConstList papszSource);
 char** OptimizedCSLSetNameValue(char** papszList, const char* pszName, const char* pszValue);
 
 /**
