@@ -7,17 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **Configurable Warning Suppression** ([#172](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues/172))
-  - Added `EOPFZARR_SUPPRESS_AUX_WARNING` configuration option to control `.aux.xml` save warnings
-  - Default behavior: warnings are suppressed for remote datasets (improves user experience)
-  - Users can enable warnings with `EOPFZARR_SUPPRESS_AUX_WARNING=NO` for debugging
-  - Available via configuration option, open option (`SUPPRESS_AUX_WARNING`), or environment variable
-
 ### Planning
 
 - Future enhancements and improvements
+
+## [5.0.0] - 2026-07-01
+
+### 🎉 Major Release - Remote Performance, PAM Support & Geotransform Fixes
+
+This release introduces automatic remote-dataset performance tuning, persistent nodata via PAM, configurable `.aux.xml` warning suppression, and critical geotransform fixes for coordinate-array datasets.
+
+### Added
+
+- **Remote Dataset Performance Optimisation** ([#211](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/211))
+  - Auto-enable VSI cache, CURL cache, and multi-threaded decoding for remote datasets
+  - Significant throughput improvement when reading data over HTTP/S3 without any user configuration
+
+- **Configurable Warning Suppression** ([#172](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/issues/172), [#212](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/212))
+  - Added `EOPFZARR_SUPPRESS_AUX_WARNING` configuration option to control `.aux.xml` save warnings
+  - Default behaviour: warnings are suppressed for remote datasets (improves user experience)
+  - Users can enable warnings with `EOPFZARR_SUPPRESS_AUX_WARNING=NO` for debugging
+  - Available via configuration option, open option (`SUPPRESS_AUX_WARNING`), or environment variable
+
+- **Docker Hub Auto-Publish on Release** ([#206](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/206))
+  - CI/CD now triggers Docker Hub image publication automatically on each GitHub release
+
+### Fixed
+
+- **Geotransform Recovery when PAM is Disabled at Construction** ([#220](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/220))
+  - Coordinate-array geotransform is now correctly recovered when PAM was uninitialised at dataset construction time
+  - Suppresses and resets spurious GDAL errors produced during the `LoadGCPsFromZarr` probe
+
+- **GCP Geolocation for Sentinel-1 Multi-Band GRD in QGIS** ([#214](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/214))
+  - Fixed GCP-based geolocation not being applied correctly for multi-band Sentinel-1 GRD products loaded in QGIS
+
+- **PAM Support: Suppress Inner `.aux.xml` and Enable Nodata Persistence** ([#212](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/212))
+  - Inner Zarr `.aux.xml` files are no longer surfaced to the user
+  - Nodata values set via GDAL are now persisted correctly through PAM
+
+### Changed
+
+- Integration tests moved out of the main CI pipeline into a dedicated workflow ([#215](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/215))
+- Removed Dependabot configuration
+
+### Documentation
+
+- Added SLC geolocation verification cells to notebook 14 ([#218](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/218))
+- Added scene footprint visualisation to notebook 14 ([#217](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/217))
+
+### CI/CD
+
+- Fixed integration test workflow for Linux and Windows ([#219](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/219))
+- Bumped `docker/build-push-action` from 5 to 7 ([#207](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/207))
+- Bumped `docker/setup-buildx-action` from 3 to 4 ([#209](https://github.com/EOPF-Sample-Service/GDAL-ZARR-EOPF/pull/209))
 
 ## [3.0.0] - 2025-12-05
 
